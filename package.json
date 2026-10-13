@@ -1,0 +1,17 @@
+{
+  "name": "almanac-notch",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ref:screens": "node tools/snapshot.mjs",
+    "ref:clips": "node tools/snapshot.mjs --clips",
+    "parity:shoot": "node tools/snapshot.mjs --target port --url http://localhost:5173/harness.html",
+    "parity:compare": "node tools/compare.mjs",
+    "parity": "npm run parity:shoot && npm run parity:compare"
+  },
+  "devDependencies": {
+    "pixelmatch": "^6.0.0",
+    "playwright": "^1.56.0",
+    "pngjs": "^7.0.0"
+  }
+}

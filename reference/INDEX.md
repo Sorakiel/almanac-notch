@@ -1,0 +1,35 @@
+# Эталон
+
+Снято с `prototype/island-prototype.html` скриптом `tools/snapshot.mjs`. Сцены описаны в `tools/scenes.mjs`.
+
+- **Кадры** снимаются при виртуальном времени (`page.clock`, старт 14.10.2026 10:30) и с фиксированным сидом случайности. Один и тот же прогон всегда даёт один и тот же кадр. Плотность 2× (пиксели ретины), канвас острова 560×200 pt, лупа 252×120 pt.
+- **Ролики** записаны в реальном времени. Это область превью нотча на странице прототипа: запись в 1×, увеличенная вдвое для просмотра, mp4 (H.264). Для деталей в пикселях смотри кадры, для таймингов - ролики.
+
+## screens/
+
+| группа | кадры |
+|---|---|
+| закрыто | `mac-closed`, `win-closed-tile` |
+| полуоткрыто | `half-after-launch`, `half-working`, `half-thinking`, `half-searching`, `half-ratelimit`, `half-success`, `half-error`, `half-dance`, `half-attention`, `half-question`, `half-sleep`, `win-half-working`. К большинству есть `-loupe` - лупа ×3 по маскоту |
+| открыто, «Главная» | `open-focus-claude`, `open-focus-github`, `open-focus-cal`, `open-focus-music`, `open-focus-almanac`, `open-music-rail-hover` (выехавшая подпись в колонке) |
+| открыто, события | `open-working-steps`, `open-github-error`, `open-attention`, `open-attention-approved`, `open-question`, `open-ratelimit` |
+| перегруз | `overload-0.3s`, `overload-1.2s`, `overload-1.2s-stage`, `overload-after` |
+| вкладки | `open-tab-chat`, `open-tab-add`, `open-tab-settings` |
+| приветствие | `greeting-0300` … `greeting-4300`: время от начала события в мс |
+| большая сцена | `stage-idle`, `stage-working`, `stage-thinking`, `stage-searching`, `stage-ratelimit`, `stage-dance`, `stage-success`, `stage-sleep`, `stage-grumpy` |
+| страница целиком | `page` |
+
+## video/
+
+| ролик | что смотреть |
+|---|---|
+| `greeting` | все такты запуска |
+| `overload` | вход, раскачка, морф глаз, кроссфейд, выход |
+| `success-error` | вспышки обводки, кольца, тряска содержимого |
+| `attention-answer` | печать команды, «Разрешено», переход в работу |
+| `question-answer` | появление вариантов, выбор |
+| `states-auto` | переходы закрыто, полуоткрыто, открыто по наведению |
+| `music-dance` | танец под музыку, выезд подписи в колонке |
+| `focus-switch` | въезд карточек при смене модуля |
+| `win-states` | Windows: плитка, полоса, открытие |
+| `ratelimit` | песочные часы, переворот |
