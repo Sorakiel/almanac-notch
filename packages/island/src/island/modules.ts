@@ -2,8 +2,8 @@
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { limitText, stepAt, stepIndex } from '../sim/events';
-import { TRACKS, calMins } from '../stub';
-import { MODULE_COL, claudeState, habitsDone, type ClaudeState } from './focus';
+import { TRACKS } from '../stub';
+import { MODULE_COL, callMins, claudeState, habitsDone, minsText, type ClaudeState } from './focus';
 import { STATE_COL, drawMini } from './crew';
 
 export type ModuleItem =
@@ -27,7 +27,7 @@ function workShort(s: IslandState): string {
 export function modules(s: IslandState): ModuleItem[] {
   const ev = s.event && s.event.type,
     cs = claudeState(s),
-    mins = calMins(s.t);
+    mins = callMins(s);
   const idleShorts: Record<Exclude<ClaudeState, 'work'>, string> = {
     think: 'думает',
     search: 'ищет',
@@ -54,13 +54,28 @@ export function modules(s: IslandState): ModuleItem[] {
       state: ev === 'working' ? 'run' : ev === 'error' ? 'fail' : 'ok',
       short: ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный',
     },
-    { id: 'cal', kind: 'cal', name: 'Календарь', mins, short: 'созвон через ' + mins + ' мин' },
+    {
+      id: 'cal',
+      kind: 'cal',
+      name: 'Календарь',
+      mins,
+      // the live calendar may have no call ahead, or one that has started or is hours away
+      short: mins === Infinity ? 'встреч нет' : mins <= 0 ? 'созвон сейчас' : 'созвон через ' + minsText(mins),
+    },
     {
       id: 'music',
       kind: 'music',
       name: 'Музыка',
       playing: s.musicPlaying,
-      short: s.musicPlaying ? (TRACKS[s.trackIdx] as readonly [string, string])[0] : 'пауза',
+      short: s.media
+        ? s.media.idle
+          ? 'не играет'
+          : s.musicPlaying
+            ? s.media.short
+            : 'пауза'
+        : s.musicPlaying
+          ? (TRACKS[s.trackIdx] as readonly [string, string])[0]
+          : 'пауза',
     },
     {
       id: 'almanac',
@@ -97,7 +112,11 @@ export function primaryItem(s: IslandState): ModuleItem {
 /** proto: idleShort */
 export function idleShort(it: ModuleItem): string {
   return it.kind === 'cal'
-    ? it.mins + ' мин'
+    ? it.mins === Infinity
+      ? 'нет'
+      : it.mins <= 0
+        ? 'сейчас'
+        : minsText(it.mins)
     : it.kind === 'music'
       ? 'играет'
       : it.kind === 'habits'
@@ -115,7 +134,7 @@ export function focusTint(s: IslandState, f: ModuleId): { c: string; a: number }
     if (ev === 'success') return { c: '#34C759', a: 0.45 };
     if (ev === 'working') return { c: '#3D8BFF', a: 0.22 };
   }
-  if (f === 'cal' && calMins(s.t) <= 5) return { c: '#F5A524', a: 0.35 };
+  if (f === 'cal' && callMins(s) <= 5) return { c: '#F5A524', a: 0.35 };
   if (f === 'music' && s.musicPlaying) return { c: '#9EE6B8', a: 0.16 };
   return null;
 }

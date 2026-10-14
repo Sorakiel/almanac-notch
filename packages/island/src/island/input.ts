@@ -1,6 +1,6 @@
 // Pointer input on the island canvas, without DOM listeners. Points are in island CSS px (proto: islandPoint).
 import { clamp } from '../util/math';
-import type { IslandState } from '../sim/state';
+import type { Hit, IslandState, MediaFeed } from '../sim/state';
 import { hop, poke, wake } from '../sim/actions';
 import { answer, trigger, type Answer } from '../sim/events';
 import { nextTrack } from '../sim/music';
@@ -61,7 +61,8 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   } else if (act.startsWith('pref:')) {
     const pr = s.prefs[+act.slice(5)];
     if (pr) pr[1] = !pr[1];
-  } else if (act === 'm:toggle') s.musicPlaying = !s.musicPlaying;
+  } else if (act.startsWith('m:') && s.media) mediaAct(s, act, h, p);
+  else if (act === 'm:toggle') s.musicPlaying = !s.musicPlaying;
   else if (act === 'm:next') nextTrack(s);
   else if (act === 'm:prev') {
     if (s.musicPos > 3) s.musicPos = 0;
@@ -74,6 +75,36 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   else if (act === 'm:seek')
     s.musicPos = clamp((p.x - (h.bx0 ?? 0)) / ((h.bx1 ?? 1) - (h.bx0 ?? 0)), 0, 1) * (TRACK_LEN[s.trackIdx] ?? 0);
   else if (act === 'm:vol') s.volume = clamp((p.x - (h.bx0 ?? 0)) / ((h.bx1 ?? 1) - (h.bx0 ?? 0)), 0, 1);
+}
+
+/** The player buttons with a real player: same look, but the commands go to the driver. */
+function mediaAct(s: IslandState, act: string, h: Hit, p: IslandPoint): void {
+  const md = s.media as MediaFeed,
+    frac = clamp((p.x - (h.bx0 ?? 0)) / ((h.bx1 ?? 1) - (h.bx0 ?? 0)), 0, 1);
+  if (act === 'm:toggle') {
+    s.musicPlaying = !s.musicPlaying;
+    md.out.push('toggle');
+  } else if (act === 'm:next') {
+    s.musicPos = 0;
+    md.out.push('next');
+  } else if (act === 'm:prev') {
+    // as in the prototype: past 3 s "previous" restarts the track
+    if (s.musicPos > 3) md.out.push('seek 0');
+    else md.out.push('prev');
+    s.musicPos = 0;
+  } else if (act === 'm:shuffle') {
+    s.shuffle = !s.shuffle;
+    md.out.push('shuffle ' + (s.shuffle ? 1 : 0));
+  } else if (act === 'm:repeat') {
+    s.repeat = !s.repeat;
+    md.out.push('repeat ' + (s.repeat ? 1 : 0));
+  } else if (act === 'm:seek' && md.len > 0) {
+    s.musicPos = frac * md.len;
+    md.out.push('seek ' + s.musicPos.toFixed(1));
+  } else if (act === 'm:vol') {
+    s.volume = frac;
+    md.out.push('vol ' + frac.toFixed(3));
+  }
 }
 
 /** proto: island dblclick - joy from the island's mascot (no burst, unlike the stage) */

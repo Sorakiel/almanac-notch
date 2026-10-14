@@ -1,16 +1,15 @@
 import type { IslandState, Targets } from './state';
 import { hop } from './actions';
 import { spawnFloat } from './particles';
-import { effectiveFocus, habitsDone, notchState } from '../island/focus';
+import { busyAside, callMins, effectiveFocus, habitsDone, notchState } from '../island/focus';
 import { PROPS, propFor } from '../mascot/props';
-import { calMins } from '../stub';
 
 /**
  * proto: moduleMood - what the mascot does while a module is in focus and nothing else is going on.
  * Returns the layer text, '' for no mood text, undefined when the layer is off.
  */
 export function moduleMood(s: IslandState, T: Targets): string | undefined {
-  if (notchState(s) !== 'open' || s.tab !== 'home' || s.event) return undefined;
+  if (notchState(s) !== 'open' || s.tab !== 'home' || (s.event && !busyAside(s))) return undefined;
   const t = s.t;
   const f = effectiveFocus(s);
   if (f === 'music' && s.musicPlaying) {
@@ -28,7 +27,7 @@ export function moduleMood(s: IslandState, T: Targets): string | undefined {
     }
     return 'танцует под музыку';
   }
-  if (f === 'cal' && calMins(t) <= 5) {
+  if (f === 'cal' && callMins(s) <= 5) {
     T.wide = 0.5;
     return 'торопит на созвон';
   }

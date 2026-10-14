@@ -2,8 +2,7 @@
 import { rrect, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { bodyPath } from '../mascot/shape';
-import { calMins } from '../stub';
-import { MODULE_COL, claudeState, type ClaudeState } from './focus';
+import { MODULE_COL, callMins, claudeState, type ClaudeState } from './focus';
 
 export type MiniState = ClaudeState | 'fail';
 
@@ -30,7 +29,7 @@ export function miniCrew(s: IslandState): MiniItem[] {
   return [
     { body: MODULE_COL.claude.body, seed: 0, state: claudeState(s) },
     { body: MODULE_COL.github.body, seed: 1, state: ev === 'error' ? 'fail' : 'idle' },
-    { body: MODULE_COL.cal.body, seed: 2, state: calMins(s.t) <= 5 ? 'ask' : 'idle' },
+    { body: MODULE_COL.cal.body, seed: 2, state: callMins(s) <= 5 ? 'ask' : 'idle' },
     { body: MODULE_COL.music.body, seed: 3, state: 'idle' },
   ];
 }

@@ -8,7 +8,7 @@ import { spawnFloat, stepParticles } from './particles';
 import { stepMusic } from './music';
 import { moduleMood } from './mood';
 import { after } from './state';
-import { notchState } from '../island/focus';
+import { busyAside, notchState } from '../island/focus';
 
 /**
  * proto: update - one frame of behaviour. Targets T are rebuilt layer by layer
@@ -173,7 +173,8 @@ export function update(s: IslandState, dt: number, now: number): void {
 
   // 4. event
   const event = s.event;
-  if (event) {
+  const aside = busyAside(s);
+  if (event && !aside) {
     const el = t - event.start;
     T.glow = 0.9;
     switch (event.type) {
@@ -309,7 +310,11 @@ export function update(s: IslandState, dt: number, now: number): void {
   // status dot: events and sleep, never plain idle
   const st = statusOf(s);
   sp.badge.t =
-    st && st.badge ? (event && event.type === 'attention' ? 1 + 0.18 * Math.sin((t - event.start) * 7) : 1) : 0;
+    st && st.badge && !aside
+      ? event && event.type === 'attention'
+        ? 1 + 0.18 * Math.sin((t - event.start) * 7)
+        : 1
+      : 0;
   if (st && st.badge) s.badgeColor = st.color;
 
   stepSprings(s, dt, dragging);

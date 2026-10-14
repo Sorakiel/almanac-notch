@@ -42,6 +42,19 @@ export function claudeState(s: IslandState): ClaudeState {
   return (ev && map[ev]) || 'idle';
 }
 
+/** proto: calMins, or the live calendar when there is one (Infinity = no call ahead) */
+export function callMins(s: IslandState): number {
+  return s.cal ? (s.cal.mins ?? Infinity) : calMins(s.t);
+}
+
+/** "14 мин", "2 ч", "2 ч 5 мин": the live calendar can be hours away (the stub never is) */
+export function minsText(m: number): string {
+  if (m < 60) return m + ' мин';
+  const h = Math.floor(m / 60),
+    r = m % 60;
+  return h + ' ч' + (r ? ' ' + r + ' мин' : '');
+}
+
 /** proto: habitsDone */
 export function habitsDone(s: IslandState): number {
   return s.habits.filter((h) => h[1]).length;
@@ -54,9 +67,24 @@ export function autoFocus(s: IslandState): ModuleId {
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent') return 'claude';
   if (ev === 'success' || ev === 'error') return 'github';
   if (claudeState(s) !== 'idle') return 'claude';
-  if (calMins(s.t) <= 30) return 'cal';
+  if (callMins(s) <= 30) return 'cal';
   if (s.musicPlaying) return 'music';
   return 'almanac';
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): a busy Claude (working, thinking, searching) stays on its
+ * own card, the rail and the ears. While another module's card is open, the mascot there keeps
+ * that module's mood and prop (dances to the music) instead of showing Claude's work.
+ */
+export function busyAside(s: IslandState): boolean {
+  const ev = s.event && s.event.type;
+  return (
+    (ev === 'working' || ev === 'thinking' || ev === 'searching') &&
+    s.tab === 'home' &&
+    notchState(s) === 'open' &&
+    effectiveFocus(s) !== 'claude'
+  );
 }
 
 /** proto: effectiveFocus - also records when the shown card changed */

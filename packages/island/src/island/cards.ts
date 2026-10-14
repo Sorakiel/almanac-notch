@@ -9,6 +9,7 @@ import { TRACKS, type ToolKind } from '../stub';
 import type { WorkFx } from './fx';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
+import { minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
 import { drawGlyph, modules, prIcon, type ModuleItem } from './modules';
 
@@ -158,12 +159,26 @@ export function drawFocusCard(
       color: T_MUTED,
       max: tmax - CM.length * (bw + bg) - 6,
     });
+  } else if (it.kind === 'cal' && s.cal) {
+    const cal = s.cal;
+    if (cal.mins === null) {
+      L(0, cal.title, '#FFFFFF');
+      L(1, cal.after, T_MUTED);
+    } else {
+      L(
+        0,
+        (cal.mins <= 0 ? 'сейчас' : 'через ' + minsText(cal.mins)) + ' · ' + cal.at,
+        cal.mins <= 5 ? '#F5B94A' : '#FFFFFF',
+      );
+      L(1, cal.title);
+      if (cal.after) L(2, cal.after, T_MUTED);
+    }
   } else if (it.kind === 'cal') {
     L(0, 'через ' + it.mins + ' мин · 15:00', it.mins <= 5 ? '#F5B94A' : '#FFFFFF');
     L(1, 'Созвон с командой');
     L(2, 'дальше: лекция в 17:10', T_MUTED);
   } else if (it.kind === 'music') {
-    const tr = TRACKS[s.trackIdx] as readonly [string, string];
+    const tr = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
     L(0, tr[0], '#FFFFFF');
     L(1, tr[1], T_MUTED);
     const by = y1 - 16,

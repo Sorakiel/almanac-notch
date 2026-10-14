@@ -10,7 +10,8 @@ export function nextTrack(s: IslandState): void {
 
 /** proto: music clock at the top of update */
 export function stepMusic(s: IslandState, dt: number): void {
-  if (!s.musicPlaying) return;
+  // a real player keeps its own clock; the desktop driver sets musicPos every frame
+  if (!s.musicPlaying || s.media) return;
   s.musicPos += dt;
   if (s.musicPos >= (TRACK_LEN[s.trackIdx] ?? Infinity)) {
     if (s.repeat) s.musicPos = 0;

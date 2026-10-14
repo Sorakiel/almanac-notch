@@ -59,35 +59,44 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   const ax = X0 + 84,
     ay = cy0 + 10,
     as = 40,
-    tr = TRACKS[s.trackIdx] as readonly [string, string],
-    art = TRACK_ART[s.trackIdx] as readonly [string, string],
-    len = TRACK_LEN[s.trackIdx] as number;
-  // generated cover art: a gradient, a sun and two waves
+    md = s.media,
+    tr = md ? ([md.title, md.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]),
+    art = TRACK_ART[md ? md.artSeed % TRACK_ART.length : s.trackIdx] as readonly [string, string],
+    len = md ? md.len : (TRACK_LEN[s.trackIdx] as number);
   c.save();
   rrect(c, ax, ay, as, as, 7);
   c.clip();
-  const g = c.createLinearGradient(ax, ay, ax + as, ay + as);
-  g.addColorStop(0, art[0]);
-  g.addColorStop(1, art[1]);
-  c.fillStyle = g;
-  c.fillRect(ax, ay, as, as);
-  c.fillStyle = 'rgba(255,255,255,0.75)';
-  c.beginPath();
-  c.arc(ax + as * 0.68, ay + as * 0.34, as * 0.13, 0, Math.PI * 2);
-  c.fill();
-  c.strokeStyle = 'rgba(255,255,255,0.55)';
-  c.lineWidth = 2;
-  for (let i = 0; i < 2; i++) {
+  if (md && md.art) {
+    // the player's own cover, cropped to a square
+    const im = md.art as { width: number; height: number },
+      side = Math.min(im.width, im.height);
+    c.drawImage(md.art, (im.width - side) / 2, (im.height - side) / 2, side, side, ax, ay, as, as);
+    c.restore();
+  } else {
+    // generated cover art: a gradient, a sun and two waves
+    const g = c.createLinearGradient(ax, ay, ax + as, ay + as);
+    g.addColorStop(0, art[0]);
+    g.addColorStop(1, art[1]);
+    c.fillStyle = g;
+    c.fillRect(ax, ay, as, as);
+    c.fillStyle = 'rgba(255,255,255,0.75)';
     c.beginPath();
-    for (let k = 0; k <= 10; k++) {
-      const x = ax + (k * as) / 10,
-        y = ay + as * (0.66 + i * 0.14) + Math.sin(k * 1.1 + t * (playing ? 2 : 0) + i) * 2;
-      if (k) c.lineTo(x, y);
-      else c.moveTo(x, y);
+    c.arc(ax + as * 0.68, ay + as * 0.34, as * 0.13, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.55)';
+    c.lineWidth = 2;
+    for (let i = 0; i < 2; i++) {
+      c.beginPath();
+      for (let k = 0; k <= 10; k++) {
+        const x = ax + (k * as) / 10,
+          y = ay + as * (0.66 + i * 0.14) + Math.sin(k * 1.1 + t * (playing ? 2 : 0) + i) * 2;
+        if (k) c.lineTo(x, y);
+        else c.moveTo(x, y);
+      }
+      c.stroke();
     }
-    c.stroke();
+    c.restore();
   }
-  c.restore();
   const tx = ax + as + 10,
     right = X1 - 12;
   c.fillStyle = playing ? '#4FD27E' : '#8E8E93';
@@ -95,7 +104,7 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   c.arc(tx + 3, ay + 11, 3, 0, Math.PI * 2);
   c.fill();
   textAt(c, tr[0], tx + 12, ay + 11.5, { size: 13, weight: 600, max: right - tx - 12 });
-  textAt(c, tr[1] + ' · ' + (tr[0].split(' ')[0] as string), tx, ay + 29, {
+  textAt(c, md ? md.sub : tr[1] + ' · ' + (tr[0].split(' ')[0] as string), tx, ay + 29, {
     size: 11.5,
     weight: 400,
     color: T_MUTED,
@@ -105,9 +114,16 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   const py = ay + as + 13,
     bx0 = ax + 34,
     bx1 = right - 38,
-    prog = clamp(s.musicPos / len, 0, 1);
+    prog = len > 0 ? clamp(s.musicPos / len, 0, 1) : 0;
   textAt(c, mmss(s.musicPos), ax, py + 0.5, { size: 10.5, mono: true, color: T_MUTED });
-  textAt(c, '-' + mmss(len - s.musicPos), right, py + 0.5, { size: 10.5, mono: true, color: T_MUTED, align: 'right' });
+  // a live stream has no length: no remaining time
+  if (len > 0)
+    textAt(c, '-' + mmss(len - s.musicPos), right, py + 0.5, {
+      size: 10.5,
+      mono: true,
+      color: T_MUTED,
+      align: 'right',
+    });
   const hovBar = hovering(s, bx0, py - 6, bx1 - bx0, 12);
   c.fillStyle = 'rgba(255,255,255,0.18)';
   rrect(c, bx0, py - 2, bx1 - bx0, 4, 2);

@@ -53,6 +53,43 @@ export interface AgentFeed {
   lastActive: number | null;
 }
 
+/**
+ * The next call from the system calendar (stage 5). Null = the prototype's calMins() stub.
+ * The desktop driver recomputes it every frame; strings are already short enough for the card.
+ */
+export interface CalFeed {
+  /** minutes to the start, 0 = started; null = no call ahead (title then says why) */
+  mins: number | null;
+  /** start time, "15:00" or "завтра 10:00" */
+  at: string;
+  title: string;
+  /** third line: "дальше: лекция в 17:10" (or the second line when mins is null) */
+  after: string;
+}
+
+/**
+ * The system's now-playing track (stage 5). Null = the prototype's TRACKS stub. Position,
+ * play state, shuffle, repeat and volume live in the usual fields (musicPos, musicPlaying, ...);
+ * the island's player buttons queue commands in `out` instead of changing the stub playlist.
+ */
+export interface MediaFeed {
+  /** nothing loaded in any player: the card says so, the rail shows "не играет" */
+  idle: boolean;
+  title: string;
+  /** the title cut for the narrow places (module short text) */
+  short: string;
+  /** second line: artist · album or player */
+  sub: string;
+  /** seconds; 0 = unknown (a live stream) */
+  len: number;
+  /** the real cover; null = the generated one */
+  art: CanvasImageSource | null;
+  /** palette of the generated cover (index into TRACK_ART) */
+  artSeed: number;
+  /** "toggle" | "next" | "prev" | "seek <s>" | "shuffle <0|1>" | "repeat <0|1>" | "vol <0..1>" */
+  out: string[];
+}
+
 export interface Particle {
   type: 'bit' | 'note' | 'z';
   color: string | undefined;
@@ -166,6 +203,8 @@ export interface IslandState {
   nextZ: number;
   event: MascotEvent | null;
   agent: AgentFeed | null;
+  cal: CalFeed | null;
+  media: MediaFeed | null;
   wander: { x: number; y: number; next: number };
   sqOverride: { val: number; until: number } | null;
   particles: Particle[];
@@ -263,6 +302,8 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     nextZ: 0,
     event: null,
     agent: null,
+    cal: null,
+    media: null,
     wander: { x: 0, y: 0, next: 0 },
     sqOverride: null,
     particles: [],

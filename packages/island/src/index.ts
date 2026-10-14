@@ -11,7 +11,15 @@ import { renderIsland } from './island/render';
 export { mulberry32, PARITY_SEED };
 export type { Rng, IslandState, EventType, ModuleId, Tab, Settings, Answer };
 export * from './sim/settings';
-export { DEFAULT_THEME, type Theme, type LayerText, type AgentFeed, type MascotEvent } from './sim/state';
+export {
+  DEFAULT_THEME,
+  type Theme,
+  type LayerText,
+  type AgentFeed,
+  type CalFeed,
+  type MediaFeed,
+  type MascotEvent,
+} from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { update } from './sim/behavior';
 export { notchState, type NotchState } from './island/focus';

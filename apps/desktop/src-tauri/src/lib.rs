@@ -5,7 +5,9 @@
 //! feeds it to packages/island as pointer moves (hover works while the window is see-through)
 //! and turns mouse events on with `set_interactive` only over `islandRect()` or a hit zone.
 
+mod calendar;
 mod claude;
+mod media;
 mod platform;
 mod tray;
 
@@ -72,6 +74,70 @@ fn agent_answer(hub: State<'_, Arc<Hub>>, id: u64, answer: String) {
 #[tauri::command]
 fn claude_usage(usage: State<'_, Arc<Mutex<Usage>>>) -> Usage {
     usage.lock().unwrap().clone()
+}
+
+/// Last calendar read and now-playing state; the frontend asks once at start, then listens.
+#[derive(Default)]
+struct Feeds {
+    calendar: Option<calendar::Calendar>,
+    media: Option<serde_json::Value>,
+    volume: Option<f32>,
+}
+
+#[derive(Serialize)]
+struct FeedsSnapshot {
+    calendar: Option<calendar::Calendar>,
+    media: Option<serde_json::Value>,
+    volume: Option<f32>,
+}
+
+#[tauri::command]
+fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
+    let f = feeds.lock().unwrap();
+    FeedsSnapshot {
+        calendar: f.calendar.clone(),
+        media: f.media.clone(),
+        volume: f.volume,
+    }
+}
+
+/// Player command from the island ("toggle", "next", "seek 42", ...); unknown ones are dropped.
+#[tauri::command]
+fn media_cmd(media: State<'_, Arc<media::Media>>, cmd: String) {
+    media.command(&cmd);
+}
+
+/// System output volume, 0..1.
+#[tauri::command]
+fn set_volume(v: f32) {
+    media::set_volume(v);
+}
+
+/// Calendar and now-playing providers. Each one failing leaves its module empty.
+fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
+    let (app2, f2) = (app.clone(), feeds.clone());
+    calendar::start(move |c| {
+        f2.lock().unwrap().calendar = Some(c.clone());
+        let _ = app2.emit("island://calendar", c);
+    });
+    let app2 = app.clone();
+    media::start(Arc::new(move |name: &str, v: serde_json::Value| {
+        {
+            let mut f = feeds.lock().unwrap();
+            if name == "island://volume" {
+                f.volume = v.as_f64().map(|x| x as f32);
+            } else {
+                // the cover comes once per track; keep it for a reloaded page
+                let art = f.media.as_ref().and_then(|m| m.get("art").cloned());
+                let mut m = v.clone();
+                if let (Some(a), Some(o)) = (art, m.as_object_mut()) {
+                    o.entry("art").or_insert(a);
+                }
+                f.media = Some(m);
+            }
+        }
+        let _ = app2.emit(name, v);
+    }))
 }
 
 /// Hook server + plan usage watcher. A failure here leaves the island working without
@@ -172,17 +238,23 @@ pub fn run() {
 
     let state: SharedState = Arc::new(Mutex::new(Shared::default()));
     let usage = Arc::new(Mutex::new(Usage::default()));
+    let feeds: Arc<Mutex<Feeds>> = Arc::new(Mutex::new(Feeds::default()));
     let hook_port: Arc<Mutex<Option<u16>>> = Arc::new(Mutex::new(None));
     let port_slot = hook_port.clone();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(state.clone())
+        .manage(feeds.clone())
         .manage(usage.clone())
         .invoke_handler(tauri::generate_handler![
             island_geometry,
             set_interactive,
             agent_answer,
-            claude_usage
+            claude_usage,
+            feeds_state,
+            media_cmd,
+            set_volume
         ])
         .setup(move |app| {
             // Not in the Dock and not in Cmd-Tab.
@@ -203,6 +275,8 @@ pub fn run() {
             })));
             app.manage(hub.clone());
             *port_slot.lock().unwrap() = start_claude(app.handle(), hub, usage.clone());
+            let media = start_feeds(app.handle(), feeds.clone());
+            app.manage(media);
             spawn_cursor_poller(app.handle().clone(), window, state.clone());
             // Launch activation (tao, wry) arrives asynchronously; undo it once it has.
             let handle = app.handle().clone();

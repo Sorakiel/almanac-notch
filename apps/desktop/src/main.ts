@@ -24,7 +24,9 @@ import {
   type EventType,
   type IslandPoint,
 } from '@almanac-notch/island';
+import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
+import { CalDriver, MediaDriver, type Calendar, type MediaMsg } from './feeds';
 
 interface Geometry {
   hasNotch: boolean;
@@ -124,29 +126,80 @@ const domPoint = (e: MouseEvent): IslandPoint => {
 };
 island.addEventListener('pointerdown', (e) => islandPointerDown(s, domPoint(e)));
 
-// proto: keydown - the answer keys Y/N and 1-3 (SPEC 2.10). They need the window to have the
-// keyboard, which the panel does not take yet (docs/CHANGES.md); the browser mode has it.
-document.addEventListener('keydown', (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
+// proto: keydown - the answer keys Y/N and 1-3 (SPEC 2.10). The panel never takes the keyboard
+// (it would steal focus), so in the window they are global ⌥Y / ⌥N / ⌥1-3, registered only
+// while a prompt is open (docs/CHANGES.md). The browser mode keeps the plain keys.
+/** true = the key answered the open prompt */
+function answerKey(key: string): boolean {
   const ev = s.event;
-  if (!ev || ev.answer || (ev.type !== 'attention' && ev.type !== 'question')) return;
-  const key = e.key.toLowerCase();
+  if (!ev || ev.answer || (ev.type !== 'attention' && ev.type !== 'question')) return false;
   if (ev.type === 'attention' && (key === 'y' || key === 'n')) {
-    e.preventDefault();
     wake();
     m.answer(key === 'y' ? 'approve' : 'deny');
+    return true;
   }
   const opts = s.agent?.question?.[1].length ?? 3;
   if (ev.type === 'question' && ['1', '2', '3'].includes(key) && +key <= opts) {
-    e.preventDefault();
     wake();
     m.answer(`opt:${+key - 1}`);
+    return true;
   }
+  return false;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (answerKey(e.key.toLowerCase())) e.preventDefault();
 });
+
+/** Which global answer keys are registered: none, the approval pair or the options. */
+let hotkeys: 'none' | 'attention' | 'question' = 'none';
+let hotkeysBusy = false;
+async function syncHotkeys(): Promise<void> {
+  const ev = s.event;
+  const want = ev && !ev.answer && (ev.type === 'attention' || ev.type === 'question') ? ev.type : 'none';
+  if (want === hotkeys || hotkeysBusy) return;
+  hotkeysBusy = true;
+  try {
+    await unregisterAll();
+    hotkeys = 'none';
+    const keys = want === 'attention' ? ['Y', 'N'] : want === 'question' ? ['1', '2', '3'] : [];
+    if (keys.length)
+      await register(
+        keys.map((k) => 'Alt+' + k),
+        (e) => {
+          if (e.state === 'Pressed') answerKey(e.shortcut.slice(-1).toLowerCase());
+        },
+      );
+    hotkeys = want;
+  } catch (err) {
+    // another app holds the combination: clicks still work
+    console.warn('[hotkeys]', err);
+    hotkeys = want;
+  } finally {
+    hotkeysBusy = false;
+  }
+}
 island.addEventListener('dblclick', (e) => islandDoubleClick(s, domPoint(e)));
 
-// ---------- Claude Code (hooks, plan usage) ----------
+// ---------- Claude Code (hooks, plan usage), calendar, music ----------
 let agent: AgentDriver | null = null;
+let cal: CalDriver | null = null;
+let media: MediaDriver | null = null;
+
+interface Feeds {
+  calendar: Calendar | null;
+  media: MediaMsg | null;
+  volume: number | null;
+}
+
+async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
+  try {
+    const bin = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+    return await createImageBitmap(new Blob([bin], { type: 'image/jpeg' }));
+  } catch {
+    return null;
+  }
+}
 
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
@@ -177,6 +230,31 @@ if (inTauri) {
     agent?.onUsage(e.payload);
   });
   agent.onUsage(await invoke<Usage>('claude_usage'));
+  cal = new CalDriver(s, Date.now);
+  media = new MediaDriver(s, {
+    send: (cmd) => void invoke('media_cmd', { cmd }),
+    setVolume: (v) => void invoke('set_volume', { v }),
+    decode: decodeArt,
+    now: Date.now,
+  });
+  await listen<Calendar>('island://calendar', (e) => {
+    wake();
+    cal?.onCalendar(e.payload);
+  });
+  await listen<MediaMsg>('island://media', (e) => {
+    wake();
+    media?.onMessage(e.payload);
+  });
+  await listen<number | null>('island://volume', (e) => {
+    wake();
+    media?.onVolume(e.payload);
+  });
+  const f = await invoke<Feeds>('feeds_state');
+  if (f.calendar) cal.onCalendar(f.calendar);
+  if (f.media) media.onMessage(f.media);
+  media.onVolume(f.volume);
+  // a reloaded page must not keep the previous page's answer keys
+  await unregisterAll();
   applyGeometry(await invoke<Geometry>('island_geometry'));
   // a reloaded page must not inherit a mouse-taking window from the previous one
   await invoke('set_interactive', { on: false });
@@ -232,6 +310,9 @@ function tick(now: number, id: number): void {
   } while (dt > 1e-6);
   // island answers go back to the hook; expired prompts, the limit timer, stale sessions
   agent?.tick();
+  cal?.tick();
+  media?.tick();
+  if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();
   // The island moves under a still cursor (opens, closes): re-check the click-through zone.
