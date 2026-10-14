@@ -87,3 +87,15 @@ export function islandDoubleClick(s: IslandState, p: IslandPoint): void {
     hop(s, 5.6);
   }
 }
+
+/** The black strip as drawn on the last frame, island CSS px. The window takes clicks only here and on hits. */
+export function islandRect(s: IslandState): { x: number; y: number; w: number; h: number } {
+  const B = s.islandBox;
+  return { x: B.x0, y: B.y0, w: B.x1 - B.x0, h: B.y1 - B.y0 };
+}
+
+/** Action of the topmost clickable zone under the point (proto: hitAt), or null. */
+export function hitTest(s: IslandState, p: IslandPoint): string | null {
+  const h = hitAt(s, p);
+  return h ? h.act : null;
+}

@@ -16,8 +16,8 @@
       {
         "label": "island",
         "title": "Almanac Notch",
-        "width": 520,
-        "height": 190,
+        "width": 560,
+        "height": 200,
         "resizable": false,
         "maximizable": false,
         "minimizable": false,

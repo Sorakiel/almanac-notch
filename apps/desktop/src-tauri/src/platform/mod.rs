@@ -3,7 +3,7 @@
 //! Units: a "screen unit" is whatever the OS cursor API returns. On macOS that is
 //! points in CoreGraphics global space (origin top-left of the menu-bar screen, y down);
 //! on Windows it is physical pixels. `Placement.scale` converts CSS px of the webview
-//! into screen units, so hit rects from the frontend can be compared with the cursor.
+//! into screen units, so the cursor can be sent to the frontend in CSS px.
 
 use serde::Serialize;
 
@@ -26,9 +26,10 @@ pub struct Placement {
     pub scale: f64,
 }
 
-/// Window size in points: the open island (480x150) plus margins (ARCHITECTURE: ~520x190).
-pub const WIN_W: f64 = 520.0;
-pub const WIN_H: f64 = 190.0;
+/// Window size in points = the prototype's island canvas (#island 560x200), so the ear and
+/// open-width limits that depend on IW match the reference frames exactly.
+pub const WIN_W: f64 = 560.0;
+pub const WIN_H: f64 = 200.0;
 
 #[cfg(target_os = "macos")]
 mod macos;

@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@almanac-notch/island": "*",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/onest": "^5.3.1",
+    "@fontsource/unbounded": "^5.3.0",
     "@tauri-apps/api": "^2.12.3"
   },
   "devDependencies": {

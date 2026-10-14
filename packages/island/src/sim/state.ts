@@ -172,6 +172,11 @@ export interface IslandState {
   /** island canvas size in CSS px */
   IW: number;
   IH: number;
+  /** notch width and menu bar height; the real window passes the system notch (ARCHITECTURE: Mac) */
+  notchW: number;
+  mb: number;
+  /** real window: transparent backdrop, no fake wallpaper, menu bar or loupe */
+  bare: boolean;
   islandBox: { x0: number; x1: number; y0: number; y1: number };
   mascotSpots: { x: number; y: number; a: number }[];
   hits: Hit[];
@@ -270,6 +275,9 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     nextDanceHop: 0,
     IW: 560,
     IH: 120,
+    notchW: 190,
+    mb: 32,
+    bare: false,
     islandBox: { x0: 0, x1: 0, y0: 0, y1: 0 },
     mascotSpots: [],
     hits: [],

@@ -4,7 +4,7 @@ import { rrect, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { statusOf } from '../sim/events';
 import { notchState } from './focus';
-import { MB, islandShape, islandTargets } from './geometry';
+import { islandShape, islandTargets } from './geometry';
 import { bootTrace, drawShine, islandFlash, shakeX, workFx } from './fx';
 import { drawHalf } from './half';
 import { drawOpen } from './open';
@@ -13,32 +13,36 @@ import { drawOpen } from './open';
  * proto: renderIsland. Draws at 2× into the offscreen context `oc` (canvas IW·2 × IH·2), then scales it
  * into the island canvas `ic` and copies the loupe region pixel for pixel into `lc`.
  */
-export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc: Ctx): void {
+export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
   const { IW, IH, S, sp } = s;
+  const MB = s.mb;
   const c = oc;
   c.setTransform(2, 0, 0, 2, 0, 0);
-  const wall = c.createLinearGradient(0, 0, IW, IH);
-  wall.addColorStop(0, '#2E3442');
-  wall.addColorStop(1, '#5A6276');
-  c.fillStyle = wall;
-  c.fillRect(0, 0, IW, IH);
-  if (S.screen === 'mac') {
-    // the menu bar exists only on the Mac; Windows keeps its taskbar at the bottom
-    c.fillStyle = 'rgba(255,255,255,0.09)';
-    c.fillRect(0, 0, IW, MB);
-    c.fillStyle = 'rgba(255,255,255,0.35)';
-    [14, 50, 84, 116].forEach((x, i) => {
-      if (x + 26 < IW * 0.28) {
-        rrect(c, x, 13, i === 0 ? 14 : 26, 6, 3);
-        c.fill();
-      }
-    });
-    [IW - 46, IW - 72, IW - 92].forEach((x) => {
-      if (x > IW * 0.72) {
-        rrect(c, x, 12, 14, 8, 3);
-        c.fill();
-      }
-    });
+  if (s.bare) c.clearRect(0, 0, IW, IH);
+  else {
+    const wall = c.createLinearGradient(0, 0, IW, IH);
+    wall.addColorStop(0, '#2E3442');
+    wall.addColorStop(1, '#5A6276');
+    c.fillStyle = wall;
+    c.fillRect(0, 0, IW, IH);
+    if (S.screen === 'mac') {
+      // the menu bar exists only on the Mac; Windows keeps its taskbar at the bottom
+      c.fillStyle = 'rgba(255,255,255,0.09)';
+      c.fillRect(0, 0, IW, MB);
+      c.fillStyle = 'rgba(255,255,255,0.35)';
+      [14, 50, 84, 116].forEach((x, i) => {
+        if (x + 26 < IW * 0.28) {
+          rrect(c, x, 13, i === 0 ? 14 : 26, 6, 3);
+          c.fill();
+        }
+      });
+      [IW - 46, IW - 72, IW - 92].forEach((x) => {
+        if (x > IW * 0.72) {
+          rrect(c, x, 12, 14, 8, 3);
+          c.fill();
+        }
+      });
+    }
   }
 
   const state = notchState(s);
@@ -69,6 +73,8 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc: Ctx): void {
       drop: !!st && !!st.drop,
       textW,
       dotsW,
+      notchW: s.notchW,
+      mb: MB,
     });
     sp.earL.t = tg.eL;
     sp.earR.t = tg.eR;
@@ -83,7 +89,7 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc: Ctx): void {
     path();
     c.fillStyle = '#000';
     c.fill();
-    if (!win) {
+    if (!win && !s.bare) {
       c.fillStyle = '#0B0C10';
       c.beginPath();
       c.arc(cx, 14, 3.4, 0, Math.PI * 2);
@@ -131,12 +137,13 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc: Ctx): void {
   else s.loupeRect = { x: cx - 42, y: 0, w: 84, h: 40 };
 
   const off = oc.canvas,
-    island = ic.canvas,
-    loupe = lc.canvas;
+    island = ic.canvas;
   ic.setTransform(1, 0, 0, 1, 0, 0);
   ic.imageSmoothingEnabled = true;
   ic.clearRect(0, 0, island.width, island.height);
   ic.drawImage(off, 0, 0, off.width, off.height, 0, 0, island.width, island.height);
+  if (!lc) return;
+  const loupe = lc.canvas;
   lc.setTransform(1, 0, 0, 1, 0, 0);
   lc.imageSmoothingEnabled = false;
   lc.fillStyle = '#000';

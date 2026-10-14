@@ -22,6 +22,8 @@ export {
   islandPointerLeave,
   islandPointerDown,
   islandDoubleClick,
+  islandRect,
+  hitTest,
   type IslandPoint,
 } from './island/input';
 export {
@@ -58,8 +60,8 @@ export function createMascot(opts: MascotOptions) {
     update: (dt: number, now: number) => update(s, dt, now),
     renderStage: (c: CanvasRenderingContext2D, dpr: number) => renderStage(s, c, dpr),
     stageCursor: () => stageCursor(s),
-    /** oc: offscreen context of an IW·2 × IH·2 canvas; ic: island canvas; lc: loupe canvas */
-    renderIsland: (ic: CanvasRenderingContext2D, oc: CanvasRenderingContext2D, lc: CanvasRenderingContext2D) =>
+    /** oc: offscreen context of an IW·2 × IH·2 canvas; ic: island canvas; lc: loupe canvas (none in the real window) */
+    renderIsland: (ic: CanvasRenderingContext2D, oc: CanvasRenderingContext2D, lc?: CanvasRenderingContext2D) =>
       renderIsland(s, ic, oc, lc),
     trigger: (type: EventType | 'sleep') => trigger(s, type),
     /** n quick pokes at (0.2, -0.3) of the body, as tools/snapshot.mjs does */

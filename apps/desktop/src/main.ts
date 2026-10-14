@@ -1,7 +1,29 @@
-// Stage 1 stub: a black strip at the notch that opens to 480x150 on hover.
-// The real island from packages/island replaces this in stage 3.
+// The island in the real window: packages/island drawn over the whole (transparent) window.
+// Rust streams the global cursor; the island decides from islandRect() and its hit zones
+// whether the window takes the mouse, so clicks anywhere else fall through.
+import '@fontsource/onest/400.css';
+import '@fontsource/onest/500.css';
+import '@fontsource/onest/600.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/unbounded/500.css';
+import '@fontsource/unbounded/600.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import {
+  EVENT_TYPES,
+  createMascot,
+  defaultSettings,
+  hitTest,
+  islandDoubleClick,
+  islandPointerDown,
+  islandPointerLeave,
+  islandPointerMove,
+  islandRect,
+  notchState,
+  type EventType,
+  type IslandPoint,
+} from '@almanac-notch/island';
 
 interface Geometry {
   hasNotch: boolean;
@@ -11,134 +33,177 @@ interface Geometry {
   winH: number;
 }
 
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+// Outside Tauri (plain browser on the Vite port) the page runs on DOM pointer events, for quick looks.
+const inTauri = '__TAURI_INTERNALS__' in window;
 
-const OPEN_W = 480;
-const OPEN_H = 150;
-// No-notch screens: flat tile at the top edge (SPEC: Windows closed state 96x9).
-const TILE_W = 96;
-const TILE_H = 9;
-const RADIUS = 14;
+for (const f of [
+  '400 12px Onest',
+  '500 12px Onest',
+  '600 12px Onest',
+  '400 12px "JetBrains Mono"',
+  '500 12px "JetBrains Mono"',
+  '500 12px Unbounded',
+  '600 12px Unbounded',
+])
+  void document.fonts.load(f);
+await document.fonts.ready;
 
-const canvas = document.getElementById('island') as HTMLCanvasElement;
-const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+const S = defaultSettings(matchMedia('(prefers-reduced-motion: reduce)').matches);
+const m = createMascot({ settings: S, now: performance.now() });
+const s = m.state;
+s.bare = true;
 
-let geo: Geometry = { hasNotch: false, notchW: 190, notchH: 32, winW: 520, winH: 190 };
-let hover = false;
-let clicks = 0;
-let flash = 0;
-// Current strip size; eased toward the target. Placeholder motion, not the prototype springs.
-let w = 0;
-let h = 0;
-let raf = 0;
-let last = 0;
+const island = document.getElementById('island') as HTMLCanvasElement,
+  ic = island.getContext('2d') as CanvasRenderingContext2D;
+const off = document.createElement('canvas'),
+  oc = off.getContext('2d') as CanvasRenderingContext2D;
 
-function closedSize(): { w: number; h: number } {
-  return geo.hasNotch ? { w: geo.notchW, h: geo.notchH } : { w: TILE_W, h: TILE_H };
-}
+let geo: Geometry = { hasNotch: true, notchW: 190, notchH: 32, winW: 560, winH: 200 };
+let dpr = 1;
 
-function targetSize(): { w: number; h: number } {
-  return hover ? { w: Math.min(OPEN_W, geo.winW - 24), h: OPEN_H } : closedSize();
-}
-
-function centered(rw: number, rh: number): Rect {
-  return { x: (geo.winW - rw) / 2, y: 0, w: rw, h: rh };
-}
-
-async function pushHitRects(): Promise<void> {
-  const c = closedSize();
-  // On a notch the closed hover zone is the notch itself; the tile is too thin to hit, so pad it.
-  const closed = geo.hasNotch ? centered(c.w, c.h) : centered(c.w + 40, c.h + 6);
-  const t = { w: Math.min(OPEN_W, geo.winW - 24), h: OPEN_H };
-  await invoke('set_hit_rects', { closed, open: centered(t.w, t.h) });
-}
-
+// proto: resize (island part)
 function resize(): void {
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.round(geo.winW * dpr);
-  canvas.height = Math.round(geo.winH * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function draw(): void {
-  ctx.clearRect(0, 0, geo.winW, geo.winH);
-  // SPEC: closed on Mac = only the camera notch. Draw nothing so no black box
-  // shows during Space switches; the hover zone stays active in Rust.
-  const c = closedSize();
-  if (geo.hasNotch && !hover && Math.abs(w - c.w) < 0.5 && Math.abs(h - c.h) < 0.5) return;
-  const r = centered(w, h);
-  const rad = Math.min(RADIUS, h / 2, w / 2);
-  ctx.beginPath();
-  ctx.moveTo(r.x, 0);
-  ctx.lineTo(r.x + r.w, 0);
-  ctx.lineTo(r.x + r.w, r.h - rad);
-  ctx.quadraticCurveTo(r.x + r.w, r.h, r.x + r.w - rad, r.h);
-  ctx.lineTo(r.x + rad, r.h);
-  ctx.quadraticCurveTo(r.x, r.h, r.x, r.h - rad);
-  ctx.closePath();
-  ctx.fillStyle = '#000';
-  ctx.fill();
-  if (h > 60) {
-    // Click feedback for the focus check: the caption flashes orange.
-    ctx.fillStyle = flash > 0 ? 'rgba(255,122,61,0.95)' : 'rgba(255,255,255,0.55)';
-    ctx.font = '12px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    const note = geo.hasNotch ? `notch ${geo.notchW.toFixed(0)}×${geo.notchH.toFixed(0)}` : 'no notch';
-    ctx.fillText(`stage 1 stub · ${note} · clicks ${clicks}`, geo.winW / 2, r.h - 20);
-  }
-}
-
-function frame(now: number): void {
-  const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
-  last = now;
-  const t = targetSize();
-  const k = 1 - Math.exp(-dt * 18);
-  w += (t.w - w) * k;
-  h += (t.h - h) * k;
-  flash = Math.max(0, flash - dt);
-  const settled = Math.abs(t.w - w) < 0.3 && Math.abs(t.h - h) < 0.3 && flash === 0;
-  if (settled) {
-    w = t.w;
-    h = t.h;
-  }
-  draw();
-  // Idle = no rAF, so the closed strip costs nothing.
-  raf = settled ? 0 : requestAnimationFrame(frame);
-}
-
-function kick(): void {
-  if (raf) return;
-  last = performance.now();
-  raf = requestAnimationFrame(frame);
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  s.IW = geo.winW;
+  s.IH = geo.winH;
+  island.width = Math.round(s.IW * dpr);
+  island.height = Math.round(s.IH * dpr);
+  off.width = Math.round(s.IW * 2);
+  off.height = Math.round(s.IH * 2);
 }
 
 function applyGeometry(g: Geometry): void {
   geo = g;
-  const c = closedSize();
-  if (w === 0) {
-    w = c.w;
-    h = c.h;
-  }
+  // No notch (Windows, external displays): the flat tile of the prototype's Windows mode.
+  S.screen = g.hasNotch ? 'mac' : 'win';
+  s.notchW = g.notchW;
+  s.mb = g.hasNotch ? g.notchH : 32;
   resize();
-  draw();
-  kick();
-  void pushHitRects();
 }
 
-canvas.addEventListener('mousedown', () => {
-  clicks += 1;
-  flash = 0.25;
-  kick();
-});
+// ---------- pointer ----------
+let ptr: IslandPoint | null = null;
+let interactive = false;
+// frame loop state; declared early because listeners may fire before the loop starts
+let last = performance.now();
+let loop = 0;
+let idle = false;
 
-await listen<Geometry>('island://geometry', (e) => applyGeometry(e.payload));
-await listen<boolean>('island://hover', (e) => {
-  hover = e.payload;
-  kick();
-});
-applyGeometry(await invoke<Geometry>('island_geometry'));
+function setInteractive(on: boolean): void {
+  if (on === interactive) return;
+  interactive = on;
+  if (inTauri) void invoke('set_interactive', { on });
+}
+
+/** The window takes the mouse only over the strip or a clickable zone (e.g. the mascot). */
+function updateInteractive(): void {
+  if (!ptr) return setInteractive(false);
+  const r = islandRect(s);
+  const inRect = ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h;
+  setInteractive(inRect || hitTest(s, ptr) !== null);
+}
+
+/** proto: island pointermove / pointerleave - the window is the prototype's island canvas */
+function pointer(p: IslandPoint | null): void {
+  wake();
+  const inside = !!p && p.x >= 0 && p.y >= 0 && p.x < s.IW && p.y < s.IH;
+  if (inside && p) {
+    ptr = p;
+    island.style.cursor = islandPointerMove(s, p, performance.now());
+  } else if (ptr) {
+    ptr = null;
+    islandPointerLeave(s);
+  }
+  updateInteractive();
+}
+
+const domPoint = (e: MouseEvent): IslandPoint => {
+  const r = island.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) * s.IW) / r.width, y: ((e.clientY - r.top) * s.IH) / r.height };
+};
+island.addEventListener('pointerdown', (e) => islandPointerDown(s, domPoint(e)));
+island.addEventListener('dblclick', (e) => islandDoubleClick(s, domPoint(e)));
+
+// ---------- debug (tray) ----------
+const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
+function debug(id: string): void {
+  wake();
+  const [kind, v = ''] = id.split(':');
+  if (kind === 'ev' && isEvent(v)) m.trigger(v);
+  else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) S.nstate = v;
+}
+
+if (inTauri) {
+  await listen<Geometry>('island://geometry', (e) => applyGeometry(e.payload));
+  await listen<IslandPoint | null>('island://cursor', (e) => pointer(e.payload));
+  await listen<string>('island://debug', (e) => debug(e.payload));
+  applyGeometry(await invoke<Geometry>('island_geometry'));
+  // a reloaded page must not inherit a mouse-taking window from the previous one
+  await invoke('set_interactive', { on: false });
+} else {
+  applyGeometry(geo);
+  island.addEventListener('pointermove', (e) => pointer(domPoint(e)));
+  island.addEventListener('pointerleave', () => pointer(null));
+  Object.assign(window, { __debug: debug, __state: s });
+}
+window.addEventListener('resize', resize);
+
+// ---------- frame loop (proto: frame) ----------
+// Idle = closed, settled, no event, cursor away. Then the sim keeps ticking on a 10 Hz timer
+// (in 0.05 s steps, the prototype's dt cap) and the hidden strip is not redrawn, so the
+// window costs next to nothing. Any cursor move, tray item or state change brings rAF back.
+const IDLE_PERIOD = 100;
+
+function isIdle(): boolean {
+  const sp = s.sp;
+  return (
+    !ptr &&
+    !s.event &&
+    notchState(s) === 'closed' &&
+    sp.halfA.x < 0.01 &&
+    sp.openA.x < 0.01 &&
+    Math.max(sp.earL.x, sp.earR.x) < 0.5 &&
+    Math.abs(sp.ih.x - sp.ih.t) < 0.3 &&
+    Math.abs(sp.nw.x - sp.nw.t) < 0.3
+  );
+}
+
+function draw(): void {
+  m.renderIsland(ic, oc);
+  // SPEC: closed on a notch = only the camera notch. Clear the strip so no black box shows
+  // during Space switches (stage 1 remark); it sits under the notch anyway. Glows around it stay.
+  const sp = s.sp;
+  if (S.screen === 'mac' && sp.halfA.x < 0.01 && sp.openA.x < 0.01 && Math.max(sp.earL.x, sp.earR.x) < 0.5) {
+    const b = s.islandBox;
+    ic.clearRect((b.x0 - 6) * dpr, 0, (b.x1 - b.x0 + 12) * dpr, b.y1 * dpr);
+  }
+}
+
+function tick(now: number, id: number): void {
+  if (id !== loop) return;
+  let dt = (now - last) / 1000;
+  last = now;
+  if (!idle) dt = Math.min(dt, 0.05);
+  // proto: frame - one update per frame, dt capped at 0.05 s
+  do {
+    const step = Math.min(dt, 0.05);
+    m.update(step * S.timeScale, now);
+    dt -= step;
+  } while (dt > 1e-6);
+  idle = isIdle();
+  if (!idle || S.screen !== 'mac') draw();
+  // The island moves under a still cursor (opens, closes): re-check the click-through zone.
+  updateInteractive();
+  if (idle) setTimeout(() => tick(performance.now(), id), IDLE_PERIOD);
+  else requestAnimationFrame((t) => tick(t, id));
+}
+
+/** Leave idle now (cursor, tray); a no-op while frames are running. */
+function wake(): void {
+  if (!idle) return;
+  idle = false;
+  loop += 1;
+  const id = loop;
+  requestAnimationFrame((t) => tick(t, id));
+}
+requestAnimationFrame((t) => tick(t, loop));

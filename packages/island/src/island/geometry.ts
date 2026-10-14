@@ -37,6 +37,10 @@ export interface IslandInputs {
   textW: number;
   /** extra width of the wave dots effect (26 or 0) */
   dotsW: number;
+  /** system notch width, NOTCH_W by default */
+  notchW?: number;
+  /** menu bar height, MB by default */
+  mb?: number;
 }
 
 export interface IslandTargets {
@@ -49,17 +53,18 @@ export interface IslandTargets {
 /** proto: renderIsland - targets of the earL / earR / ih / nw springs */
 export function islandTargets(i: IslandInputs): IslandTargets {
   const { IW, state, win } = i;
-  const NW = Math.min(NOTCH_W, IW * 0.36);
+  const MBH = i.mb ?? MB;
+  const NW = Math.min(i.notchW ?? NOTCH_W, IW * 0.36);
   const OPEN_W = Math.min(IW - 24, 480),
     OPEN_H = 150;
   let eL = 0,
     eR = 0,
-    hh = MB,
+    hh = MBH,
     baseW = NW;
   if (state === 'half') {
     eL = i.ratelimit ? 52 : 44;
     eR = i.status && !i.drop ? Math.min(IW / 2 - NW / 2 - 10, 18 + i.textW + i.dotsW) : i.status && i.drop ? 44 : 50;
-    hh = i.status && i.drop ? MB + 54 : MB;
+    hh = i.status && i.drop ? MBH + 54 : MBH;
     // the strip stays centred on the screen: both ears take the width of the wider one
     eL = eR = Math.min(IW / 2 - NW / 2 - 10, Math.max(eL, eR));
   } else if (state === 'open') {
