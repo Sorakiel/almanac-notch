@@ -3,8 +3,8 @@
 Обновляется в конце каждой сессии. Новая сессия начинает с этого файла.
 
 ## Сейчас
-- Этап: 2b (остров: геометрия, состояния, полуоткрыто) - сделан, ждёт ответа владельца. Следующий - 2c (карточки, вкладки, плеер, приветствие).
-- Ветки: `stage-0-scaffold` (от `master`), `stage-1-window` (от `stage-0-scaffold`), `stage-2a-mascot` (от `stage-1-window`), `stage-2b-island` (от `stage-2a-mascot`). Не запушены, PR не созданы, в `master` ничего не влито.
+- Этап: 2c (карточки, вкладки, плеер, приветствие) - сделан, ждёт ответа владельца. Следующий - 2d (харнесс, детерминизм, сверка до зелёного отчёта, чек-лист PARITY).
+- Ветки: `stage-0-scaffold` (от `master`), `stage-1-window` (от `stage-0-scaffold`), `stage-2a-mascot` (от `stage-1-window`), `stage-2b-island` (от `stage-2a-mascot`), `stage-2c-cards` (от `stage-2b-island`). Не запушены, PR не созданы, в `master` ничего не влито.
 
 ## Сделано
 - Монорепо на npm workspaces: `packages/island`, `apps/harness`, `apps/desktop`.
@@ -55,8 +55,18 @@
 - Тесты (+21, всего 39): `notchState` - ручные режимы и 6 правил «Авто» по порядку; `islandTargets` - уши 44/50/52, центровка, предел `IW/2−NW/2−10`, drop (44, MB+54), открыто 480×150 и `IW−24`, закрытое Mac/Windows 96×9, ширина выреза; `islandShape` - путь по точкам; `shakeX` по формуле.
 - Пункты PARITY «Остров», которые закрывает 2b (отметить в PR): три состояния и «Авто», Mac-вырез, Windows-плитка, центровка, пружинные переходы и кроссфейд, вспышка/тряска/bootTrace (bootTrace видна только в приветствии - кадр `greeting-0300` 0.71%, остальное приветствие - 2c), полуоткрыто целиком, добавка глаз в нотче, курсор-указатель.
 
+### Этап 2c (ветка `stage-2c-cards`)
+- Открытое состояние перенесено в `packages/island/src/island/`: `open.ts` (`drawOpen`, `topBar`, `icon`, `drawOpenBody`), `card.ts` (`card`, `cardMascot`, `cardTint`, `kbdButton`), `modules.ts` (`modules`, `isHot`, `primaryItem`, `idleShort`, `focusTint`, `ring`, `drawGlyph`, `prIcon`), `cards.ts` (`drawFocusCard`, `drawSteps`/`TOOL_TAG`, `drawAsk`/`QUESTION`, `drawAlert`, `drawLaunch`/`STARS`), `music.ts` (`drawMusicWide`, `iconBtn`, `TRACK_ART`, `mmss`, `drawRail`), `tabs.ts` (`drawChat`, `drawAdd`, `drawSettings`).
+- `IslandState.railK` - прогресс выезда подписей рейки (в прототипе глобальный `railK`).
+- Не перенесено как мёртвый код: ветка `if (false)` в `drawOpenBody` (старая карточка разрешения), `idleEarW` (нигде не вызывается). `primaryItem` перенесён, но сейчас им никто не пользуется - как и в прототипе. У `drawAsk` и `drawAlert` убраны неиспользуемые параметры (`split`, `gap`, `fx`), на рисунок не влияет.
+- STARS считаются через `Math.sin`, как в прототипе, без `rng`.
+- Результат `npm run parity`: 60/60 в пределах 1%, 57 кадров 0.00%. `open-attention-approved` 0.11%, `open-question` 0.01%, `half-dance-loupe` 0.02% (последний раньше был 0.00% - шум сглаживания, в 2c его код не менялся).
+- Причина 0.11%: файл Onest 500 (кириллица) из `@fontsource` чуть отличается от того, что отдаёт Google Fonts: «Разрешено» 65.184 px против 65.167 px. Текст, выровненный по центру («✓ Разрешено»), сдвигается на субпиксель. Код ни при чём. Если в 2d нужно 0.00% - сравнить версии шрифта и, может быть, взять файл той же версии, что у Google (с разрешения владельца).
+- Тесты (+6, всего 45): `modules` и короткие тексты, `isHot`, лимит 1:24 → 1:14, `primaryItem`, таблица `focusTint`, STARS по формуле.
+- Ввод по карточкам (вкладки, музыка, привычки, настройки) скриптом в браузере не сверял: ветки `pointerdown` перенесены в 2b, зоны `addHit` совпадают по коду с прототипом, кадр `open-music-rail-hover` 0.00%. Сделать в 2d вместе со сценами ввода.
+
 ## Дальше
-- Ответ владельца на отчёт 2b, затем 2c: `drawOpen`, `topBar`, `drawOpenBody`, карточки (`drawFocusCard`, `drawMusicWide`, `drawRail`, `drawAsk`, `drawAlert`, `drawLaunch`, `drawSteps`), вкладки (`drawChat`, `drawAdd`, `drawSettings`), `cardMascot`, `cardTint`, `kbdButton`, `drawGlyph`/`ring`, `modules`, `primaryItem`. Заглушка - `packages/island/src/island/open.ts`.
+- Ответ владельца на отчёт 2c, затем 2d: сверка ввода по карточкам скриптом (прототип против харнесса), сцены ввода в `tools/scenes.mjs` (только с разрешения - меняют эталон), ролики `reference/video` на глаз, чек-лист `docs/PARITY.md` целиком, решение по шрифту Onest (см. 2c).
 - Windows: запустить на живой машине или виртуалке (на этапе 7 или раньше, если появится Windows).
 - Поведение в полноэкранных приложениях: сейчас `fullScreenAuxiliary` - остров виден поверх. В ARCHITECTURE по умолчанию «прячется» - решить вместе с вопросом из DECISIONS.
 

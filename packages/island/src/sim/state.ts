@@ -179,6 +179,8 @@ export interface IslandState {
   muted: boolean;
   volume: number;
   prefs: [string, boolean][];
+  /** proto: railK - slide-out progress of each rail chip */
+  railK: Record<string, { k: number; last: number }>;
 }
 
 /** a clickable zone of the island, rebuilt every frame (proto: hits) */
@@ -275,6 +277,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     muted: false,
     volume: 0.6,
     prefs: initialPrefs(),
+    railK: {},
   };
 }
 
