@@ -20,7 +20,7 @@ serde_json = "1"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSThread"] }
-objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSPanel", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics"] }
+objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics", "NSWorkspace"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_Graphics_Gdi"] }

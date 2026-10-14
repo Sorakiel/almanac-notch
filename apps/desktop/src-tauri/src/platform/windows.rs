@@ -3,14 +3,16 @@
 
 use tauri::WebviewWindow;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+};
 use windows::Win32::UI::HiDpi::{
     GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetWindowLongPtrW, GetWindowRect, IsWindowVisible, SetWindowLongPtrW, SetWindowPos,
-    GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-    WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    GetCursorPos, GetWindowLongPtrW, GetWindowRect, IsWindowVisible, SetWindowLongPtrW,
+    SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+    SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
 };
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -53,7 +55,10 @@ fn desired(h: HWND) -> (RECT, Geometry, f64) {
     // SAFETY: plain Win32 queries.
     unsafe {
         let mon = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
-        let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
+        let mut info = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
         let _ = GetMonitorInfoW(mon, &mut info);
         let m = info.rcMonitor;
         let dpi = GetDpiForWindow(h).max(96);
@@ -61,9 +66,20 @@ fn desired(h: HWND) -> (RECT, Geometry, f64) {
         let w = (WIN_W * scale).round() as i32;
         let hh = (WIN_H * scale).round() as i32;
         let x = m.left + ((m.right - m.left) - w) / 2;
-        let rect = RECT { left: x, top: m.top, right: x + w, bottom: m.top + hh };
+        let rect = RECT {
+            left: x,
+            top: m.top,
+            right: x + w,
+            bottom: m.top + hh,
+        };
         // No camera on Windows: the frontend draws the flat strip.
-        let geometry = Geometry { has_notch: false, notch_w: 190.0, notch_h: 32.0, win_w: WIN_W, win_h: WIN_H };
+        let geometry = Geometry {
+            has_notch: false,
+            notch_w: 190.0,
+            notch_h: 32.0,
+            win_w: WIN_W,
+            win_h: WIN_H,
+        };
         (rect, geometry, scale)
     }
 }
@@ -89,7 +105,11 @@ pub fn place(window: &WebviewWindow) -> Placement {
             (r.left, r.top, r.right, r.bottom),
             (got.left, got.top, got.right, got.bottom)
         );
-        Placement { geometry, origin: (got.left as f64, got.top as f64), scale }
+        Placement {
+            geometry,
+            origin: (got.left as f64, got.top as f64),
+            scale,
+        }
     }
 }
 
@@ -115,3 +135,7 @@ pub fn cursor() -> Option<(f64, f64)> {
     unsafe { GetCursorPos(&mut p).ok()? };
     Some((p.x as f64, p.y as f64))
 }
+
+pub fn remember_front_app() {}
+
+pub fn yield_activation() {}

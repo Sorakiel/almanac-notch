@@ -78,7 +78,10 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
                     let mut s = state.lock().unwrap();
                     let pl = s.placement;
                     // Screen units -> window-relative CSS px.
-                    let p = ((c.0 - pl.origin.0) / pl.scale, (c.1 - pl.origin.1) / pl.scale);
+                    let p = (
+                        (c.0 - pl.origin.0) / pl.scale,
+                        (c.1 - pl.origin.1) / pl.scale,
+                    );
                     // Hysteresis: enter through the closed rect, leave through the open one.
                     let zone = if s.hover { s.open } else { s.closed };
                     let inside = zone.w > 0.0 && distance(&zone, p) == 0.0;
@@ -88,7 +91,6 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
                     (inside, near, changed)
                 };
                 if changed {
-                    eprintln!("[island] hover {inside} at {:.0},{:.0}", c.0, c.1);
                     let _ = window.set_ignore_cursor_events(!inside);
                     let _ = app.emit("island://hover", inside);
                 }
@@ -117,6 +119,8 @@ pub fn run() {
     #[cfg(windows)]
     platform::init_process();
 
+    platform::remember_front_app();
+
     let state: SharedState = Arc::new(Mutex::new(Shared::default()));
     tauri::Builder::default()
         .manage(state.clone())
@@ -126,11 +130,19 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let window = app.get_webview_window("island").expect("island window missing");
+            let window = app
+                .get_webview_window("island")
+                .expect("island window missing");
             window.set_ignore_cursor_events(true)?;
             platform::setup_window(&window);
             place_and_publish(app.handle(), &window, &state);
             spawn_cursor_poller(app.handle().clone(), window, state.clone());
+            // Launch activation (tao, wry) arrives asynchronously; undo it once it has.
+            let handle = app.handle().clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(800));
+                let _ = handle.run_on_main_thread(platform::yield_activation);
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -3,10 +3,9 @@
 
 use std::ffi::c_void;
 
-use objc2::runtime::{AnyClass, AnyObject};
-use objc2::{define_class, ClassType, MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSPanel, NSScreen, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
-use objc2_foundation::{NSPoint, NSRect, NSSize};
+use objc2::MainThreadMarker;
+use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior};
+use objc2_foundation::{NSObjectProtocol, NSPoint, NSRect, NSSize};
 use tauri::WebviewWindow;
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -24,56 +23,26 @@ fn mtm() -> MainThreadMarker {
     MainThreadMarker::new().expect("AppKit call off the main thread")
 }
 
-define_class!(
-    // SAFETY: NSPanel has no subclassing requirements; no ivars, no Drop.
-    #[unsafe(super(NSPanel, NSWindow))]
-    #[thread_kind = MainThreadOnly]
-    #[name = "AlmanacIslandPanel"]
-    struct IslandPanel;
-
-    impl IslandPanel {
-        // Never key or main: a click on the island must not take keyboard focus
-        // from the app the user is typing in.
-        #[unsafe(method(canBecomeKeyWindow))]
-        fn can_become_key(&self) -> bool {
-            false
-        }
-
-        #[unsafe(method(canBecomeMainWindow))]
-        fn can_become_main(&self) -> bool {
-            false
-        }
+/// Keep WindowServer from activating the app when the island is clicked.
+/// Checked in stage 1: without this tag a click activates us (an activated event from
+/// WindowServer, no activate call in-process) and steals focus from the app the user
+/// types in. NSPanel sets the tag for non-activating panels at init; a plain window
+/// needs the private setter. Private API, already allowed via macOSPrivateApi.
+fn prevent_activation(ns: &NSWindow) {
+    let sel = objc2::sel!(_setPreventsActivation:);
+    if ns.respondsToSelector(sel) {
+        // SAFETY: private AppKit setter taking a BOOL, checked with respondsToSelector.
+        let _: () = unsafe { objc2::msg_send![ns, _setPreventsActivation: true] };
+    } else {
+        eprintln!("[island] _setPreventsActivation missing: clicks will steal focus");
     }
-);
-
-/// Turn Tauri's NSWindow into a non-activating NSPanel in place (same trick as tauri-nspanel).
-/// AppKit honours NSWindowStyleMaskNonactivatingPanel only on NSPanel instances.
-fn make_nonactivating_panel(ns: &NSWindow) {
-    let obj = ns as *const NSWindow as *mut AnyObject;
-    // SAFETY: `obj` is a live NSWindow; the panel class adds no ivars, and we only
-    // swap when the original instance is at least as large as the new class needs.
-    unsafe {
-        let from: &AnyClass = (*obj).class();
-        if from.name().to_bytes() == b"AlmanacIslandPanel" {
-            return;
-        }
-        let to = IslandPanel::class();
-        if from.instance_size() < to.instance_size() {
-            eprintln!("[island] cannot swap {:?} -> panel: instance too small", from.name());
-            return;
-        }
-        objc2::ffi::object_setClass(obj, to);
-        eprintln!("[island] window class {:?} -> AlmanacIslandPanel", from.name());
-    }
-    ns.setStyleMask(ns.styleMask() | NSWindowStyleMask::NonactivatingPanel);
 }
 
 pub fn setup_window(window: &WebviewWindow) {
     let ns = ns_window(window);
-    // ALMANAC_PLAIN_WINDOW=1 keeps the plain Tauri window, to compare focus behaviour.
-    if std::env::var_os("ALMANAC_PLAIN_WINDOW").is_none() {
-        make_nonactivating_panel(ns);
-    }
+    // Never key: a click must not take keyboard focus from the app the user types in.
+    let _ = window.set_focusable(false);
+    prevent_activation(ns);
     ns.setLevel(STATUS_WINDOW_LEVEL);
     ns.setCollectionBehavior(
         NSWindowCollectionBehavior::CanJoinAllSpaces
@@ -96,7 +65,13 @@ fn desired(mtm: MainThreadMarker) -> Option<(NSRect, Geometry)> {
     let screen = primary_screen(mtm)?;
     let frame = screen.frame();
     let insets = screen.safeAreaInsets();
-    let mut geometry = Geometry { has_notch: false, notch_w: 190.0, notch_h: 32.0, win_w: WIN_W, win_h: WIN_H };
+    let mut geometry = Geometry {
+        has_notch: false,
+        notch_w: 190.0,
+        notch_h: 32.0,
+        win_w: WIN_W,
+        win_h: WIN_H,
+    };
     let mut center_x = frame.origin.x + frame.size.width / 2.0;
     if insets.top > 0.0 {
         // The notch is what lies between the two menu-bar areas left and right of the camera.
@@ -120,7 +95,9 @@ fn desired(mtm: MainThreadMarker) -> Option<(NSRect, Geometry)> {
 
 /// Height of the menu-bar screen, for flipping AppKit y into CoreGraphics y.
 fn primary_height(mtm: MainThreadMarker) -> f64 {
-    primary_screen(mtm).map(|s| s.frame().size.height).unwrap_or(0.0)
+    primary_screen(mtm)
+        .map(|s| s.frame().size.height)
+        .unwrap_or(0.0)
 }
 
 pub fn place(window: &WebviewWindow) -> Placement {
@@ -143,32 +120,36 @@ pub fn place(window: &WebviewWindow) -> Placement {
         || (got.size.height - want.size.height).abs() > 0.5;
     eprintln!(
         "[island] placed: want {:?} got {:?} (cg top-left {:?}) level {} notch {:?}{}",
-        (want.origin.x, want.origin.y, want.size.width, want.size.height),
+        (
+            want.origin.x,
+            want.origin.y,
+            want.size.width,
+            want.size.height
+        ),
         (got.origin.x, got.origin.y, got.size.width, got.size.height),
         origin,
         ns.level(),
         geometry,
         if moved { " MOVED BY SYSTEM" } else { "" }
     );
-    Placement { geometry, origin, scale: 1.0 }
+    Placement {
+        geometry,
+        origin,
+        scale: 1.0,
+    }
 }
 
 /// True when the screen setup changed, the window drifted or it was ordered out (sleep, lock, displays).
 pub fn needs_replace(window: &WebviewWindow, last: &Placement) -> bool {
     let mtm = mtm();
     let ns = ns_window(window);
-    let Some((want, geometry)) = desired(mtm) else { return false };
+    let Some((want, geometry)) = desired(mtm) else {
+        return false;
+    };
     let got = ns.frame();
     let ph = primary_height(mtm);
     let origin = (got.origin.x, ph - (got.origin.y + got.size.height));
-    // KVO on the original window may swap the isa back when its observers go away.
-    let panel_lost = std::env::var_os("ALMANAC_PLAIN_WINDOW").is_none()
-        && !ns.class().name().to_bytes().ends_with(b"AlmanacIslandPanel");
-    if panel_lost {
-        eprintln!("[island] window class reverted to {:?}", ns.class().name());
-    }
-    panel_lost
-        || !ns.isVisible()
+    !ns.isVisible()
         || ns.level() != STATUS_WINDOW_LEVEL
         || geometry != last.geometry
         || (got.origin.x - want.origin.x).abs() > 0.5
@@ -207,5 +188,32 @@ pub fn cursor() -> Option<(f64, f64)> {
         let p = CGEventGetLocation(ev);
         CFRelease(ev);
         Some((p.x, p.y))
+    }
+}
+
+thread_local! {
+    static PREV_FRONT: std::cell::RefCell<Option<objc2::rc::Retained<objc2_app_kit::NSRunningApplication>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Remember the frontmost app before tao/wry activate us at launch. Main thread.
+pub fn remember_front_app() {
+    let front = objc2_app_kit::NSWorkspace::sharedWorkspace().frontmostApplication();
+    PREV_FRONT.with(|p| *p.borrow_mut() = front);
+}
+
+/// tao and wry activate the app at launch. Hand focus back to the app that had it;
+/// allowed because we are the active app at this point.
+pub fn yield_activation() {
+    let app = objc2_app_kit::NSApplication::sharedApplication(mtm());
+    if !app.isActive() {
+        return;
+    }
+    let prev = PREV_FRONT.with(|p| p.borrow_mut().take());
+    match prev {
+        Some(prev) if !prev.isTerminated() => {
+            prev.activateWithOptions(objc2_app_kit::NSApplicationActivationOptions::empty());
+        }
+        _ => app.deactivate(),
     }
 }
