@@ -1,0 +1,7 @@
+prototype/
+reference/
+tools/
+docs/
+*.md
+package-lock.json
+.parity/

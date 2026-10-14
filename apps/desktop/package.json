@@ -1,0 +1,12 @@
+{
+  "name": "@almanac-notch/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node -e \"console.error('apps/desktop: the Tauri 2 shell is added in stage 1 (docs/PLAN.md)'); process.exit(1)\""
+  },
+  "dependencies": {
+    "@almanac-notch/island": "*"
+  }
+}
