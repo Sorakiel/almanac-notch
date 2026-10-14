@@ -18,7 +18,7 @@
     "ref:clips": "node tools/snapshot.mjs --clips",
     "parity:shoot": "node tools/snapshot.mjs --target port --url http://localhost:5173/harness.html",
     "parity:compare": "node tools/compare.mjs",
-    "parity": "npm run parity:shoot && npm run parity:compare"
+    "parity": "node tools/parity.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

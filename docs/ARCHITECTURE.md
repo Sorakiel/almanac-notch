@@ -13,9 +13,14 @@ Rust отвечает за окно, системные API, секреты и �
 ```
 almanac-notch/
   packages/island/        рендер и поведение: чистый TS, без React, без DOM кроме <canvas>
-    src/sim/              springs.ts, pose.ts, behavior.ts (слои, T), events.ts, particles.ts
-    src/mascot/           body.ts, eyes.ts, hand.ts, badge.ts, marks.ts (орбита, дуга, луч, пузырь, часы), props/ (реестр + по файлу на предмет)
-    src/island/           geometry.ts (состояния, уши, центровка), half.ts, open.ts, cards/ (claude, github, cal, music, almanac, ask, alert, launch), tabs/ (chat, add, settings), rail.ts, hits.ts
+    src/util/             math.ts (clamp, ss, hexA, mix), draw.ts (rrect, textAt)
+    src/sim/              state.ts (IslandState, after), settings.ts (DEFAULTS, SLIDERS, COLORS), springs.ts, pose.ts,
+                          behavior.ts (update: слои, T, шаг пружин), actions.ts (hop, poke, wake), events.ts (EVENTS, trigger,
+                          answer, statusOf), mood.ts (moduleMood), particles.ts, music.ts (часы трека), rng.ts
+    src/mascot/           shape.ts (BODY, bodyPath, bodyField), body.ts, eyes.ts, hand.ts, badge.ts, marks.ts (дуга, кольца,
+                          луч, пузырь, часы), particles.ts (рисование), props/ (реестр + по файлу на предмет)
+    src/stage.ts          большая сцена: render и ввод (pointer, drag, dblclick) чистыми функциями, DOM-слушатели в харнессе
+    src/island/           focus.ts (notchState, autoFocus, effectiveFocus - нужны поведению маскота), geometry.ts (состояния, уши, центровка), half.ts, open.ts, cards/ (claude, github, cal, music, almanac, ask, alert, launch), tabs/ (chat, add, settings), rail.ts, hits.ts
     src/model.ts          типы снимков модулей и событий (контракт с Rust)
     src/stub.ts           заглушки данных из прототипа - для харнесса и тестов
     src/index.ts          createIsland(canvas, opts) -> { setModel, trigger, pointer, key, setScreen, ... }

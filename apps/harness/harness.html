@@ -1,12 +1,179 @@
-<!doctype html>
-<html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Almanac Notch - харнесс</title>
-  </head>
-  <body>
-    <p id="status">Харнесс появится на этапе 2 (docs/PLAN.md).</p>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+<!-- Copy of the prototype page markup and styles (prototype/island-prototype.html, lines 1-179), fonts served locally. Layout must match: the parity frames are cut out of it. -->
+<title>Almanac Notch - харнесс</title>
+<style>
+/* Layout: notch preview strip on top (real size + loupe), then stage column and tuning panel side by side; stacks under 900px */
+:root{
+  --bg:#EFF0EE; --surface:#FFFFFF; --sunken:#E4E6E3; --line:#D2D5D1; --fg:#191B1D; --muted:#5C6166;
+  --accent:#2F6FEB; --accent-soft:#E3ECFD;
+  --stage-top:#F7F7F6; --stage-bot:#E5E7E4; --ground:#CFD3CE; --unlit:rgba(20,24,28,0.07); --shadow-a:0.16;
+  --f-display:"Unbounded","Onest",system-ui,sans-serif;
+  --f-body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111214; --surface:#191B1E; --sunken:#0C0D0F; --line:#2A2D31; --fg:#E8E9EA; --muted:#9A9FA5;
+    --accent:#7FA8FF; --accent-soft:#1B2436;
+    --stage-top:#1C1E21; --stage-bot:#131416; --ground:#2C2F33; --unlit:rgba(255,255,255,0.06); --shadow-a:0.4;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111214; --surface:#191B1E; --sunken:#0C0D0F; --line:#2A2D31; --fg:#E8E9EA; --muted:#9A9FA5;
+  --accent:#7FA8FF; --accent-soft:#1B2436;
+  --stage-top:#1C1E21; --stage-bot:#131416; --ground:#2C2F33; --unlit:rgba(255,255,255,0.06); --shadow-a:0.4;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:clamp(16px,3vw,32px);padding-block:28px 48px;display:grid;gap:20px}
+header{display:grid;gap:6px}
+h1{font-family:var(--f-display);font-weight:600;font-size:clamp(24px,3.2vw,34px);letter-spacing:-0.015em;line-height:1.1;margin:0;text-wrap:balance}
+.lede{color:var(--muted);max-width:72ch;margin:0}
+.notch{display:grid;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px}
+.notch-top{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.notch-title{font-family:var(--f-display);font-size:13px;font-weight:500}
+.notch-views{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.view{display:grid;gap:6px;min-width:0}
+.view figcaption{font-size:12.5px;color:var(--muted)}
+#island{display:block;width:min(100%,560px);height:200px;border-radius:12px;cursor:pointer}
+#loupe{display:block;width:252px;height:120px;border-radius:12px;image-rendering:pixelated;background:#000}
+.view.grow{flex:1 1 360px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.stage-col{display:grid;gap:12px;min-width:0}
+.stage{position:relative;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--stage-bot)}
+#stage{display:block;width:100%;height:clamp(300px,42vw,420px);touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{margin:0;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:13.5px}
+.hint b{color:var(--fg);font-weight:500}
+.layers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:560px){.layers{grid-template-columns:minmax(0,1fr)}}
+.layer{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 12px;min-width:0;transition:border-color .2s}
+.layer .k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.layer .v{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.layer.on{border-color:var(--accent);background:var(--accent-soft)}
+.layer.on .k{color:var(--accent)}
+.events{display:flex;flex-wrap:wrap;gap:8px}
+.ev{font:inherit;font-size:14px;font-weight:500;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.ev:hover{border-color:var(--muted)}
+.ev i{width:8px;height:8px;border-radius:50%;background:var(--dot,#888);flex:none}
+.ev[aria-pressed="true"]{border-color:var(--fg);background:var(--sunken)}
+.ev small{color:var(--muted);font-size:12px;font-weight:400}
+.ev kbd{font-family:var(--f-mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:0 5px;line-height:16px}
+@media (min-width:900px) and (min-height:760px){.notch{position:sticky;top:8px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.12)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;display:grid;gap:20px;min-width:0}
+fieldset{border:0;padding:0;margin:0;display:grid;gap:12px;min-width:0}
+legend{font-family:var(--f-display);font-size:13px;font-weight:500;padding:0;margin-bottom:8px}
+.row{display:grid;gap:3px}
+.row .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13.5px}
+.row output{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+input[type=range]{width:100%;margin:0;accent-color:var(--accent)}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--sunken);border-radius:10px;min-width:0}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg span{display:block;padding:5px 11px;border-radius:7px;font-size:13.5px;font-weight:500;color:var(--muted);white-space:nowrap}
+.seg input:checked + span{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg input:focus-visible + span{outline:2px solid var(--accent);outline-offset:1px}
+.seg-row{display:grid;gap:6px}
+.seg-row .lbl{font-size:12.5px;color:var(--muted)}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{position:relative;display:grid;justify-items:center;gap:4px;font-size:11.5px;color:var(--muted);cursor:pointer}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.sw span{display:block;width:30px;height:30px;border-radius:50%;box-shadow:0 0 0 1px var(--line);border:3px solid var(--surface)}
+.sw input:checked + span{box-shadow:0 0 0 2px var(--fg)}
+.sw input:focus-visible + span{outline:2px solid var(--accent);outline-offset:3px}
+.toggles{display:grid;gap:8px}
+.tg{display:flex;gap:9px;align-items:center;font-size:14px;cursor:pointer}
+.tg input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font:inherit;font-size:14px;font-weight:500;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.note{font-size:12.5px;color:var(--muted);margin:0;min-height:1.4em}
+#copyFallback{width:100%;min-height:120px;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Маскот острова</h1>
+    <p class="lede">Персонаж без рта и без милоты: крупные глаза, отдельная точка статуса и превью нотча с вырезом камеры. У каждого события свой знак: работа - орбита, раздумья - дуга, успех - зелёные кольца и вспышка, ошибка - красная вспышка и встряска. Главная проверка - лупа: так персонаж выглядит в реальных пикселях ретины.</p>
+  </header>
+
+  <section class="notch" aria-label="Превью нотча">
+    <div class="notch-top">
+      <span class="notch-title">Нотч в реальном размере</span>
+      <div class="seg" role="radiogroup" aria-label="Экран">
+        <label><input type="radio" name="screen" value="mac" id="sc-mac"><span>MacBook с камерой</span></label>
+        <label><input type="radio" name="screen" value="win" id="sc-win"><span>Windows, без выреза</span></label>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Эффект «работает» в нотче">
+        <label><input type="radio" name="workfx" value="orbit" id="wf-orbit"><span>Орбита</span></label>
+        <label><input type="radio" name="workfx" value="dots" id="wf-dots"><span>Точки</span></label>
+        <label><input type="radio" name="workfx" value="shine" id="wf-shine"><span>Блик</span></label>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Состояние острова">
+        <label><input type="radio" name="nstate" value="auto" id="ns-auto"><span>Авто</span></label>
+        <label><input type="radio" name="nstate" value="closed" id="ns-closed"><span>Закрыто</span></label>
+        <label><input type="radio" name="nstate" value="half" id="ns-half"><span>Полуоткрыто</span></label>
+        <label><input type="radio" name="nstate" value="open" id="ns-open"><span>Открыто</span></label>
+      </div>
+    </div>
+    <div class="notch-views">
+      <figure class="view grow" style="margin:0"><canvas id="island" aria-label="Верх экрана с островом"></canvas><figcaption>Верх экрана, 1 пиксель = 1 пункт. В режиме «Авто» остров закрыт, пока ничего не происходит, полуоткрыт во время событий и открывается при наведении или когда агент ждёт ответа. На MacBook середина занята камерой.</figcaption></figure>
+      <figure class="view" style="margin:0"><canvas id="loupe" aria-label="Лупа ×3 по левому уху"></canvas><figcaption>Лупа ×3 по персонажу, пиксели ретины</figcaption></figure>
+    </div>
+    <div class="events" role="group" aria-label="События от модулей">
+        <button class="ev" data-ev="attention" style="--dot:#F5A524" aria-pressed="false"><kbd>1</kbd><i></i>Внимание <small>агент ждёт</small></button>
+        <button class="ev" data-ev="working" style="--dot:#3D8BFF" aria-pressed="false"><kbd>2</kbd><i></i>Работает</button>
+        <button class="ev" data-ev="thinking" style="--dot:#A07CFF" aria-pressed="false"><kbd>3</kbd><i></i>Думает</button>
+        <button class="ev" data-ev="searching" style="--dot:#38BDF8" aria-pressed="false"><kbd>4</kbd><i></i>Ищет</button>
+        <button class="ev" data-ev="question" style="--dot:#22C3E6" aria-pressed="false"><kbd>5</kbd><i></i>Вопрос <small>выбор ответа</small></button>
+        <button class="ev" data-ev="ratelimit" style="--dot:#8E8E93" aria-pressed="false"><kbd>6</kbd><i></i>Лимит</button>
+        <button class="ev" data-ev="success" style="--dot:#34C759" aria-pressed="false"><kbd>7</kbd><i></i>Успех <small>CI прошёл</small></button>
+        <button class="ev" data-ev="error" style="--dot:#FF453A" aria-pressed="false"><kbd>8</kbd><i></i>Ошибка <small>деплой упал</small></button>
+        <button class="ev" data-ev="dance" style="--dot:#FF5FA2" aria-pressed="false"><kbd>9</kbd><i></i>Праздник</button>
+        <button class="ev" data-ev="greeting" style="--dot:#C9C9CE" aria-pressed="false"><kbd>0</kbd><i></i>Привет</button>
+        <button class="ev" data-ev="sleep" style="--dot:#8E8E93" aria-pressed="false"><kbd>Q</kbd><i></i>Сон</button>
+      </div>
+
+  </section>
+
+  <main class="grid">
+    <section class="stage-col" aria-label="Сцена">
+      <div class="stage">
+        <canvas id="stage" aria-label="Маскот: реагирует на курсор, клики и перетаскивание"></canvas>
+        <p class="hint"><b>Курсор</b> - следит. <b>Медленно води по макушке</b> - гладишь. <b>Клик</b> - тычок, три быстрых - дуется, шесть - перегрузится. <b>Перетащи и отпусти</b>. <b>Двойной клик</b> - радуется. Полминуты без движения - уснёт.</p>
+      </div>
+      <div class="layers">
+        <div class="layer" id="L-ev"><div class="k">Событие</div><div class="v" id="V-ev">-</div></div>
+        <div class="layer" id="L-ia"><div class="k">Взаимодействие</div><div class="v" id="V-ia">-</div></div>
+        <div class="layer" id="L-bg"><div class="k">Фон</div><div class="v" id="V-bg">-</div></div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Настройки">
+      <fieldset><legend>Персонаж</legend>
+        <div class="swatches" id="swatches" role="radiogroup" aria-label="Цвет"></div>
+      </fieldset>
+      <fieldset id="g-eyes"><legend>Глаза</legend></fieldset>
+      <fieldset id="g-springs"><legend>Пружины</legend></fieldset>
+      <fieldset id="g-behave"><legend>Поведение</legend>
+      </fieldset>
+      <fieldset><legend>Прочее</legend>
+        <div class="toggles">
+          <label class="tg"><input type="checkbox" id="t-reduced"> Меньше движения</label>
+          <label class="tg"><input type="checkbox" id="t-debug"> Показать зону касания</label>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="copyBtn">Скопировать настройки</button>
+          <button class="btn" id="resetBtn">Сбросить</button>
+        </div>
+        <p class="note" id="note"></p>
+        <textarea id="copyFallback" hidden readonly aria-label="Настройки в JSON"></textarea>
+      </fieldset>
+    </aside>
+  </main>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body></html>

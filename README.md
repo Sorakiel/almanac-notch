@@ -39,5 +39,5 @@ npm install
 npx playwright install chromium
 npm run ref:screens     # заново снять кадры эталона из прототипа
 npm run ref:clips       # ролики (нужен ffmpeg)
-npm run parity          # снять те же сцены с харнесса и сравнить (харнесс должен быть запущен)
+npm run parity          # собрать харнесс, снять те же сцены и сравнить (сервер поднимается сам)
 ```
