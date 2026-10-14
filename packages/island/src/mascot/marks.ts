@@ -2,6 +2,7 @@ import { clamp, hexA, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { Pose } from '../sim/pose';
 import type { IslandState } from '../sim/state';
+import { drawOrbit, type WorkFx } from '../island/fx';
 
 /** proto: drawThinkArc - a comet arc slowly circling the mascot, so it never looks like the busy orbit */
 export function drawThinkArc(s: IslandState, c: Ctx, x: number, y: number, r: number, a: number, lw: number): void {
@@ -161,4 +162,25 @@ export function drawOverhead(s: IslandState, c: Ctx, P: Pose): void {
   stateMarks(s, c, P.ax, P.ay - P.b * P.sy, P.R, true);
   if (s.event && s.event.type === 'success')
     drawRings(c, P.ax, P.ay - P.b * P.sy, s.t - s.event.start, P.R * 1.0, P.R * 2.2, P.R * 0.05, '#34C759');
+}
+
+/** proto: mascotMarks - marks around a mascot drawn at radius R, centre (mx, my); back pass then front pass */
+export function mascotMarks(
+  s: IslandState,
+  c: Ctx,
+  fx: WorkFx | null,
+  mx: number,
+  my: number,
+  R: number,
+  front: boolean,
+): void {
+  const big = R > 16;
+  if (front) stateMarks(s, c, mx, my, R, big);
+  if (fx && (big || s.S.workfx === 'orbit'))
+    drawOrbit(s, c, fx, mx, my - (big ? R * 1.1 : 0), front, big ? R * 0.9 : 16, big ? R * 0.22 : 4.5, big ? 2.4 : 1.9);
+  if (front) {
+    drawThinkArc(s, c, mx, my, big ? R * 1.45 : 14, clamp(s.sp.think.x, 0, 1), big ? 2.4 : 2);
+    if (s.event && s.event.type === 'success')
+      drawRings(c, mx, my, s.t - s.event.start, big ? R : 9, big ? R * 2 : 22, big ? 2.2 : 1.8, '#34C759');
+  }
 }

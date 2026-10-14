@@ -13,6 +13,10 @@ import {
   SLIDERS,
   createMascot,
   defaultSettings,
+  islandDoubleClick,
+  islandPointerDown,
+  islandPointerLeave,
+  islandPointerMove,
   loadSettings,
   saveSettings,
   stageDoubleClick,
@@ -57,8 +61,12 @@ const s = m.state;
 // ---------- canvases (proto: resize) ----------
 const stage = $<HTMLCanvasElement>('stage'),
   sc = stage.getContext('2d') as CanvasRenderingContext2D;
-const island = $<HTMLCanvasElement>('island');
-const loupe = $<HTMLCanvasElement>('loupe');
+const island = $<HTMLCanvasElement>('island'),
+  ic = island.getContext('2d') as CanvasRenderingContext2D;
+const loupe = $<HTMLCanvasElement>('loupe'),
+  lc = loupe.getContext('2d') as CanvasRenderingContext2D;
+const off = document.createElement('canvas'),
+  oc = off.getContext('2d') as CanvasRenderingContext2D;
 let dpr = 1;
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -68,8 +76,12 @@ function resize() {
   stage.width = Math.round(s.W * dpr);
   stage.height = Math.round(s.H * dpr);
   const r2 = island.getBoundingClientRect();
-  island.width = Math.round(Math.max(240, r2.width) * dpr);
-  island.height = Math.round(Math.max(80, r2.height) * dpr);
+  s.IW = Math.max(240, r2.width);
+  s.IH = Math.max(80, r2.height);
+  island.width = Math.round(s.IW * dpr);
+  island.height = Math.round(s.IH * dpr);
+  off.width = Math.round(s.IW * 2);
+  off.height = Math.round(s.IH * 2);
   const r3 = loupe.getBoundingClientRect();
   loupe.width = Math.round(Math.max(60, r3.width) * dpr);
   loupe.height = Math.round(Math.max(30, r3.height) * dpr);
@@ -122,6 +134,19 @@ stage.addEventListener('pointerdown', (e) => {
 window.addEventListener('pointerup', () => stageRelease(s));
 window.addEventListener('pointercancel', () => stageRelease(s));
 stage.addEventListener('dblclick', (e) => stageDoubleClick(s, stagePoint(e)));
+
+// ---------- island input ----------
+// proto: islandPoint
+function islandPoint(e: PointerEvent | MouseEvent) {
+  const r = island.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) * s.IW) / r.width, y: ((e.clientY - r.top) * s.IH) / r.height };
+}
+island.addEventListener('pointermove', (e) => {
+  island.style.cursor = islandPointerMove(s, islandPoint(e), performance.now());
+});
+island.addEventListener('pointerleave', () => islandPointerLeave(s));
+island.addEventListener('pointerdown', (e) => islandPointerDown(s, islandPoint(e)));
+island.addEventListener('dblclick', (e) => islandDoubleClick(s, islandPoint(e)));
 
 // ---------- panel ----------
 const groups = { eyes: $('g-eyes'), springs: $('g-springs'), behave: $('g-behave') };
@@ -372,6 +397,7 @@ function frame(now: number) {
   m.update(realDt * S.timeScale, now);
   m.renderStage(sc, dpr);
   stage.style.cursor = m.stageCursor();
+  m.renderIsland(ic, oc, lc);
   if (now - lastUI > 100) {
     updateLayersUI();
     lastUI = now;

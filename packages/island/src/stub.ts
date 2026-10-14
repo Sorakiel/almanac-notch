@@ -35,6 +35,15 @@ export function initialHabits(): [string, boolean][] {
   ];
 }
 
+/** proto: PREFS (initial; the settings tab toggles them) */
+export function initialPrefs(): [string, boolean][] {
+  return [
+    ['Звуки', true],
+    ['Запуск при входе', true],
+    ['Открывать при наведении', false],
+  ];
+}
+
 /** proto: calMins - minutes to the next call */
 export function calMins(t: number): number {
   return 14 - (Math.floor(t / 40) % 14);

@@ -3,8 +3,8 @@
 Обновляется в конце каждой сессии. Новая сессия начинает с этого файла.
 
 ## Сейчас
-- Этап: 2a (маскот) - сделан, ждёт ответа владельца. Следующий - 2b (остров: геометрия, состояния, полуоткрыто).
-- Ветки: `stage-0-scaffold` (от `master`), `stage-1-window` (от `stage-0-scaffold`), `stage-2a-mascot` (от `stage-1-window`). Не запушены, PR не созданы, в `master` ничего не влито.
+- Этап: 2b (остров: геометрия, состояния, полуоткрыто) - сделан, ждёт ответа владельца. Следующий - 2c (карточки, вкладки, плеер, приветствие).
+- Ветки: `stage-0-scaffold` (от `master`), `stage-1-window` (от `stage-0-scaffold`), `stage-2a-mascot` (от `stage-1-window`), `stage-2b-island` (от `stage-2a-mascot`). Не запушены, PR не созданы, в `master` ничего не влито.
 
 ## Сделано
 - Монорепо на npm workspaces: `packages/island`, `apps/harness`, `apps/desktop`.
@@ -44,8 +44,19 @@
 - Тесты (18): пружина по формуле, сходимость всех групп, перелёт/без перелёта, таблица групп SPEC 1.3, гравитация и отскок `posY`, высота прыжка, детерминизм (один сид - одно состояние, другой - другое, без `Math.random`), приветствие 0.5 с + 4.6 с, моргание, 3 тычка - дуется, 6 - перегруз и перезагрузка, сон через 30 с и пробуждение, бесконечные события выключаются повтором, «Разрешить» через 0.55 с - работа.
 - Пункты чек-листа PARITY «Маскот», которые проверены только на сцене: форма, дыхание, пружины, глаза (кроме добавки в нотче и карточке), точка статуса, слежение, тычки, перегруз на сцене, двойной клик, поглаживание, перетаскивание, сон, частицы. Добавка глаз 1.3/1.12, часы в нотче, предметы в карточках, рука в приветствии видны только в острове - проверить в 2b/2c.
 
+### Этап 2b (ветка `stage-2b-island`)
+- `packages/island/src/island/`: `geometry.ts` (`MB`, `NOTCH_W`, `islandShape`, `islandTargets` - блок целей `earL/earR/ih/nw` из `renderIsland`, вынесен чистой функцией для тестов, формулы те же), `fx.ts` (`workFx`, `drawOrbit`, `drawWaveDots`, `drawShine`, `islandFlash`, `shakeX`, `bootTrace`), `crew.ts` (`STATE_COL`, `miniCrew`, `drawMini`), `hits.ts` (`addHit`, `hovering`, `hitAt`, `button`), `half.ts` (`drawHalf`, `approvalBlock`, `T_MUTED`), `render.ts` (`renderIsland`), `input.ts` (обработчики `#island`: move/leave/down/dblclick), `open.ts` - пустая заглушка `drawOpen` до 2c. `mascotMarks` - в `mascot/marks.ts`.
+- `IslandState`: добавлены `IW, IH, islandBox, mascotSpots, hits, loupeRect, muted, volume, prefs` (+ `initialPrefs` в `stub.ts`). Все ветки `pointerdown` прототипа перенесены сразу (вкладки, музыка, привычки, настройки) - в 2c их надо только вызвать из карточек через `addHit`.
+- `renderIsland(s, ic, oc, lc)`: пакет не создаёт канвасы, offscreen (IW·2 × IH·2) создаёт харнесс. `createMascot().renderIsland(ic, oc, lc)`.
+- Харнесс: `resize` пишет `s.IW/IH` и размер offscreen, слушатели на `#island` с `islandPoint`, `renderIsland` после сцены в `frame`.
+- Результат `npm run parity`: `mac-closed`, `win-closed-tile`, все `half-*` и `half-*-loupe`, `win-half-working` - 0.00%; `stage-*`, `overload-1.2s-stage`, `overload-after`, `page` - 0.00%. Красные только `open-*`, `greeting-*` (кроме 0300), `overload-0.3s/1.2s` - это `drawOpen`, 2c.
+- Опасение из плана не подтвердилось: в `half-after-launch` и `mac-closed` хвост `openA` пустой `drawOpen` не портит.
+- Ввод по острову сверен скриптом (не в репо, как в 2a): наведение и слежение из маскота острова, тычок, 3 тычка - «Дуется», двойной клик, «Разрешить» и «Отклонить» кликом (с подсветкой кнопки при наведении), пробуждение наведением, «Авто» открывается наведением и закрывается уходом курсора - 0-5 пикселей на кадр, курсор `pointer` над хитами совпадает. Координаты кликов считать от ширины `#island` (560 CSS px на 1280×900), а не сцены.
+- Тесты (+21, всего 39): `notchState` - ручные режимы и 6 правил «Авто» по порядку; `islandTargets` - уши 44/50/52, центровка, предел `IW/2−NW/2−10`, drop (44, MB+54), открыто 480×150 и `IW−24`, закрытое Mac/Windows 96×9, ширина выреза; `islandShape` - путь по точкам; `shakeX` по формуле.
+- Пункты PARITY «Остров», которые закрывает 2b (отметить в PR): три состояния и «Авто», Mac-вырез, Windows-плитка, центровка, пружинные переходы и кроссфейд, вспышка/тряска/bootTrace (bootTrace видна только в приветствии - кадр `greeting-0300` 0.71%, остальное приветствие - 2c), полуоткрыто целиком, добавка глаз в нотче, курсор-указатель.
+
 ## Дальше
-- Ответ владельца на отчёт 2a, затем 2b: остров - `renderIsland`, геометрия и уши, `islandShape`, три состояния, полуоткрыто (`drawHalf`, `drawOrbit`, `drawWaveDots`, `drawShine`, `mascotMarks`, `islandFlash`, `shakeX`), лупа, ввод по острову (`islandPoint`, `hitAt`, `hits`, `islandHover`, `islandPtr`, `islandMascot`).
+- Ответ владельца на отчёт 2b, затем 2c: `drawOpen`, `topBar`, `drawOpenBody`, карточки (`drawFocusCard`, `drawMusicWide`, `drawRail`, `drawAsk`, `drawAlert`, `drawLaunch`, `drawSteps`), вкладки (`drawChat`, `drawAdd`, `drawSettings`), `cardMascot`, `cardTint`, `kbdButton`, `drawGlyph`/`ring`, `modules`, `primaryItem`. Заглушка - `packages/island/src/island/open.ts`.
 - Windows: запустить на живой машине или виртуалке (на этапе 7 или раньше, если появится Windows).
 - Поведение в полноэкранных приложениях: сейчас `fullScreenAuxiliary` - остров виден поверх. В ARCHITECTURE по умолчанию «прячется» - решить вместе с вопросом из DECISIONS.
 

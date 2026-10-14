@@ -1,0 +1,89 @@
+// Pointer input on the island canvas, without DOM listeners. Points are in island CSS px (proto: islandPoint).
+import { clamp } from '../util/math';
+import type { IslandState } from '../sim/state';
+import { hop, poke, wake } from '../sim/actions';
+import { answer, trigger, type Answer } from '../sim/events';
+import { nextTrack } from '../sim/music';
+import { TRACKS, TRACK_LEN } from '../stub';
+import type { ModuleId, Tab } from '../sim/state';
+import { habitsDone } from './focus';
+import { hitAt } from './hits';
+
+export interface IslandPoint {
+  x: number;
+  y: number;
+}
+
+/** proto: island pointermove - returns the cursor for the island canvas; now in ms */
+export function islandPointerMove(s: IslandState, p: IslandPoint, now: number): string {
+  const B = s.islandBox;
+  s.islandPtr = p;
+  s.islandHover = p.x > B.x0 - 10 && p.x < B.x1 + 10 && p.y < B.y1 + 10;
+  const cursor = hitAt(s, p) ? 'pointer' : 'default';
+  s.ptr.lastMoveReal = now;
+  s.ptr.seen = true;
+  if (s.sleeping && !s.forcedSleep) wake(s, true);
+  return cursor;
+}
+
+/** proto: island pointerleave */
+export function islandPointerLeave(s: IslandState): void {
+  s.islandHover = false;
+  s.islandPtr = null;
+}
+
+/** proto: island pointerdown */
+export function islandPointerDown(s: IslandState, p: IslandPoint): void {
+  const h = hitAt(s, p);
+  if (!h) return;
+  const act = h.act;
+  if (act === 'mascot') {
+    const R = h.R ?? 1;
+    poke(s, clamp((p.x - (h.cx ?? 0)) / R, -1, 1), clamp((p.y - (h.cy ?? 0)) / (R * 0.92), -1, 1));
+  } else if (act.startsWith('focus:')) s.focusId = act.slice(6) as ModuleId;
+  else if (act === 'approve' || act === 'deny' || act.startsWith('opt:')) answer(s, act as Answer);
+  else if (act.startsWith('tab:'))
+    s.tab = act.slice(4) === s.tab && s.tab === 'settings' ? 'home' : (act.slice(4) as Tab);
+  else if (act === 'mute') s.muted = !s.muted;
+  else if (act.startsWith('habit:')) {
+    const hb = s.habits[+act.slice(6)];
+    if (!hb) return;
+    hb[1] = !hb[1];
+    if (hb[1] && habitsDone(s) === s.habits.length) {
+      const keep = s.focusId;
+      trigger(s, 'dance');
+      if (s.event) s.event.label = 'Все привычки выполнены';
+      s.focusId = keep;
+    } else if (hb[1]) {
+      s.happyUntil = s.t + 0.8;
+      hop(s, 3);
+    }
+  } else if (act.startsWith('pref:')) {
+    const pr = s.prefs[+act.slice(5)];
+    if (pr) pr[1] = !pr[1];
+  } else if (act === 'm:toggle') s.musicPlaying = !s.musicPlaying;
+  else if (act === 'm:next') nextTrack(s);
+  else if (act === 'm:prev') {
+    if (s.musicPos > 3) s.musicPos = 0;
+    else {
+      s.trackIdx = (s.trackIdx + TRACKS.length - 1) % TRACKS.length;
+      s.musicPos = 0;
+    }
+  } else if (act === 'm:shuffle') s.shuffle = !s.shuffle;
+  else if (act === 'm:repeat') s.repeat = !s.repeat;
+  else if (act === 'm:seek')
+    s.musicPos = clamp((p.x - (h.bx0 ?? 0)) / ((h.bx1 ?? 1) - (h.bx0 ?? 0)), 0, 1) * (TRACK_LEN[s.trackIdx] ?? 0);
+  else if (act === 'm:vol') s.volume = clamp((p.x - (h.bx0 ?? 0)) / ((h.bx1 ?? 1) - (h.bx0 ?? 0)), 0, 1);
+}
+
+/** proto: island dblclick - joy from the island's mascot (no burst, unlike the stage) */
+export function islandDoubleClick(s: IslandState, p: IslandPoint): void {
+  const h = hitAt(s, p);
+  if (h && h.act === 'mascot') {
+    s.pokes = [];
+    s.grumpyUntil = 0;
+    s.hideUntil = 0;
+    s.happyUntil = s.t + 1.1;
+    hop(s, 5.6);
+  }
+}

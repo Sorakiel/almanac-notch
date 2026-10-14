@@ -6,6 +6,7 @@ import { update } from './sim/behavior';
 import { answer, trigger, type Answer } from './sim/events';
 import { poke } from './sim/actions';
 import { renderStage, stageCursor } from './stage';
+import { renderIsland } from './island/render';
 
 export { mulberry32, PARITY_SEED };
 export type { Rng, IslandState, EventType, ModuleId, Tab, Settings, Answer };
@@ -13,7 +14,16 @@ export * from './sim/settings';
 export { DEFAULT_THEME, type Theme, type LayerText } from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { update } from './sim/behavior';
-export { notchState } from './island/focus';
+export { notchState, type NotchState } from './island/focus';
+export { renderIsland } from './island/render';
+export { MB, NOTCH_W, islandShape, islandTargets, type IslandInputs, type IslandTargets } from './island/geometry';
+export {
+  islandPointerMove,
+  islandPointerLeave,
+  islandPointerDown,
+  islandDoubleClick,
+  type IslandPoint,
+} from './island/input';
 export {
   renderStage,
   stageCursor,
@@ -48,6 +58,9 @@ export function createMascot(opts: MascotOptions) {
     update: (dt: number, now: number) => update(s, dt, now),
     renderStage: (c: CanvasRenderingContext2D, dpr: number) => renderStage(s, c, dpr),
     stageCursor: () => stageCursor(s),
+    /** oc: offscreen context of an IW·2 × IH·2 canvas; ic: island canvas; lc: loupe canvas */
+    renderIsland: (ic: CanvasRenderingContext2D, oc: CanvasRenderingContext2D, lc: CanvasRenderingContext2D) =>
+      renderIsland(s, ic, oc, lc),
     trigger: (type: EventType | 'sleep') => trigger(s, type),
     /** n quick pokes at (0.2, -0.3) of the body, as tools/snapshot.mjs does */
     poke: (n: number, lx = 0.2, ly = -0.3) => {

@@ -1,7 +1,7 @@
 import type { Rng } from './rng';
 import { createSprings, type Springs } from './springs';
 import type { Settings } from './settings';
-import { initialHabits } from '../stub';
+import { initialHabits, initialPrefs } from '../stub';
 
 export type EventType =
   | 'attention'
@@ -167,6 +167,32 @@ export interface IslandState {
   repeat: boolean;
   habits: [string, boolean][];
   nextDanceHop: number;
+
+  // the island canvas (proto: IW, IH, islandBox, mascotSpots, hits, loupeRect)
+  /** island canvas size in CSS px */
+  IW: number;
+  IH: number;
+  islandBox: { x0: number; x1: number; y0: number; y1: number };
+  mascotSpots: { x: number; y: number; a: number }[];
+  hits: Hit[];
+  loupeRect: { x: number; y: number; w: number; h: number };
+  muted: boolean;
+  volume: number;
+  prefs: [string, boolean][];
+}
+
+/** a clickable zone of the island, rebuilt every frame (proto: hits) */
+export interface Hit {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  act: string;
+  cx?: number;
+  cy?: number;
+  R?: number;
+  bx0?: number;
+  bx1?: number;
 }
 
 export function createState(S: Settings, rng: Rng, now: number): IslandState {
@@ -240,6 +266,15 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     repeat: false,
     habits: initialHabits(),
     nextDanceHop: 0,
+    IW: 560,
+    IH: 120,
+    islandBox: { x0: 0, x1: 0, y0: 0, y1: 0 },
+    mascotSpots: [],
+    hits: [],
+    loupeRect: { x: 0, y: 0, w: 84, h: 40 },
+    muted: false,
+    volume: 0.6,
+    prefs: initialPrefs(),
   };
 }
 
