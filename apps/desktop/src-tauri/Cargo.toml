@@ -1,0 +1,31 @@
+[package]
+name = "almanac-notch"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "almanac_notch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSThread"] }
+objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSPanel", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_HiDpi", "Win32_Graphics_Gdi"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -1,8 +1,17 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/island" },
-    { "path": "packages/island/tsconfig.test.json" },
-    { "path": "apps/harness" }
+    {
+      "path": "packages/island"
+    },
+    {
+      "path": "packages/island/tsconfig.test.json"
+    },
+    {
+      "path": "apps/harness"
+    },
+    {
+      "path": "apps/desktop"
+    }
   ]
 }

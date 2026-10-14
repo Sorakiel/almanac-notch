@@ -4,9 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node -e \"console.error('apps/desktop: the Tauri 2 shell is added in stage 1 (docs/PLAN.md)'); process.exit(1)\""
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "build": "tauri build",
+    "build:web": "vite build",
+    "tauri": "tauri"
   },
   "dependencies": {
-    "@almanac-notch/island": "*"
+    "@almanac-notch/island": "*",
+    "@tauri-apps/api": "^2.12.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2"
   }
 }
