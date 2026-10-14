@@ -127,7 +127,10 @@ export interface IslandState {
   overloadUntil: number;
   rebootAt: number;
   prevOverload: boolean;
+  /** half-open hold: 30 s after launch, the greeting and (CHANGES 2026-10-14) every open */
   postLaunchUntil: number;
+  /** notchState was 'open' on the previous update (auto only) */
+  wasOpen: boolean;
   prevHiding: boolean;
   petAccum: number;
   petting: boolean;
@@ -223,6 +226,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     rebootAt: -10,
     prevOverload: false,
     postLaunchUntil: 0,
+    wasOpen: false,
     prevHiding: false,
     petAccum: 0,
     petting: false,

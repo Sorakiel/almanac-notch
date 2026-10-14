@@ -3,6 +3,7 @@ import { createMascot } from '../index';
 import { defaultSettings } from './settings';
 import { mulberry32, PARITY_SEED } from './rng';
 import type { IslandState } from './state';
+import { notchState } from '../island/focus';
 
 const DT = 1 / 60;
 
@@ -154,5 +155,35 @@ describe('behaviour timings', () => {
     run(0.1);
     expect(s.event?.type).toBe('working');
     expect(s.happyUntil).toBeGreaterThan(s.t);
+  });
+});
+
+describe('half-open hold after open (CHANGES 2026-10-14)', () => {
+  it('stays half-open for 30 s after the hover leaves, then closes', () => {
+    const { s, run, touch } = make();
+    run(80); // launch greeting and its 30 s hold are over
+    touch();
+    expect(notchState(s)).toBe('closed');
+    s.islandHover = true;
+    run(1);
+    expect(notchState(s)).toBe('open');
+    s.islandHover = false;
+    run(1);
+    expect(notchState(s)).toBe('half');
+    touch();
+    run(28.5);
+    expect(notchState(s)).toBe('half');
+    run(1);
+    expect(notchState(s)).toBe('closed');
+  });
+
+  it('does not hold when the state is forced', () => {
+    const { s, run } = make();
+    run(80);
+    s.S.nstate = 'open';
+    run(1);
+    s.S.nstate = 'auto';
+    run(0.1);
+    expect(notchState(s)).toBe('closed');
   });
 });

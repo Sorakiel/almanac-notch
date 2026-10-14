@@ -8,6 +8,7 @@ import { spawnFloat, stepParticles } from './particles';
 import { stepMusic } from './music';
 import { moduleMood } from './mood';
 import { after } from './state';
+import { notchState } from '../island/focus';
 
 /**
  * proto: update - one frame of behaviour. Targets T are rebuilt layer by layer
@@ -33,6 +34,13 @@ export function update(s: IslandState, dt: number, now: number): void {
     s.event = null;
     s.notify();
   }
+  // CHANGES 2026-10-14: in "auto" every time the open island closes (hover left, an event ended)
+  // it stays half-open for 30 s, like after the launch greeting. Not in the prototype.
+  if (S.nstate === 'auto') {
+    const open = notchState(s) === 'open';
+    if (s.wasOpen && !open) s.postLaunchUntil = Math.max(s.postLaunchUntil, t + 30);
+    s.wasOpen = open;
+  } else s.wasOpen = false;
   const hiding = s.hideUntil > t;
   if (s.prevHiding && !hiding) hop(s, 4.2);
   s.prevHiding = hiding;
