@@ -62,7 +62,7 @@ window.__notch = {
   - `collectionBehavior`: `canJoinAllSpaces`, `stationary`, `fullScreenAuxiliary`, `ignoresCycle`;
   - геометрия выреза из `NSScreen.safeAreaInsets`, `auxiliaryTopLeftArea`, `auxiliaryTopRightArea` (macOS 12+); ширина выреза идёт в пакет вместо константы 190;
   - на экранах без выреза - режим «Windows» (полоса без камеры) у верхнего края;
-  - клик по острову не забирает фокус: `set_focusable(false)` и приватный `_setPreventsActivation:YES` (без него WindowServer активирует приложение на клик, проверено на этапе 1); фокус, взятый при запуске, возвращается прежнему приложению;
+  - клик по острову не забирает фокус: видимое окно - своя `NSPanel` (`Borderless | NonactivatingPanel`, публичный API), в неё перенесён contentView окна Tauri с webview; окно Tauri скрыто и держит webview и IPC (проверено на этапе 1: обычное окно Tauri на клик активирует приложение). Фокус, взятый при запуске, возвращается прежнему приложению;
   - курсор - из CoreGraphics (`CGEventGetLocation`, точки, начало сверху слева), опрос 60 Гц рядом с островом и 20 Гц далеко.
 - **Windows:**
   - окно по центру у верхнего края основного монитора, `WS_EX_TOOLWINDOW`, `WS_EX_NOACTIVATE`, topmost;
