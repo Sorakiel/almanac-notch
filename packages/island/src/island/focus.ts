@@ -50,6 +50,8 @@ export function habitsDone(s: IslandState): number {
 /** proto: autoFocus */
 export function autoFocus(s: IslandState): ModuleId {
   const ev = s.event && s.event.type;
+  // a real Claude Code session finishing or failing belongs to its own card
+  if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent') return 'claude';
   if (ev === 'success' || ev === 'error') return 'github';
   if (claudeState(s) !== 'idle') return 'claude';
   if (calMins(s.t) <= 30) return 'cal';

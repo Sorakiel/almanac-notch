@@ -1,8 +1,8 @@
 // Module items for the open island: the list, glyphs and tints (docs/SPEC.md 2.4-2.5).
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
-import { stepAt, stepIndex } from '../sim/events';
-import { TRACKS, calMins, limitLeft } from '../stub';
+import { limitText, stepAt, stepIndex } from '../sim/events';
+import { TRACKS, calMins } from '../stub';
 import { MODULE_COL, claudeState, habitsDone, type ClaudeState } from './focus';
 import { STATE_COL, drawMini } from './crew';
 
@@ -16,8 +16,9 @@ export type ModuleItem =
 /** what drawGlyph needs; prIcon-free glyphs can be drawn from a bare { kind, state } */
 export type GlyphItem = ModuleItem | { kind: 'ci'; state: 'run' | 'fail' | 'ok' };
 
-function eventTime(s: IslandState): number {
-  return s.event ? s.t - s.event.start : 0;
+function workShort(s: IslandState): string {
+  const st = stepAt(s, stepIndex(s));
+  return st ? st[1].toLowerCase() + ' ' + st[2] : 'работает';
 }
 
 /** proto: modules */
@@ -30,7 +31,7 @@ export function modules(s: IslandState): ModuleItem[] {
     search: 'ищет',
     ask: 'ждёт ответа',
     question: 'спрашивает',
-    limit: 'лимит ' + limitLeft(eventTime(s)),
+    limit: 'лимит ' + limitText(s),
     idle: 'свободен',
   };
   const done = habitsDone(s);
@@ -42,7 +43,7 @@ export function modules(s: IslandState): ModuleItem[] {
       body: MODULE_COL.claude.body,
       seed: 0,
       state: cs,
-      short: cs === 'work' ? stepAt(stepIndex(s))[1].toLowerCase() + ' ' + stepAt(stepIndex(s))[2] : idleShorts[cs],
+      short: cs === 'work' ? workShort(s) : idleShorts[cs],
     },
     {
       id: 'github',

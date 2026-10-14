@@ -51,6 +51,13 @@ export function calMins(t: number): number {
 
 /** proto: limitLeft - plan usage reset timer, from the start of the ratelimit event */
 export function limitLeft(el: number): string {
-  const left = Math.max(0, 84 - Math.floor(el));
-  return Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+  return clockLeft(84 - Math.floor(el));
+}
+
+/** m:ss like limitLeft; h:mm:ss once a real reset is an hour or more away */
+export function clockLeft(sec: number): string {
+  const left = Math.max(0, Math.floor(sec)),
+    pad = (n: number): string => String(n).padStart(2, '0');
+  if (left < 3600) return Math.floor(left / 60) + ':' + pad(left % 60);
+  return Math.floor(left / 3600) + ':' + pad(Math.floor(left / 60) % 60) + ':' + pad(left % 60);
 }

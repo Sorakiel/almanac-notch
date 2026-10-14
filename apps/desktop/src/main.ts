@@ -24,6 +24,7 @@ import {
   type EventType,
   type IslandPoint,
 } from '@almanac-notch/island';
+import { AgentDriver, type AgentMsg, type Usage } from './agent';
 
 interface Geometry {
   hasNotch: boolean;
@@ -122,13 +123,38 @@ const domPoint = (e: MouseEvent): IslandPoint => {
   return { x: ((e.clientX - r.left) * s.IW) / r.width, y: ((e.clientY - r.top) * s.IH) / r.height };
 };
 island.addEventListener('pointerdown', (e) => islandPointerDown(s, domPoint(e)));
+
+// proto: keydown - the answer keys Y/N and 1-3 (SPEC 2.10). They need the window to have the
+// keyboard, which the panel does not take yet (docs/CHANGES.md); the browser mode has it.
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const ev = s.event;
+  if (!ev || ev.answer || (ev.type !== 'attention' && ev.type !== 'question')) return;
+  const key = e.key.toLowerCase();
+  if (ev.type === 'attention' && (key === 'y' || key === 'n')) {
+    e.preventDefault();
+    wake();
+    m.answer(key === 'y' ? 'approve' : 'deny');
+  }
+  const opts = s.agent?.question?.[1].length ?? 3;
+  if (ev.type === 'question' && ['1', '2', '3'].includes(key) && +key <= opts) {
+    e.preventDefault();
+    wake();
+    m.answer(`opt:${+key - 1}`);
+  }
+});
 island.addEventListener('dblclick', (e) => islandDoubleClick(s, domPoint(e)));
+
+// ---------- Claude Code (hooks, plan usage) ----------
+let agent: AgentDriver | null = null;
 
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
 function debug(id: string): void {
   wake();
   const [kind, v = ''] = id.split(':');
+  // tray events demo the prototype's stub data; the next real hook brings live data back
+  if (kind === 'ev') s.agent = null;
   if (kind === 'ev' && isEvent(v)) m.trigger(v);
   else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) S.nstate = v;
 }
@@ -137,6 +163,20 @@ if (inTauri) {
   await listen<Geometry>('island://geometry', (e) => applyGeometry(e.payload));
   await listen<IslandPoint | null>('island://cursor', (e) => pointer(e.payload));
   await listen<string>('island://debug', (e) => debug(e.payload));
+  agent = new AgentDriver({
+    m,
+    send: (id, answer) => void invoke('agent_answer', { id, answer }),
+    now: Date.now,
+  });
+  await listen<AgentMsg>('island://agent', (e) => {
+    wake();
+    agent?.onMessage(e.payload);
+  });
+  await listen<Usage>('island://usage', (e) => {
+    wake();
+    agent?.onUsage(e.payload);
+  });
+  agent.onUsage(await invoke<Usage>('claude_usage'));
   applyGeometry(await invoke<Geometry>('island_geometry'));
   // a reloaded page must not inherit a mouse-taking window from the previous one
   await invoke('set_interactive', { on: false });
@@ -190,6 +230,8 @@ function tick(now: number, id: number): void {
     m.update(step * S.timeScale, now);
     dt -= step;
   } while (dt > 1e-6);
+  // island answers go back to the hook; expired prompts, the limit timer, stale sessions
+  agent?.tick();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();
   // The island moves under a still cursor (opens, closes): re-check the click-through zone.

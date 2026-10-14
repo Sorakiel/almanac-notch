@@ -1,7 +1,7 @@
 import { after, type EventType, type IslandState } from './state';
 import { hop, wake } from './actions';
 import { burst } from './particles';
-import { STEPS, STEP_LEN, limitLeft, type Step } from '../stub';
+import { STEPS, STEP_LEN, clockLeft, limitLeft, type Step } from '../stub';
 
 export interface EventDef {
   label: string;
@@ -27,13 +27,29 @@ export const EVENTS: Readonly<Record<EventType, EventDef>> = {
 
 export const EVENT_TYPES = Object.keys(EVENTS) as EventType[];
 
-/** proto: stepIndex */
+/** proto: stepIndex - with a live session, the newest real step */
 export function stepIndex(s: IslandState): number {
-  return s.event && s.event.type === 'working' ? Math.floor((s.t - s.event.start) / STEP_LEN) : -1;
+  if (!s.event || s.event.type !== 'working') return -1;
+  if (s.agent) return s.agent.steps.length - 1;
+  return Math.floor((s.t - s.event.start) / STEP_LEN);
 }
-/** proto: stepAt */
-export function stepAt(i: number): Step {
+/** proto: stepAt - stubs cycle; real steps end (null before the first one) */
+export function stepAt(s: IslandState, i: number): Step | null {
+  if (s.agent) return s.agent.steps[i] ?? null;
   return STEPS[((i % STEPS.length) + STEPS.length) % STEPS.length] as Step;
+}
+/** progress 0..1 of the newest step's slide-in period */
+export function stepFrac(s: IslandState): number {
+  const ev = s.event;
+  if (!ev) return 0;
+  if (s.agent) return Math.min(1, Math.max(0, s.t - Math.max(s.agent.stepT, ev.start)) / STEP_LEN);
+  return ((s.t - ev.start) % STEP_LEN) / STEP_LEN;
+}
+/** proto: limitLeft(t - event.start) - or the time to the real plan usage reset */
+export function limitText(s: IslandState): string {
+  const reset = s.agent && s.agent.limitReset;
+  if (reset !== null && reset !== undefined) return clockLeft((reset - s.date().getTime()) / 1000);
+  return limitLeft(s.event ? s.t - s.event.start : 0);
 }
 
 /** proto: greetText */
@@ -173,10 +189,10 @@ export function statusOf(s: IslandState): Status | null {
     const E = EVENTS[event.type];
     let text = E.text;
     if (event.type === 'working') {
-      const st = stepAt(stepIndex(s));
-      text = st[1] + ' ' + st[2];
+      const st = stepAt(s, stepIndex(s));
+      if (st) text = st[1] + ' ' + st[2];
     }
-    if (event.type === 'ratelimit') text = 'Лимит ' + limitLeft(t - event.start);
+    if (event.type === 'ratelimit') text = 'Лимит ' + limitText(s);
     if (event.type === 'greeting') {
       const el = t - event.start,
         g = event.greet || '';

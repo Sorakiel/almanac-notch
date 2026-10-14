@@ -26,6 +26,9 @@ almanac-notch/
     src/index.ts          createIsland(canvas, opts) -> { setModel, trigger, pointer, key, setScreen, ... }
   apps/harness/           Vite-страница, повторяющая страницу прототипа: #island, #stage, #loupe, панель, кнопки событий, window.__notch
   apps/desktop/           Tauri 2: src-tauri (Rust) + маленький фронт, который монтирует packages/island во всё окно
+    src/agent.ts          хуки Claude Code и plan usage -> события острова (AgentDriver), чистая логика с тестами
+    src-tauri/src/claude/ сервер хуков (server.rs), ожидание ответов (mod.rs, Hub), plan usage (usage.rs), установщик из трея (hooks_ui.rs)
+    hook/                 крейт almanac-hook: клиент хука (std + serde_json) и установщик хуков в settings.json
   prototype/              эталон, не редактировать
   reference/              эталонные кадры и ролики из прототипа
   tools/                  snapshot.mjs, scenes.mjs, compare.mjs
@@ -79,10 +82,17 @@ window.__notch = {
 ### Rust-ядро
 
 - **Шина событий:** Rust → фронт `island://event` (`IslandEvent`) и `island://model` (`ModelSnapshot`); фронт → Rust `island://answer` (ответ на подтверждение или вопрос).
-- **Сервер хуков Claude Code:**
-  - HTTP только на `127.0.0.1`, случайный порт, токен в заголовке;
-  - установщик пишет хуки в `~/.claude/settings.json` (PreToolUse, PostToolUse, Notification, Stop, UserPromptSubmit) с бэкапом и показывает дифф перед записью;
-  - PreToolUse с подтверждением держит запрос, пока пользователь не ответит в острове, с таймаутом 30 с, как в прототипе.
+- **Claude Code (этап 4):** Rust → фронт `island://agent` (урезанный payload хука или `resolved`) и `island://usage`; фронт → Rust команда `agent_answer(id, answer)`. Хуки в события острова превращает `apps/desktop/src/agent.ts` (`AgentDriver`), живые данные лежат в `s.agent` пакета. Пока `s.agent` равен `null`, пакет рисует заглушки прототипа (харнесс, parity).
+- **Сервер хуков Claude Code** (`src-tauri/src/claude`):
+  - HTTP только на `127.0.0.1`, случайный порт. Токен - 32 случайных байта на запуск, заголовок `X-Almanac-Token`, сравнение за постоянное время. Запросы с `Origin` (так шлют браузеры) или с чужим `Host` (DNS rebinding) отклоняются. Заголовки до 16 КБ, тело до 1 МБ, чтение не дольше 5 с, не больше 64 соединений.
+  - Порт и токен лежат в `<app data>/hook.json` (права 0600, каталог 0700), при выходе файл удаляется. На Mac `<app data>` = `~/Library/Application Support/dev.almanac.notch`.
+  - Хук - отдельный бинарник `almanac-hook` (крейт `apps/desktop/hook`, ~400 КБ, только libSystem, старт ~5 мс). Он пересылает stdin серверу и печатает ответ. Нет файла, порт закрыт, ответ кривой или медленный - хук молча выходит с кодом 0, и Claude Code работает как без хука. Обычные события ждут не больше 2 с.
+  - Хуки: `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop`, `StopFailure`, `SessionEnd`.
+  - Разрешение команды идёт через `PermissionRequest`, а не через `PreToolUse`. `PreToolUse` срабатывает на каждый вызов ещё до правил доступа, и «разрешить» в нём обходило бы настройки пользователя. `PermissionRequest` приходит только тогда, когда Claude Code сам собирается спросить.
+  - Вопрос - `PreToolUse` инструмента `AskUserQuestion`, ответ уходит как `updatedInput.answers`. Остров отвечает только на один вопрос с одиночным выбором, остальные Claude Code задаёт в терминале.
+  - Сервер держит такой хук до ответа острова, не дольше 30 с, как в прототипе. Без ответа хук ничего не возвращает, и Claude Code показывает свой обычный диалог. Если сессия пошла дальше (ответили в терминале), открытый вопрос снимается по следующему хуку той же сессии и того же субагента.
+  - Во фронт уходит урезанный payload: без содержимого файлов, вывода команд и длинных строк. Для правок Rust считает только +/− строк.
+  - Установщик (трей «Установить хуки Claude Code…» или `almanac-hook install`) копирует клиент в `<app data>` и добавляет наши записи в `~/.claude/settings.json`. Чужие хуки и настройки он не трогает. Перед записью показывает дифф и делает бэкап `settings.json.bak-almanac-<unix>`, пишет атомарно. Если файл изменился после показа диффа, установка отказывается. Свои записи узнаёт по `almanac-hook` в команде. Удаление - тем же путём.
 - **Модули** - отдельные провайдеры с общим трейтом. Каждый можно выключить, приложение работает без любого из них:
 
 ```rust
@@ -101,7 +111,7 @@ trait Provider {
 | модуль | источник |
 |---|---|
 | Claude Code | хуки (выше), шаги из PreToolUse и PostToolUse: инструмент, файл, +/− для правок |
-| Plan usage | разбор локальных логов `~/.claude/projects/**/*.jsonl`, окно 5 часов. Сети нет |
+| Plan usage | хвосты (256 КБ) свежих `~/.claude/projects/*/*.jsonl` раз в 20 с и сразу после `Stop`/`StopFailure`. Если последнее сообщение ассистента - `"error": "rate_limit"` («resets 7pm (Europe/Moscow)»), остров показывает «Лимит» с таймером до сброса. Время сброса разбирает фронт через Intl. Название плана - `oauthAccount.organizationType` из `~/.claude.json`, читается только это поле. Сети нет |
 | Календарь | Mac - EventKit (с разрешением). Windows - решить позже: Outlook, Google или выключено |
 | Музыка | Mac - текущий плеер через MediaRemote (приватный фреймворк, через хелпер) или через AppleScript для Music и Spotify. Windows - SMTC (`GlobalSystemMediaTransportControls`). Обложка - реальная, своя сгенерированная остаётся запасной |
 | GitHub | fine-grained токен на выбранные репозитории, GraphQL: статус CI последнего коммита, PR на ревью, коммиты за 7 дней |
@@ -114,6 +124,7 @@ trait Provider {
 - Сервер хуков слушает только `127.0.0.1`, с токеном.
 - Секреты только в системном хранилище.
 - Всё, что модуль читает, видно в настройках модуля: «что читается и куда ходит».
+- Claude Code. Читает: payload хуков (в окно попадает урезанным), хвосты `~/.claude/projects/*/*.jsonl` (только время и признак лимита), одно поле `~/.claude.json`. Пишет: `~/.claude/settings.json` (только после подтверждения, с бэкапом), `<app data>/hook.json`, `<app data>/almanac-hook`. Сети нет.
 
 ## Запасной путь
 

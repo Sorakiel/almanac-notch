@@ -9,6 +9,8 @@
   "scripts": {
     "dev:harness": "npm run dev -w @almanac-notch/harness",
     "desktop:dev": "npm run dev -w @almanac-notch/desktop",
+    "hook:build": "cargo build --release --quiet --manifest-path apps/desktop/hook/Cargo.toml",
+    "hook:diff": "npm run hook:build && apps/desktop/hook/target/release/almanac-hook install",
     "test": "vitest run",
     "typecheck": "tsc -b",
     "lint": "eslint .",

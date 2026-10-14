@@ -2,10 +2,10 @@
 import { clamp, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
-import { EVENTS, statusOf, stepAt, stepIndex } from '../sim/events';
+import { EVENTS, limitText, statusOf, stepAt, stepFrac, stepIndex } from '../sim/events';
 import { drawMascot } from '../mascot/body';
 import { propFor } from '../mascot/props';
-import { STEP_LEN, TRACKS, limitLeft, type ToolKind } from '../stub';
+import { TRACKS, type ToolKind } from '../stub';
 import type { WorkFx } from './fx';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
@@ -31,11 +31,12 @@ export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: 
   const ev = s.event;
   if (!ev) return;
   const cur = stepIndex(s),
-    frac = ((s.t - ev.start) % STEP_LEN) / STEP_LEN,
+    frac = stepFrac(s),
     k = ss(0, 1, frac / 0.18);
   for (let j = 0; j < 3; j++) {
-    const st = stepAt(cur - j),
-      y = y0 + 40 + j * 18 + (j === 0 ? (1 - k) * -6 : 0) + (j > 0 ? (1 - k) * -18 : 0);
+    const st = stepAt(s, cur - j);
+    if (!st) break;
+    const y = y0 + 40 + j * 18 + (j === 0 ? (1 - k) * -6 : 0) + (j > 0 ? (1 - k) * -18 : 0);
     c.save();
     c.globalAlpha *= j === 0 ? k : 1 - j * 0.25;
     const tag = TOOL_TAG[st[0]];
@@ -56,6 +57,16 @@ export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: 
     }
     c.restore();
   }
+}
+
+/** "последняя сессия N мин назад" from the newest hook */
+function lastSession(s: IslandState, at: number | null): string {
+  if (at === null) return 'сессий ещё не было';
+  const min = Math.floor((s.date().getTime() - at) / 60000);
+  if (min < 1) return 'последняя сессия только что';
+  if (min < 60) return 'последняя сессия ' + min + ' мин назад';
+  const h = Math.floor(min / 60);
+  return h < 24 ? 'последняя сессия ' + h + ' ч назад' : 'последняя сессия давно';
 }
 
 function commitsWord(n: number): string {
@@ -98,17 +109,17 @@ export function drawFocusCard(
     if (it.state === 'work') drawSteps(s, c, tx, y0, tmax);
     else if (it.state === 'search') {
       L(0, 'ищет по проекту', '#5FD6F0');
-      L(1, 'grep "rrect(" · 14 совпадений', T_MUTED);
+      L(1, s.agent ? s.agent.search : 'grep "rrect(" · 14 совпадений', T_MUTED);
     } else if (it.state === 'limit') {
       L(0, 'лимит плана исчерпан', '#C7C7CC');
-      L(1, 'сброс через ' + limitLeft(s.event ? s.t - s.event.start : 0), T_MUTED);
-      L(2, 'план Pro · окно 5 часов', T_MUTED);
+      L(1, 'сброс через ' + limitText(s), T_MUTED);
+      L(2, 'план ' + (s.agent ? s.agent.plan : 'Pro') + ' · окно 5 часов', T_MUTED);
     } else if (it.state === 'think') {
       L(0, 'планирует изменения', '#BFA6FF');
       L(1, 'смотрит структуру проекта', T_MUTED);
     } else {
       L(0, 'свободен');
-      L(1, 'последняя сессия 12 мин назад', T_MUTED);
+      L(1, s.agent ? lastSession(s, s.agent.lastActive) : 'последняя сессия 12 мин назад', T_MUTED);
     }
   } else if (it.kind === 'ci') {
     const ciCol = it.state === 'fail' ? '#FF6B61' : it.state === 'run' ? '#7FB0FF' : '#5FD27D';
@@ -280,7 +291,7 @@ export function drawAsk(
     c.fillStyle = 'rgba(255,255,255,0.08)';
     rrect(c, tx, cy0 + 28, tw, 26, 8);
     c.fill();
-    const cmd = 'git push origin main',
+    const cmd = s.agent ? s.agent.cmd : 'git push origin main',
       n = clamp(Math.floor((el - 0.25) * 40), 0, cmd.length);
     textAt(c, cmd.slice(0, n), tx + 10, cy0 + 41.5, {
       mono: true,
@@ -311,13 +322,20 @@ export function drawAsk(
       kbdButton(s, c, tx + 110, by, 104, 24, 'Разрешить', 'Y', 'approve', true);
     }
   } else {
-    textAt(c, QUESTION[0], tx, cy0 + 38, { size: 12.5, weight: 600, max: tw });
-    let ox = tx;
-    QUESTION[1].forEach((opt, i) => {
+    const Q = (s.agent && s.agent.question) || QUESTION;
+    textAt(c, Q[0], tx, cy0 + 38, { size: 12.5, weight: 600, max: tw });
+    let ox = tx,
+      full = false;
+    Q[1].forEach((opt, i) => {
       c.save();
       c.font = '500 12px Onest, system-ui, sans-serif';
       const w = c.measureText(opt).width + 44;
       c.restore();
+      // real options can be long: those that do not fit are answered in the terminal
+      if (full || (s.agent && i > 0 && ox + w > tx + tw)) {
+        full = true;
+        return;
+      }
       const y = cy0 + 54,
         sel = ev.choice === i,
         hov = hovering(s, ox, y, w, 24);

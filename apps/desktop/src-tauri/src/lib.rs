@@ -5,15 +5,20 @@
 //! feeds it to packages/island as pointer moves (hover works while the window is see-through)
 //! and turns mouse events on with `set_interactive` only over `islandRect()` or a hit zone.
 
+mod claude;
 mod platform;
 mod tray;
 
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewWindow};
+
+use claude::usage::Usage;
+use claude::Hub;
 
 use platform::{Geometry, Placement};
 
@@ -54,6 +59,43 @@ fn set_interactive(window: WebviewWindow, state: State<'_, SharedState>, on: boo
     if s.interactive != on {
         s.interactive = on;
         platform::set_ignore(&window, !on);
+    }
+}
+
+/// Answer from the island to a held hook ("approve", "deny", "opt:N", "none").
+#[tauri::command]
+fn agent_answer(hub: State<'_, Arc<Hub>>, id: u64, answer: String) {
+    hub.answer(id, &answer);
+}
+
+/// Plan usage as last scanned; the frontend asks once at start, then listens.
+#[tauri::command]
+fn claude_usage(usage: State<'_, Arc<Mutex<Usage>>>) -> Usage {
+    usage.lock().unwrap().clone()
+}
+
+/// Hook server + plan usage watcher. A failure here leaves the island working without
+/// Claude Code (the hook client finds no connection file and stays silent).
+fn start_claude(app: &AppHandle, hub: Arc<Hub>, usage: Arc<Mutex<Usage>>) -> Option<u16> {
+    let (poke_tx, poke_rx) = mpsc::channel::<()>();
+    let poke = Mutex::new(poke_tx);
+    *hub.on_turn_end.lock().unwrap() = Some(Box::new(move || {
+        let _ = poke.lock().unwrap().send(());
+    }));
+    let app2 = app.clone();
+    thread::spawn(move || {
+        claude::usage::watch(poke_rx, |u| {
+            *usage.lock().unwrap() = u.clone();
+            let _ = app2.emit("island://usage", u);
+        })
+    });
+    let h = hub.clone();
+    match claude::server::start(Arc::new(move |p| h.handle(p))) {
+        Ok(s) => Some(s.port),
+        Err(e) => {
+            eprintln!("[claude] hook server not started: {e}");
+            None
+        }
     }
 }
 
@@ -127,9 +169,19 @@ pub fn run() {
     platform::remember_front_app();
 
     let state: SharedState = Arc::new(Mutex::new(Shared::default()));
-    tauri::Builder::default()
+    let usage = Arc::new(Mutex::new(Usage::default()));
+    let hook_port: Arc<Mutex<Option<u16>>> = Arc::new(Mutex::new(None));
+    let port_slot = hook_port.clone();
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(state.clone())
-        .invoke_handler(tauri::generate_handler![island_geometry, set_interactive])
+        .manage(usage.clone())
+        .invoke_handler(tauri::generate_handler![
+            island_geometry,
+            set_interactive,
+            agent_answer,
+            claude_usage
+        ])
         .setup(move |app| {
             // Not in the Dock and not in Cmd-Tab.
             #[cfg(target_os = "macos")]
@@ -143,6 +195,12 @@ pub fn run() {
             platform::set_ignore(&window, true);
             place_and_publish(app.handle(), &window, &state);
             tray::create(app.handle())?;
+            let handle = app.handle().clone();
+            let hub = Arc::new(Hub::new(Arc::new(move |name: &str, v| {
+                let _ = handle.emit(name, v);
+            })));
+            app.manage(hub.clone());
+            *port_slot.lock().unwrap() = start_claude(app.handle(), hub, usage.clone());
             spawn_cursor_poller(app.handle().clone(), window, state.clone());
             // Launch activation (tao, wry) arrives asynchronously; undo it once it has.
             let handle = app.handle().clone();
@@ -152,6 +210,13 @@ pub fn run() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+    app.run(move |_, e| {
+        if let RunEvent::Exit = e {
+            if let Some(port) = *hook_port.lock().unwrap() {
+                claude::server::remove_connection_file(port);
+            }
+        }
+    });
 }

@@ -1,7 +1,7 @@
 import type { Rng } from './rng';
 import { createSprings, type Springs } from './springs';
 import type { Settings } from './settings';
-import { initialHabits, initialPrefs } from '../stub';
+import { initialHabits, initialPrefs, type Step } from '../stub';
 
 export type EventType =
   | 'attention'
@@ -25,6 +25,30 @@ export interface MascotEvent {
   label?: string;
   answer?: 'approve' | 'deny' | 'opt';
   answerAt?: number;
+  /** set by real Claude Code sessions: success and error then belong to the claude card */
+  src?: 'agent';
+}
+
+/**
+ * Live data of a real Claude Code session (stage 4). Null = the prototype's stubs (STEPS,
+ * QUESTION, the command, limitLeft), which the harness and the parity frames use.
+ */
+export interface AgentFeed {
+  /** tool calls, oldest first */
+  steps: Step[];
+  /** s.t when the newest step arrived (slide-in of drawSteps) */
+  stepT: number;
+  /** the command waiting for approval */
+  cmd: string;
+  question: readonly [string, readonly string[]] | null;
+  /** second line of the searching card */
+  search: string;
+  /** plan usage reset, epoch ms; null = no limit hit */
+  limitReset: number | null;
+  /** plan name for the limit card, e.g. "Pro" */
+  plan: string;
+  /** last hook from any session, epoch ms */
+  lastActive: number | null;
 }
 
 export interface Particle {
@@ -139,6 +163,7 @@ export interface IslandState {
   forcedSleep: boolean;
   nextZ: number;
   event: MascotEvent | null;
+  agent: AgentFeed | null;
   wander: { x: number; y: number; next: number };
   sqOverride: { val: number; until: number } | null;
   particles: Particle[];
@@ -235,6 +260,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     forcedSleep: false,
     nextZ: 0,
     event: null,
+    agent: null,
     wander: { x: 0, y: 0, next: 0 },
     sqOverride: null,
     particles: [],

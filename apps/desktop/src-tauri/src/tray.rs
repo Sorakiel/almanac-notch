@@ -1,6 +1,7 @@
 //! Debug tray menu: fire any island event like the prototype's 1-0 and Q buttons,
 //! and force the notch state like its "Состояние" radios. Items are forwarded to the
 //! frontend as `island://debug` with the menu id ("ev:<type>" or "nstate:<state>").
+//! Also: install / remove the Claude Code hooks (shows the diff first).
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
@@ -64,6 +65,21 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&MenuItem::with_id(
         app,
+        "hooks:install",
+        "Установить хуки Claude Code…",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "hooks:uninstall",
+        "Удалить хуки Claude Code…",
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(
+        app,
         "quit",
         "Выйти",
         true,
@@ -78,6 +94,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             let id = e.id().as_ref();
             if id == "quit" {
                 app.exit(0);
+                return;
+            }
+            if let Some(what) = id.strip_prefix("hooks:") {
+                crate::claude::hooks_ui::run(app, what == "install");
                 return;
             }
             if id.starts_with("nstate:") {
