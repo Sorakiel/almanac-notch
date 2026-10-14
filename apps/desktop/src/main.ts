@@ -67,6 +67,10 @@ function resize(): void {
 
 function draw(): void {
   ctx.clearRect(0, 0, geo.winW, geo.winH);
+  // SPEC: closed on Mac = only the camera notch. Draw nothing so no black box
+  // shows during Space switches; the hover zone stays active in Rust.
+  const c = closedSize();
+  if (geo.hasNotch && !hover && Math.abs(w - c.w) < 0.5 && Math.abs(h - c.h) < 0.5) return;
   const r = centered(w, h);
   const rad = Math.min(RADIUS, h / 2, w / 2);
   ctx.beginPath();
@@ -79,12 +83,9 @@ function draw(): void {
   ctx.closePath();
   ctx.fillStyle = '#000';
   ctx.fill();
-  // Debug outline so the stub is visible over the black notch in recordings.
-  ctx.strokeStyle = flash > 0 ? 'rgba(255,122,61,0.95)' : 'rgba(120,124,135,0.9)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
   if (h > 60) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    // Click feedback for the focus check: the caption flashes orange.
+    ctx.fillStyle = flash > 0 ? 'rgba(255,122,61,0.95)' : 'rgba(255,255,255,0.55)';
     ctx.font = '12px -apple-system, system-ui, sans-serif';
     ctx.textAlign = 'center';
     const note = geo.hasNotch ? `notch ${geo.notchW.toFixed(0)}×${geo.notchH.toFixed(0)}` : 'no notch';
