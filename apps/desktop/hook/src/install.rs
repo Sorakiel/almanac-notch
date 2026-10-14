@@ -18,7 +18,8 @@ const MARK: &str = "almanac-hook";
 /// the rest return in milliseconds and get a short cap in case the app hangs.
 pub const EVENTS: [(&str, u64); 9] = [
     ("UserPromptSubmit", 10),
-    ("PreToolUse", 45),
+    // a held AskUserQuestion: up to 4 questions, 30 s each
+    ("PreToolUse", 130),
     ("PermissionRequest", 45),
     ("PostToolUse", 10),
     ("PostToolUseFailure", 10),

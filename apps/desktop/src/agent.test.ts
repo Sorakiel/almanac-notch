@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMascot, defaultSettings, statusOf } from '@almanac-notch/island';
-import { AgentDriver, caption, limitReset, toolStep, type AgentMsg, type Hook } from './agent';
+import { AgentDriver, caption, limitReset, questionView, toolStep, type AgentMsg, type Hook } from './agent';
 
 const DT = 1 / 60;
 
@@ -131,6 +131,40 @@ describe('AgentDriver', () => {
     expect(sent[0]).toEqual([1, 'opt:1']);
     expect(s.event?.type).toBe('attention');
     expect(s.agent?.cmd).toBe('ls');
+  });
+
+  it('a questionnaire is asked one by one and answered together', () => {
+    const { m, s, sent, run, hook } = make();
+    const qs = ['Цвет?', 'Размер?', 'Форма?'].map((question) => ({
+      question,
+      options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }],
+    }));
+    hook(
+      { hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'AskUserQuestion', tool_input: { questions: qs } },
+      5,
+    );
+    expect(s.agent?.question?.[0]).toBe('1/3 · Цвет?');
+    m.answer('opt:2');
+    run(0.5);
+    expect(s.event?.type).toBe('question');
+    expect(s.agent?.question?.[0]).toBe('2/3 · Размер?');
+    m.answer('opt:0');
+    run(0.5);
+    m.answer('opt:1');
+    run(0.1);
+    expect(sent).toEqual([[5, 'opts:2,0,1']]);
+    run(1);
+    expect(s.event?.type).toBe('working');
+  });
+
+  it('long questions keep their point', () => {
+    const long =
+      'Музыка на Mac. MediaRemote с macOS 15.4 закрыт для обычных приложений; обход может сломаться. Что берём?';
+    expect(questionView(long, 'Музыка', 3, 4, ['MediaRemote через perl-хелпер'])).toEqual([
+      '4/4 · Музыка: Что берём?',
+      ['MediaRemote через…'],
+    ]);
+    expect(questionView('Раннер?', undefined, 0, 1, ['Vitest'])).toEqual(['Раннер?', ['Vitest']]);
   });
 
   it('answered in the terminal: the card goes away; timeout: "none"', () => {

@@ -47,6 +47,8 @@ const BUSY: readonly EventType[] = ['working', 'thinking', 'searching'];
 const STALE_MS = 10 * 60 * 1000;
 /** Pause after a tool before the island says Claude is thinking or writing the reply. */
 const AFTER_TOOL_MS = 1500;
+/** The picked option stays highlighted this long before the next question (the package moves on at 0.6 s). */
+const NEXT_QUESTION_S = 0.45;
 /** Steps kept for the card (it shows three). */
 const KEEP_STEPS = 12;
 
@@ -243,11 +245,37 @@ export function limitReset(text: string, atIso: string): number | null {
 
 // ---------- the driver ----------
 
+type Question = NonNullable<AgentFeed['question']>;
+
 interface Ask {
   id: number;
   type: 'attention' | 'question';
   cmd: string;
-  question: AgentFeed['question'];
+  /** AskUserQuestion: asked one by one, answered together */
+  questions: Question[];
+}
+
+/** One line of the question card fits about this much; the card squeezes longer text. */
+const QUESTION_MAX = 46;
+const OPTION_MAX = 18;
+
+/**
+ * The question as the card shows it: "2/4 · " when there are several, and a long question
+ * cut to its point - the header plus the last sentence ("Музыка на Mac: Что берём?").
+ */
+export function questionView(q: string, header: string | undefined, i: number, n: number, options: string[]): Question {
+  const pre = n > 1 ? `${i + 1}/${n} · ` : '';
+  const room = QUESTION_MAX - pre.length;
+  let text = q.replace(/\s+/g, ' ').trim();
+  if (text.length > room) {
+    const last =
+      text
+        .split(/(?<=[.!?:])\s+/)
+        .filter(Boolean)
+        .pop() ?? text;
+    text = clip(header && last !== text ? header + ': ' + last : last, room);
+  }
+  return [pre + text, options.map((o) => clip(o, OPTION_MAX))];
 }
 
 export interface AgentHost {
@@ -274,7 +302,7 @@ export function emptyFeed(): AgentFeed {
 export class AgentDriver {
   readonly feed: AgentFeed = emptyFeed();
   private queue: Ask[] = [];
-  private cur: { ask: Ask; ev: MascotEvent; sent: boolean } | null = null;
+  private cur: { ask: Ask; ev: MascotEvent; sent: boolean; idx: number; picks: number[] } | null = null;
   /** when the last tool ended, while no new hook has come */
   private afterTool: number | null = null;
 
@@ -336,13 +364,21 @@ export class AgentDriver {
         break;
       case 'PreToolUse': {
         if (tool === 'AskUserQuestion') {
-          const q = input.questions?.[0];
-          if (msg.id !== undefined && q) {
+          const qs = input.questions || [];
+          if (msg.id !== undefined && qs.length) {
             this.enqueue({
               id: msg.id,
               type: 'question',
               cmd: '',
-              question: [q.question, (q.options || []).map((o) => o.label)],
+              questions: qs.map((q, i) =>
+                questionView(
+                  q.question,
+                  q.header,
+                  i,
+                  qs.length,
+                  (q.options || []).map((o) => o.label),
+                ),
+              ),
             });
           }
           break;
@@ -361,7 +397,7 @@ export class AgentDriver {
       }
       case 'PermissionRequest':
         if (msg.id !== undefined)
-          this.enqueue({ id: msg.id, type: 'attention', cmd: askCommand(tool, input), question: null });
+          this.enqueue({ id: msg.id, type: 'attention', cmd: askCommand(tool, input), questions: [] });
         break;
       case 'PostToolUseFailure':
         if (h.is_interrupt) this.clearBusy();
@@ -392,12 +428,12 @@ export class AgentDriver {
     const a = this.queue.shift();
     if (!a) return;
     this.feed.cmd = a.cmd;
-    this.feed.question = a.question;
+    this.feed.question = a.questions[0] ?? null;
     const s = this.s;
     // the prompt replaces whatever is up; trigger never toggles attention/question off
     if (s.event && s.event.type === a.type) s.event = null;
     this.host.m.trigger(a.type);
-    this.cur = { ask: a, ev: s.event as MascotEvent, sent: false };
+    this.cur = { ask: a, ev: s.event as MascotEvent, sent: false, idx: 0, picks: [] };
   }
 
   private resolved(id: number): void {
@@ -418,8 +454,23 @@ export class AgentDriver {
     const c = this.cur,
       s = this.s;
     if (c) {
+      const n = c.ask.questions.length;
+      if (c.ev.answer === 'opt' && n > 1 && !c.sent) {
+        // a questionnaire: keep the pick, show the next question once the pick has been seen
+        if (c.picks.length === c.idx) c.picks.push(c.ev.choice ?? -1);
+        if (c.idx === n - 1) {
+          c.sent = true;
+          this.host.send(c.ask.id, 'opts:' + c.picks.join(','));
+        } else if (s.t >= (c.ev.answerAt ?? s.t) + NEXT_QUESTION_S) {
+          c.idx += 1;
+          this.feed.question = c.ask.questions[c.idx] ?? null;
+          s.event = null;
+          this.host.m.trigger('question');
+          c.ev = s.event as unknown as MascotEvent;
+        }
+      }
       const ev = c.ev;
-      if (ev.answer && !c.sent) {
+      if (ev.answer && !c.sent && n <= 1) {
         c.sent = true;
         this.host.send(c.ask.id, ev.answer === 'opt' ? 'opt:' + String(ev.choice ?? -1) : ev.answer);
       }

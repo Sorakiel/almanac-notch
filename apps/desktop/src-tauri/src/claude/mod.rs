@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 /// How often a held hook checks that its client is still there.
 const POLL: Duration = Duration::from_millis(200);
 
-use almanac_hook::{is_blocking, ANSWER_WAIT_SECS};
+use almanac_hook::{is_blocking, ANSWER_WAIT_SECS, MAX_QUESTIONS};
 use serde_json::{json, Map, Value};
 
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
@@ -142,19 +142,28 @@ fn who(p: &Value) -> String {
 }
 
 /// Can the island answer this AskUserQuestion? One single-choice question with options.
+/// Can the island answer this AskUserQuestion? 1-4 single-choice questions with options
+/// (it asks them one by one). Multi-select stays with Claude Code's own prompt.
 fn answerable_question(p: &Value) -> bool {
-    let qs = p.pointer("/tool_input/questions").and_then(Value::as_array);
-    match qs.map(Vec::as_slice) {
-        Some([q]) => {
+    let Some(qs) = p.pointer("/tool_input/questions").and_then(Value::as_array) else {
+        return false;
+    };
+    !qs.is_empty()
+        && qs.len() as u64 <= MAX_QUESTIONS
+        && qs.iter().all(|q| {
             !q.get("multiSelect")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
                 && q.get("options")
                     .and_then(Value::as_array)
                     .is_some_and(|o| !o.is_empty())
-        }
-        _ => false,
-    }
+        })
+}
+
+fn question_count(p: &Value) -> u32 {
+    p.pointer("/tool_input/questions")
+        .and_then(Value::as_array)
+        .map_or(1, |q| q.len().max(1) as u32)
 }
 
 /// The hook output for an island answer. "" = no decision.
@@ -174,21 +183,36 @@ pub fn decision(p: &Value, answer: &str) -> String {
             }
         })
         .to_string(),
-        ("PreToolUse", a) if a.starts_with("opt:") => {
-            let Ok(i) = a[4..].parse::<usize>() else {
-                return String::new();
+        // "opt:N" for one question, "opts:N,M,..." for each question in order
+        ("PreToolUse", a) if a.starts_with("opt:") || a.starts_with("opts:") => {
+            let picks: Vec<usize> = match a.split_once(':').map(|(_, l)| {
+                l.split(',')
+                    .map(str::parse)
+                    .collect::<Result<Vec<usize>, _>>()
+            }) {
+                Some(Ok(v)) => v,
+                _ => return String::new(),
             };
-            let Some(q) = p.pointer("/tool_input/questions/0") else {
+            let qs = p
+                .pointer("/tool_input/questions")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            if picks.len() != qs.len() {
                 return String::new();
-            };
-            let Some(label) = q
-                .pointer(&format!("/options/{i}/label"))
-                .and_then(Value::as_str)
-            else {
-                return String::new();
-            };
+            }
+            let mut answers = Map::new();
+            for (q, i) in qs.iter().zip(picks) {
+                let Some(label) = q
+                    .pointer(&format!("/options/{i}/label"))
+                    .and_then(Value::as_str)
+                else {
+                    return String::new();
+                };
+                answers.insert(s(q, "question").into(), Value::String(label.into()));
+            }
             let mut input = p.get("tool_input").cloned().unwrap_or_else(|| json!({}));
-            input["answers"] = json!({ s(q, "question"): label });
+            input["answers"] = Value::Object(answers);
             json!({
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -278,13 +302,15 @@ impl Hub {
             json!({ "kind": "hook", "id": id, "hook": slim(&p) }),
         );
         let start = Instant::now();
+        // the island asks questions one by one, each with the prototype's 30 s
+        let wait = self.wait * question_count(&p);
         let answer = loop {
-            match rx.recv_timeout(POLL.min(self.wait)) {
+            match rx.recv_timeout(POLL.min(wait)) {
                 Ok(a) => break a,
                 Err(RecvTimeoutError::Disconnected) => break String::new(),
                 Err(RecvTimeoutError::Timeout) => {
                     let gone = !alive();
-                    if gone || start.elapsed() >= self.wait {
+                    if gone || start.elapsed() >= wait {
                         if gone {
                             eprintln!("[claude] #{id} decided elsewhere, hook closed");
                         }
@@ -412,12 +438,27 @@ mod tests {
     }
 
     #[test]
-    fn multi_question_is_not_held() {
+    fn multi_question_answers_each() {
+        let p = json!({
+            "hook_event_name": "PreToolUse", "tool_name": "AskUserQuestion",
+            "tool_input": { "questions": [
+                { "question": "a", "options": [{ "label": "x" }, { "label": "x2" }] },
+                { "question": "b", "options": [{ "label": "y" }, { "label": "y2" }] }] }
+        });
+        assert!(answerable_question(&p));
+        let out: Value = serde_json::from_str(&decision(&p, "opts:1,0")).unwrap();
+        let ans = &out["hookSpecificOutput"]["updatedInput"]["answers"];
+        assert_eq!(ans["a"], "x2");
+        assert_eq!(ans["b"], "y");
+        assert_eq!(decision(&p, "opts:1"), "", "every question needs an answer");
+    }
+
+    #[test]
+    fn multi_select_is_not_held() {
         let (h, _) = hub(5000);
         let p = json!({
             "hook_event_name": "PreToolUse", "tool_name": "AskUserQuestion",
-            "tool_input": { "questions": [{ "question": "a", "options": [{ "label": "x" }] },
-                                          { "question": "b", "options": [{ "label": "y" }] }] }
+            "tool_input": { "questions": [{ "question": "a", "multiSelect": true, "options": [{ "label": "x" }] }] }
         });
         assert_eq!(h.handle(p, &|| true), "");
     }

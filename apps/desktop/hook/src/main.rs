@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use almanac_hook::{install, is_blocking, paths, ANSWER_WAIT_SECS, TOKEN_HEADER};
+use almanac_hook::{install, is_blocking, paths, ANSWER_WAIT_SECS, MAX_QUESTIONS, TOKEN_HEADER};
 use serde_json::Value;
 
 const MAX_INPUT: u64 = 1 << 20;
@@ -69,7 +69,9 @@ fn forward(input: &str) -> Option<String> {
         .get("tool_name")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let wait = if is_blocking(event, tool) {
+    let wait = if tool == "AskUserQuestion" && is_blocking(event, tool) {
+        Duration::from_secs(ANSWER_WAIT_SECS * MAX_QUESTIONS + 3)
+    } else if is_blocking(event, tool) {
         Duration::from_secs(ANSWER_WAIT_SECS + 3)
     } else {
         QUICK_TIMEOUT
