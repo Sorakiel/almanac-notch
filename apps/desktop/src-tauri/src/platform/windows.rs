@@ -139,3 +139,7 @@ pub fn cursor() -> Option<(f64, f64)> {
 pub fn remember_front_app() {}
 
 pub fn yield_activation() {}
+
+pub fn set_ignore(window: &WebviewWindow, ignore: bool) {
+    let _ = window.set_ignore_cursor_events(ignore);
+}

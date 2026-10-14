@@ -91,7 +91,7 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
                     (inside, near, changed)
                 };
                 if changed {
-                    let _ = window.set_ignore_cursor_events(!inside);
+                    platform::set_ignore(&window, !inside);
                     let _ = app.emit("island://hover", inside);
                 }
                 if near || inside {
@@ -135,6 +135,7 @@ pub fn run() {
                 .expect("island window missing");
             window.set_ignore_cursor_events(true)?;
             platform::setup_window(&window);
+            platform::set_ignore(&window, true);
             place_and_publish(app.handle(), &window, &state);
             spawn_cursor_poller(app.handle().clone(), window, state.clone());
             // Launch activation (tao, wry) arrives asynchronously; undo it once it has.

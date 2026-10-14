@@ -1,11 +1,16 @@
 //! macOS: window above the menu bar on every Space, notch geometry from NSScreen,
 //! cursor from CoreGraphics. Everything except `cursor()` must run on the main thread.
 
+use std::cell::RefCell;
 use std::ffi::c_void;
 
-use objc2::MainThreadMarker;
-use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior};
-use objc2_foundation::{NSObjectProtocol, NSPoint, NSRect, NSSize};
+use objc2::rc::Retained;
+use objc2::{msg_send, MainThreadMarker, MainThreadOnly};
+use objc2_app_kit::{
+    NSBackingStoreType, NSColor, NSPanel, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior,
+    NSWindowStyleMask,
+};
+use objc2_foundation::{NSPoint, NSRect, NSSize};
 use tauri::WebviewWindow;
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -13,50 +18,91 @@ use super::{Geometry, Placement, WIN_H, WIN_W};
 /// kCGStatusWindowLevel: one above the menu bar (kCGMainMenuWindowLevel = 24).
 const STATUS_WINDOW_LEVEL: isize = 25;
 
-fn ns_window(window: &WebviewWindow) -> &NSWindow {
-    let ptr = window.ns_window().expect("island window has no NSWindow");
-    // SAFETY: Tauri owns the NSWindow for the lifetime of `window`.
-    unsafe { &*(ptr as *const NSWindow) }
-}
-
 fn mtm() -> MainThreadMarker {
     MainThreadMarker::new().expect("AppKit call off the main thread")
 }
 
-/// Keep WindowServer from activating the app when the island is clicked.
-/// Checked in stage 1: without this tag a click activates us (an activated event from
-/// WindowServer, no activate call in-process) and steals focus from the app the user
-/// types in. NSPanel sets the tag for non-activating panels at init; a plain window
-/// needs the private setter. Private API, already allowed via macOSPrivateApi.
-fn prevent_activation(ns: &NSWindow) {
-    let sel = objc2::sel!(_setPreventsActivation:);
-    if ns.respondsToSelector(sel) {
-        // SAFETY: private AppKit setter taking a BOOL, checked with respondsToSelector.
-        let _: () = unsafe { objc2::msg_send![ns, _setPreventsActivation: true] };
-    } else {
-        eprintln!("[island] _setPreventsActivation missing: clicks will steal focus");
+thread_local! {
+    /// The visible island window. Main thread only.
+    static PANEL: RefCell<Option<Retained<NSPanel>>> = const { RefCell::new(None) };
+}
+
+fn panel() -> Retained<NSPanel> {
+    PANEL
+        .with(|p| p.borrow().clone())
+        .expect("island panel not created")
+}
+
+/// Host the Tauri webview in our own non-activating NSPanel.
+///
+/// A click on a plain Tauri window activates the app (WindowServer sends an activated
+/// event; nothing in-process calls activate) and steals focus from the app the user types
+/// in. Setting NSWindowStyleMaskNonactivatingPanel later, or swapping the window class to
+/// NSPanel, does not help: AppKit tells WindowServer "don't activate" only when an NSPanel
+/// is created with that style. So the panel is created here with public API, Tauri's
+/// content view (with the WKWebView) is moved into it, and Tauri's window stays hidden,
+/// still owning the webview and IPC.
+fn create_panel(window: &WebviewWindow) -> Retained<NSPanel> {
+    let mtm = mtm();
+    let ptr = window.ns_window().expect("island window has no NSWindow");
+    // SAFETY: Tauri owns the NSWindow for the lifetime of the app.
+    let tauri_window: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(WIN_W, WIN_H));
+    let style = NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel;
+    // SAFETY: designated initializer of NSWindow, inherited by NSPanel.
+    let panel: Retained<NSPanel> = unsafe {
+        msg_send![
+            NSPanel::alloc(mtm),
+            initWithContentRect: rect,
+            styleMask: style,
+            backing: NSBackingStoreType::Buffered,
+            defer: false
+        ]
+    };
+    // SAFETY: we keep the panel retained in PANEL; AppKit must not free it on close.
+    unsafe { panel.setReleasedWhenClosed(false) };
+    panel.setOpaque(false);
+    panel.setBackgroundColor(Some(&NSColor::clearColor()));
+    panel.setHasShadow(false);
+    panel.setBecomesKeyOnlyIfNeeded(true);
+    panel.setHidesOnDeactivate(false);
+    panel.setCanHide(false);
+    panel.setIgnoresMouseEvents(true);
+    if let Some(content) = tauri_window.contentView() {
+        // Leave Tauri's window a valid empty view; the webview moves to the panel.
+        tauri_window.setContentView(Some(&NSView::new(mtm)));
+        panel.setContentView(Some(&content));
     }
+    tauri_window.orderOut(None);
+    panel
 }
 
 pub fn setup_window(window: &WebviewWindow) {
-    let ns = ns_window(window);
-    // Never key: a click must not take keyboard focus from the app the user types in.
-    let _ = window.set_focusable(false);
-    prevent_activation(ns);
-    ns.setLevel(STATUS_WINDOW_LEVEL);
-    ns.setCollectionBehavior(
+    let panel = PANEL.with(|p| p.borrow().clone()).unwrap_or_else(|| {
+        let created = create_panel(window);
+        PANEL.with(|p| *p.borrow_mut() = Some(created.clone()));
+        created
+    });
+    panel.setLevel(STATUS_WINDOW_LEVEL);
+    panel.setCollectionBehavior(
         NSWindowCollectionBehavior::CanJoinAllSpaces
             | NSWindowCollectionBehavior::Stationary
             | NSWindowCollectionBehavior::FullScreenAuxiliary
             | NSWindowCollectionBehavior::IgnoresCycle,
     );
-    ns.setHidesOnDeactivate(false);
-    ns.setCanHide(false);
-    ns.setHasShadow(false);
+}
+
+/// Click-through toggle for the panel; callable from any thread.
+pub fn set_ignore(window: &WebviewWindow, ignore: bool) {
+    let _ = window.run_on_main_thread(move || {
+        if let Some(p) = PANEL.with(|p| p.borrow().clone()) {
+            p.setIgnoresMouseEvents(ignore);
+        }
+    });
 }
 
 /// Island lives on the menu-bar screen (ARCHITECTURE: primary display for now).
-fn primary_screen(mtm: MainThreadMarker) -> Option<objc2::rc::Retained<NSScreen>> {
+fn primary_screen(mtm: MainThreadMarker) -> Option<Retained<NSScreen>> {
     NSScreen::screens(mtm).firstObject()
 }
 
@@ -100,9 +146,9 @@ fn primary_height(mtm: MainThreadMarker) -> f64 {
         .unwrap_or(0.0)
 }
 
-pub fn place(window: &WebviewWindow) -> Placement {
+pub fn place(_window: &WebviewWindow) -> Placement {
     let mtm = mtm();
-    let ns = ns_window(window);
+    let ns = panel();
     let Some((want, geometry)) = desired(mtm) else {
         eprintln!("[island] no screens");
         return Placement::default();
@@ -140,9 +186,9 @@ pub fn place(window: &WebviewWindow) -> Placement {
 }
 
 /// True when the screen setup changed, the window drifted or it was ordered out (sleep, lock, displays).
-pub fn needs_replace(window: &WebviewWindow, last: &Placement) -> bool {
+pub fn needs_replace(_window: &WebviewWindow, last: &Placement) -> bool {
     let mtm = mtm();
-    let ns = ns_window(window);
+    let ns = panel();
     let Some((want, geometry)) = desired(mtm) else {
         return false;
     };
@@ -192,8 +238,8 @@ pub fn cursor() -> Option<(f64, f64)> {
 }
 
 thread_local! {
-    static PREV_FRONT: std::cell::RefCell<Option<objc2::rc::Retained<objc2_app_kit::NSRunningApplication>>> =
-        const { std::cell::RefCell::new(None) };
+    static PREV_FRONT: RefCell<Option<Retained<objc2_app_kit::NSRunningApplication>>> =
+        const { RefCell::new(None) };
 }
 
 /// Remember the frontmost app before tao/wry activate us at launch. Main thread.
