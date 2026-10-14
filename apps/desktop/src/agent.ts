@@ -51,8 +51,34 @@ const KEEP_STEPS = 12;
 const base = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 const firstLine = (t: string): string => (t.split('\n')[0] ?? '').trim();
 
+/** Step targets share the ear with the verb; canvas fillText squeezes longer text unreadably. */
+const STEP_MAX = 24;
+/** The approval card fits about this many mono characters. */
+const ASK_MAX = 54;
+
+export function clip(t: string, n: number): string {
+  const s = t.replace(/\s+/g, ' ').trim();
+  return s.length <= n ? s : s.slice(0, n - 1).trimEnd() + '…';
+}
+
+/** "cd ~/x && FOO=1 npm test | tail" -> "npm test": the command that actually runs. */
+export function shortCommand(cmd: string): string {
+  const parts = firstLine(cmd)
+    .split(/\s*(?:&&|\|\||;|\|)\s*/)
+    .map((p) => p.trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, ''))
+    .filter((p) => p && !/^cd(\s|$)/.test(p));
+  return clip(parts[0] ?? firstLine(cmd), STEP_MAX);
+}
+
 /** A tool call as a card step [tag, verb, target, +, −]; null = not shown. */
 export function toolStep(tool: string, input: NonNullable<Hook['tool_input']>): Step | null {
+  const st = rawStep(tool, input);
+  if (!st) return null;
+  const target = clip(st[2], STEP_MAX);
+  return st[3] === undefined ? [st[0], st[1], target] : [st[0], st[1], target, st[3], st[4] ?? ''];
+}
+
+function rawStep(tool: string, input: NonNullable<Hook['tool_input']>): Step | null {
   const file = base(input.file_path || input.notebook_path || '');
   const diff = (verb: string): Step => [
     'edit',
@@ -72,7 +98,7 @@ export function toolStep(tool: string, input: NonNullable<Hook['tool_input']>): 
       return diff('Пишет');
     case 'Bash':
     case 'PowerShell':
-      return ['bash', 'Запускает', firstLine(input.command || '')];
+      return ['bash', 'Запускает', shortCommand(input.command || '')];
     case 'Grep':
     case 'Glob':
       return ['grep', 'Ищет', '"' + (input.pattern || '') + '"'];
@@ -105,9 +131,9 @@ function hostOf(url: string): string {
 
 /** The line of the approval card: what exactly will run. */
 export function askCommand(tool: string, input: NonNullable<Hook['tool_input']>): string {
-  if (input.command) return firstLine(input.command);
-  const st = toolStep(tool, input);
-  if (st && st[2]) return st[1] + ' ' + st[2];
+  if (input.command) return clip(firstLine(input.command), ASK_MAX);
+  const st = rawStep(tool, input);
+  if (st && st[2]) return clip(st[1] + ' ' + st[2], ASK_MAX);
   return tool;
 }
 
@@ -278,8 +304,9 @@ export class AgentDriver {
           break;
         }
         if (tool === 'Grep' || tool === 'Glob') {
-          this.feed.search = (tool === 'Grep' ? 'grep ' : 'glob ') + '"' + (input.pattern || '') + '"';
-          if (input.path || input.glob) this.feed.search += ' · ' + base(input.glob || input.path || '');
+          let line = (tool === 'Grep' ? 'grep ' : 'glob ') + '"' + clip(input.pattern || '', STEP_MAX) + '"';
+          if (input.path || input.glob) line += ' · ' + base(input.glob || input.path || '');
+          this.feed.search = clip(line, ASK_MAX);
           this.show('searching');
           break;
         }

@@ -1,11 +1,21 @@
 //! Tray actions: install or remove our hooks in ~/.claude/settings.json.
-//! The diff is always shown first; nothing is written without "Записать".
+//!
+//! The dialog stays short (a full diff in an NSAlert grows past the screen and hides its
+//! buttons): it says what changes, and "Показать дифф" opens the full diff in the text
+//! editor, then asks again. Nothing is written without "Записать".
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use almanac_hook::{install, paths};
 use tauri::AppHandle;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::{
+    DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+};
+
+const WRITE: &str = "Записать";
+const SHOW: &str = "Показать дифф";
+const CANCEL: &str = "Отмена";
 
 /// The hook client binary to copy: next to the app's executable (bundle), or the
 /// release build of apps/desktop/hook in a dev checkout.
@@ -31,6 +41,120 @@ fn info(app: &AppHandle, title: &str, text: &str, kind: MessageDialogKind) {
         .kind(kind)
         .buttons(MessageDialogButtons::Ok)
         .show(|_| {});
+}
+
+/// Save the diff next to the app data and open it in the default text editor.
+fn open_diff(diff: &str) -> Result<(), String> {
+    let path = paths::app_dir().join("claude-settings.diff");
+    std::fs::create_dir_all(paths::app_dir()).map_err(|e| e.to_string())?;
+    std::fs::write(&path, diff).map_err(|e| e.to_string())?;
+    open_text(&path)
+}
+
+fn open_text(path: &Path) -> Result<(), String> {
+    let mut cmd = if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg("-t");
+        c
+    } else if cfg!(windows) {
+        Command::new("notepad")
+    } else {
+        Command::new("xdg-open")
+    };
+    cmd.arg(path).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+fn pressed(r: &MessageDialogResult, label: &str, std: &MessageDialogResult) -> bool {
+    match r {
+        MessageDialogResult::Custom(s) => s == label,
+        other => other == std,
+    }
+}
+
+struct Job {
+    app: AppHandle,
+    title: &'static str,
+    plan: install::Plan,
+    source: Option<PathBuf>,
+    target: PathBuf,
+}
+
+fn ask(job: Job) {
+    let added = job
+        .plan
+        .diff
+        .lines()
+        .filter(|l| l.starts_with("+ "))
+        .count();
+    let removed = job
+        .plan
+        .diff
+        .lines()
+        .filter(|l| l.starts_with("- "))
+        .count();
+    let what = if job.source.is_some() {
+        let events: Vec<&str> = install::EVENTS.iter().map(|(e, _)| *e).collect();
+        format!(
+            "Добавятся хуки Almanac Notch для событий:\n{}.",
+            events.join(", ")
+        )
+    } else {
+        "Удалятся хуки Almanac Notch.".to_string()
+    };
+    let text = format!(
+        "{what}\n\nФайл: {}\nСтрок: +{added} −{removed}. Другие хуки и настройки не меняются. Перед записью будет сделан бэкап.",
+        job.plan.path.display()
+    );
+    let dialog = job
+        .app
+        .dialog()
+        .message(text)
+        .title(job.title)
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::YesNoCancelCustom(
+            WRITE.into(),
+            SHOW.into(),
+            CANCEL.into(),
+        ));
+    dialog.show_with_result(move |r| {
+        if pressed(&r, SHOW, &MessageDialogResult::No) {
+            if let Err(e) = open_diff(&job.plan.diff) {
+                return info(&job.app, job.title, &e, MessageDialogKind::Error);
+            }
+            return ask(job);
+        }
+        if !pressed(&r, WRITE, &MessageDialogResult::Yes) {
+            return;
+        }
+        write(job);
+    });
+}
+
+fn write(job: Job) {
+    if let Some(src) = &job.source {
+        if let Err(e) = install::copy_client(src, &job.target) {
+            return info(&job.app, job.title, &e, MessageDialogKind::Error);
+        }
+    }
+    match install::apply(&job.plan) {
+        Ok(b) => {
+            let backup = b
+                .map(|p| format!("\nБэкап: {}", p.display()))
+                .unwrap_or_default();
+            let what = if job.source.is_some() {
+                "Хуки установлены. Новые сессии Claude Code уже их используют."
+            } else {
+                "Хуки удалены."
+            };
+            info(
+                &job.app,
+                job.title,
+                &format!("{what}{backup}"),
+                MessageDialogKind::Info,
+            );
+        }
+        Err(e) => info(&job.app, job.title, &e, MessageDialogKind::Error),
+    }
 }
 
 pub fn run(app: &AppHandle, add: bool) {
@@ -80,48 +204,11 @@ pub fn run(app: &AppHandle, add: bool) {
         };
         return info(app, title, msg, MessageDialogKind::Info);
     }
-    let text = format!(
-        "Изменения в {}. Другие хуки и настройки не меняются. Перед записью будет сделан бэкап.\n\n{}",
-        settings.display(),
-        plan.diff
-    );
-    let app2 = app.clone();
-    let title2 = title.to_string();
-    app.dialog()
-        .message(text)
-        .title(title)
-        .kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Записать".into(),
-            "Отмена".into(),
-        ))
-        .show(move |ok| {
-            if !ok {
-                return;
-            }
-            if let Some(src) = &source {
-                if let Err(e) = install::copy_client(src, &target) {
-                    return info(&app2, &title2, &e, MessageDialogKind::Error);
-                }
-            }
-            match install::apply(&plan) {
-                Ok(b) => {
-                    let backup = b
-                        .map(|p| format!("\nБэкап: {}", p.display()))
-                        .unwrap_or_default();
-                    let what = if source.is_some() {
-                        "Хуки установлены. Новые сессии Claude Code уже их используют."
-                    } else {
-                        "Хуки удалены."
-                    };
-                    info(
-                        &app2,
-                        &title2,
-                        &format!("{what}{backup}"),
-                        MessageDialogKind::Info,
-                    );
-                }
-                Err(e) => info(&app2, &title2, &e, MessageDialogKind::Error),
-            }
-        });
+    ask(Job {
+        app: app.clone(),
+        title,
+        plan,
+        source,
+        target,
+    });
 }

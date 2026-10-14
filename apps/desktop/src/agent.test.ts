@@ -40,6 +40,15 @@ describe('toolStep', () => {
     expect(toolStep('mcp__github__get_issue', {})).toEqual(['bash', 'Вызывает', 'get_issue']);
     expect(toolStep('TodoWrite', {})).toBeNull();
   });
+
+  it('keeps long commands readable in the ear', () => {
+    const cmd = 'cd ~/.claude/projects/-Users-sora && FOO=1 grep "stop_hook_summary" a.jsonl | tail -1';
+    const st = toolStep('Bash', { command: cmd });
+    expect(st?.[2]).toBe('grep "stop_hook_summary…');
+    expect((st?.[2] ?? '').length).toBeLessThanOrEqual(24);
+    expect(toolStep('Bash', { command: 'npm test' })?.[2]).toBe('npm test');
+    expect(toolStep('Read', { file_path: '/a/' + 'x'.repeat(40) + '.ts' })?.[2]).toHaveLength(24);
+  });
 });
 
 describe('AgentDriver', () => {
