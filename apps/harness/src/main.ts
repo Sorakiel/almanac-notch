@@ -371,6 +371,7 @@ declare global {
       setTab(tab: Tab): void;
       poke(n: number): void;
       answer(a: Answer): void;
+      peek(): Record<string, unknown>;
     };
   }
 }
@@ -386,6 +387,24 @@ window.__notch = {
   setTab: (tab) => m.setTab(tab),
   poke: (n) => m.poke(n),
   answer: (a) => m.answer(a),
+  // state snapshot for tools/inputs.mjs (same fields it reads from the prototype)
+  peek: () => ({
+    focusId: s.focusId,
+    tab: s.tab,
+    muted: s.muted,
+    volume: s.volume,
+    trackIdx: s.trackIdx,
+    musicPos: s.musicPos,
+    musicPlaying: s.musicPlaying,
+    shuffle: s.shuffle,
+    repeat: s.repeat,
+    habits: s.habits,
+    prefs: s.prefs,
+    event: s.event && { type: s.event.type, label: s.event.label, answer: s.event.answer, choice: s.event.choice },
+    IW: s.IW,
+    IH: s.IH,
+    hits: s.hits.map((h) => ({ act: h.act, x: h.x, y: h.y, w: h.w, h: h.h })),
+  }),
 };
 
 // ---------- frame loop (proto: frame) ----------
