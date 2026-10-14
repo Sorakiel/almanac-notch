@@ -45,6 +45,26 @@ static id sym(void *h, const char *name) {
   return p ? (__bridge id) * (CFStringRef *)p : nil;
 }
 
+static NSString *lastIconBundle = nil;
+
+/** The player's app icon as a 128 px PNG: the island's fallback cover, like Boring Notch. */
+static NSString *appIcon(NSString *bundle) {
+  NSRunningApplication *ra = [NSRunningApplication runningApplicationsWithBundleIdentifier:bundle].firstObject;
+  NSImage *icon = ra.icon;
+  if (!icon && ra.bundleURL) icon = [NSWorkspace.sharedWorkspace iconForFile:ra.bundleURL.path];
+  if (!icon) return nil;
+  NSRect r = NSMakeRect(0, 0, 128, 128);
+  CGImageRef img = [icon CGImageForProposedRect:&r context:nil hints:nil];
+  if (!img) return nil;
+  NSMutableData *out = [NSMutableData data];
+  CGImageDestinationRef dst = CGImageDestinationCreateWithData((__bridge CFMutableDataRef)out, CFSTR("public.png"), 1, NULL);
+  if (!dst) return nil;
+  CGImageDestinationAddImage(dst, img, NULL);
+  CGImageDestinationFinalize(dst);
+  CFRelease(dst);
+  return out.length ? [out base64EncodedStringWithOptions:0] : nil;
+}
+
 static NSString *jpegThumb(NSData *data) {
   CGImageSourceRef src = CGImageSourceCreateWithData((__bridge CFDataRef)data, NULL);
   if (!src) return nil;
@@ -90,6 +110,7 @@ static void publish(void) {
         NSString *title = str(info[@"kMRMediaRemoteNowPlayingInfoTitle"]);
         if (!info.count || !title.length) {
           lastArt = 0;
+          lastIconBundle = nil;
           emit(@{@"none" : @YES});
           return;
         }
@@ -129,6 +150,11 @@ static void publish(void) {
           lastArt = artId;
           NSString *b64 = artId ? jpegThumb(art) : nil;
           d[@"art"] = b64 ?: @"";
+        }
+        // the icon goes once per player; the frontend shows it when a track brings no cover
+        if (bundle.length && ![bundle isEqual:lastIconBundle]) {
+          lastIconBundle = bundle;
+          d[@"icon"] = appIcon(bundle) ?: @"";
         }
         emit(d);
       });

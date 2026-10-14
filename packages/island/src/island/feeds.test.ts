@@ -20,6 +20,8 @@ const media = (o: Partial<MediaFeed> = {}): MediaFeed => ({
   sub: 'Artist · Zen',
   len: 200,
   art: null,
+  artPending: false,
+  artA: 1,
   artSeed: 0,
   out: [],
   ...o,

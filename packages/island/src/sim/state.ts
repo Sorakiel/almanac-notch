@@ -82,8 +82,12 @@ export interface MediaFeed {
   sub: string;
   /** seconds; 0 = unknown (a live stream) */
   len: number;
-  /** the real cover; null = the generated one */
+  /** the real cover; null = the generated one (or the loading tile while artPending) */
   art: CanvasImageSource | null;
+  /** a new track whose cover may still come: a neutral tile instead of the generated cover */
+  artPending: boolean;
+  /** fade-in of a cover that replaced the loading tile, 0..1 */
+  artA: number;
   /** palette of the generated cover (index into TRACK_ART) */
   artSeed: number;
   /** "toggle" | "next" | "prev" | "seek <s>" | "shuffle <0|1>" | "repeat <0|1>" | "vol <0..1>" */

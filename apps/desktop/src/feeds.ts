@@ -103,18 +103,28 @@ export interface MediaMsg {
   shuffle?: number;
   /** MediaRemote: 1 off, 2 one, 3 all */
   repeat?: number;
+  /** identity of the player's cover; 0 = none right now */
+  artId?: number;
   /** base64 JPEG; "" = no cover; absent = unchanged */
   art?: string;
+  /** base64 PNG of the player's app icon, the fallback cover; absent = same player */
+  icon?: string;
 }
 
 export interface MediaHost {
   send: (cmd: string) => void;
   setVolume: (v: number) => void;
-  /** base64 JPEG -> something drawImage takes; async, may fail */
+  /** base64 JPEG or PNG -> something drawImage takes; async, may fail */
   decode: (b64: string) => Promise<CanvasImageSource | null>;
   now: () => number;
 }
 
+/** After a track change the cover may come later; until then the loading tile, then the generated cover. */
+const ART_WAIT_MS = 2500;
+/** Fade of a cover over the loading tile. */
+const ART_FADE_MS = 180;
+/** Players report "nothing" for a moment between tracks; only a longer silence empties the card. */
+const NONE_GRACE_MS = 1500;
 const MEDIA_TITLE_MAX = 34;
 const MEDIA_SHORT_MAX = 18;
 const MEDIA_SUB_MAX = 40;
@@ -131,6 +141,16 @@ export class MediaDriver {
   private ts = 0;
   private rate = 0;
   private artGen = 0;
+  /** title|artist of the shown track */
+  private track = '';
+  /** artId of md.art; 0 = none shown, -1 = the player's icon */
+  private shownArt = 0;
+  /** the player's app icon: shown when a track brings no cover (as Boring Notch does) */
+  private icon: CanvasImageSource | null = null;
+  private iconGen = 0;
+  private artUntil = 0;
+  private artAt = 0;
+  private noneAt = 0;
   constructor(
     private s: IslandState,
     private host: MediaHost,
@@ -143,22 +163,89 @@ export class MediaDriver {
   }
 
   private empty(title: string, sub: string): MediaFeed {
-    return { idle: true, title, short: title, sub, len: 0, art: null, artSeed: 0, out: [] };
+    return { idle: true, title, short: title, sub, len: 0, art: null, artPending: false, artA: 1, artSeed: 0, out: [] };
+  }
+
+  private setEmpty(off: boolean): void {
+    const s = this.s;
+    s.media = off
+      ? this.empty('Музыка недоступна', 'нет доступа к системному плееру')
+      : this.empty('Ничего не играет', 'включи музыку в любом плеере');
+    s.musicPlaying = false;
+    s.musicPos = 0;
+    this.rate = 0;
+    this.artGen++;
+    this.track = '';
+    this.shownArt = 0;
+    this.icon = null;
+    this.iconGen++;
+  }
+
+  private showIcon(md: MediaFeed): void {
+    if (!this.icon) return;
+    md.art = this.icon;
+    md.artPending = false;
+    this.shownArt = -1;
+    this.artAt = this.host.now();
+    md.artA = 0;
+  }
+
+  /** The cover: keep what fits this track, wait a little for a missing one, fade a late one in. */
+  private onArt(m: MediaMsg, md: MediaFeed, newTrack: boolean): void {
+    const now = this.host.now(),
+      id = m.artId ?? 0;
+    if (id && id === this.shownArt) return;
+    if (m.icon !== undefined) {
+      const gen = ++this.iconGen;
+      this.icon = null;
+      if (m.icon)
+        void this.host.decode(m.icon).then((img) => {
+          if (gen !== this.iconGen) return;
+          this.icon = img;
+          // the wait for a cover is already over: the icon instead of the generated cover
+          if (this.s.media === md && !md.art && !md.artPending) this.showIcon(md);
+        });
+    }
+    if (newTrack) {
+      this.artUntil = now + ART_WAIT_MS;
+      // the icon stays while the next track's cover may still come; a real cover is wrong for it
+      if (this.shownArt !== -1) {
+        this.artGen++;
+        this.shownArt = 0;
+        md.art = null;
+        md.artPending = true;
+      }
+    }
+    // no cover in this update: for the same track it is a blink of the player, keep ours
+    if (!id || !m.art) return;
+    const gen = ++this.artGen,
+      fromTile = !md.art;
+    void this.host.decode(m.art).then((img) => {
+      if (gen !== this.artGen || this.s.media !== md) return;
+      if (!img) {
+        md.artPending = false;
+        return;
+      }
+      md.art = img;
+      md.artPending = false;
+      this.shownArt = id;
+      this.artAt = fromTile ? this.host.now() : 0;
+      md.artA = fromTile ? 0 : 1;
+    });
   }
 
   onMessage(m: MediaMsg): void {
-    const s = this.s,
-      md = s.media as MediaFeed;
+    const s = this.s;
     if (m.off || m.none || !m.title) {
-      s.media = m.off
-        ? this.empty('Музыка недоступна', 'нет доступа к системному плееру')
-        : this.empty('Ничего не играет', 'включи музыку в любом плеере');
-      s.musicPlaying = false;
-      s.musicPos = 0;
-      this.rate = 0;
-      this.artGen++;
+      if (m.off) this.setEmpty(true);
+      else if (!this.noneAt) this.noneAt = this.host.now() + NONE_GRACE_MS;
       return;
     }
+    this.noneAt = 0;
+    const md = s.media as MediaFeed,
+      key = m.title + '|' + (m.artist ?? ''),
+      newTrack = key !== this.track;
+    this.track = key;
     const sub = [m.artist, m.album || m.app].filter(Boolean).join(' · ');
     md.idle = false;
     md.title = clip(m.title, MEDIA_TITLE_MAX);
@@ -172,15 +259,7 @@ export class MediaDriver {
     this.elapsed = m.elapsed ?? 0;
     this.ts = m.ts ?? this.host.now();
     this.rate = m.playing ? (m.rate ?? 1) || 1 : 0;
-    if (m.art !== undefined) {
-      const gen = ++this.artGen;
-      md.art = null;
-      if (m.art)
-        void this.host.decode(m.art).then((img) => {
-          if (gen === this.artGen && s.media === md) md.art = img;
-        });
-    }
-    // no "art" key: the cover did not change, keep the one we have
+    this.onArt(m, md, newTrack);
     this.tick();
   }
 
@@ -194,6 +273,16 @@ export class MediaDriver {
       md = s.media;
     if (!md) return;
     const now = this.host.now();
+    if (this.noneAt && now >= this.noneAt) {
+      this.noneAt = 0;
+      this.setEmpty(false);
+      return;
+    }
+    if (md.artPending && !md.art && now >= this.artUntil) {
+      md.artPending = false;
+      this.showIcon(md);
+    }
+    if (md.artA < 1) md.artA = Math.min(1, (now - this.artAt) / ART_FADE_MS);
     for (const cmd of md.out.splice(0)) {
       const [name = '', arg = ''] = cmd.split(' ');
       if (name === 'vol') {

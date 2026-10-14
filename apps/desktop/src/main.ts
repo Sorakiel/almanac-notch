@@ -195,7 +195,7 @@ interface Feeds {
 async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
   try {
     const bin = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
-    return await createImageBitmap(new Blob([bin], { type: 'image/jpeg' }));
+    return await createImageBitmap(new Blob([bin], { type: b64.startsWith('iVBOR') ? 'image/png' : 'image/jpeg' }));
   } catch {
     return null;
   }

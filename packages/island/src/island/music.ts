@@ -66,11 +66,20 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   c.save();
   rrect(c, ax, ay, as, as, 7);
   c.clip();
-  if (md && md.art) {
-    // the player's own cover, cropped to a square
-    const im = md.art as { width: number; height: number },
-      side = Math.min(im.width, im.height);
-    c.drawImage(md.art, (im.width - side) / 2, (im.height - side) / 2, side, side, ax, ay, as, as);
+  if (md && (md.art || md.artPending)) {
+    // a player's cover still loading after a track change: a quiet pulsing tile, never the
+    // generated cover for a moment (players send the title first and the cover a bit later)
+    if (!md.art || md.artA < 1) {
+      c.fillStyle = 'rgba(255,255,255,' + (0.09 + 0.04 * Math.sin(t * 4)).toFixed(3) + ')';
+      c.fillRect(ax, ay, as, as);
+    }
+    if (md.art) {
+      // the player's own cover, cropped to a square, faded in over the tile
+      const im = md.art as { width: number; height: number },
+        side = Math.min(im.width, im.height);
+      c.globalAlpha *= clamp(md.artA, 0, 1);
+      c.drawImage(md.art, (im.width - side) / 2, (im.height - side) / 2, side, side, ax, ay, as, as);
+    }
     c.restore();
   } else {
     // generated cover art: a gradient, a sun and two waves

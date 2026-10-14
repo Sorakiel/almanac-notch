@@ -127,11 +127,14 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
             if name == "island://volume" {
                 f.volume = v.as_f64().map(|x| x as f32);
             } else {
-                // the cover comes once per track; keep it for a reloaded page
-                let art = f.media.as_ref().and_then(|m| m.get("art").cloned());
+                // the cover and the player icon come once; keep them for a reloaded page
                 let mut m = v.clone();
-                if let (Some(a), Some(o)) = (art, m.as_object_mut()) {
-                    o.entry("art").or_insert(a);
+                if let (Some(prev), Some(o)) = (f.media.as_ref(), m.as_object_mut()) {
+                    for key in ["art", "icon"] {
+                        if let Some(x) = prev.get(key) {
+                            o.entry(key).or_insert_with(|| x.clone());
+                        }
+                    }
                 }
                 f.media = Some(m);
             }

@@ -51,7 +51,7 @@ describe('media driver', () => {
     const d = new MediaDriver(m.state, {
       send: (c) => sent.push(c),
       setVolume: (v) => vols.push(v),
-      decode: () => Promise.resolve(null),
+      decode: (b64) => Promise.resolve({ width: 1, height: 1, b64 } as unknown as CanvasImageSource),
       now: () => now,
     });
     return { s: m.state, d, sent, vols, step: (ms: number) => (now += ms), now: () => now };
@@ -79,7 +79,13 @@ describe('media driver', () => {
     step(500_000);
     d.tick();
     expect(s.musicPos).toBe(200);
+    // a blink of "nothing" between tracks does not empty the card; a longer silence does
     d.onMessage({ none: true });
+    step(1000);
+    d.tick();
+    expect(s.media?.idle).toBe(false);
+    step(1000);
+    d.tick();
     expect(s.media?.idle).toBe(true);
     expect(s.musicPlaying).toBe(false);
   });
@@ -94,5 +100,69 @@ describe('media driver', () => {
     step(3000);
     d.tick();
     expect(s.musicPos).toBe(50);
+  });
+  it('a track change shows the loading tile, never a stale or blinking generated cover', async () => {
+    const { s, d, step, now } = make();
+    const msg = (title: string, artId: number, art?: string) =>
+      d.onMessage({
+        title,
+        duration: 200,
+        elapsed: 0,
+        ts: now(),
+        playing: true,
+        artId,
+        ...(art !== undefined ? { art } : {}),
+      });
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const shown = () => (s.media?.art as unknown as { b64: string } | null)?.b64 ?? null;
+    msg('A', 1, 'aaa');
+    expect(s.media?.artPending).toBe(true);
+    await flush();
+    expect(shown()).toBe('aaa');
+    expect(s.media?.artPending).toBe(false);
+    expect(s.media?.artA).toBe(0);
+    step(100);
+    d.tick();
+    expect(s.media?.artA).toBeGreaterThan(0);
+    step(200);
+    d.tick();
+    expect(s.media?.artA).toBe(1);
+    // the same track loses its cover for an update: keep it
+    msg('A', 0, '');
+    expect(shown()).toBe('aaa');
+    // next track: title first, cover later -> loading tile, then the cover
+    msg('B', 0, '');
+    expect(s.media?.art).toBeNull();
+    expect(s.media?.artPending).toBe(true);
+    step(1000);
+    d.tick();
+    expect(s.media?.artPending).toBe(true);
+    msg('B', 2, 'bbb');
+    await flush();
+    expect(shown()).toBe('bbb');
+    // a track without any cover: the generated one after the wait
+    msg('C', 0, '');
+    step(2600);
+    d.tick();
+    expect(s.media?.artPending).toBe(false);
+    expect(s.media?.art).toBeNull();
+  });
+  it("no cover: the player's icon after the wait, kept across tracks until a real cover comes", async () => {
+    const { s, d, step, now } = make();
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const shown = () => (s.media?.art as unknown as { b64: string } | null)?.b64 ?? null;
+    d.onMessage({ title: 'Video', duration: 600, ts: now(), playing: true, artId: 0, icon: 'iVBORzen' });
+    await flush();
+    expect(s.media?.artPending).toBe(true);
+    expect(shown()).toBeNull();
+    step(2600);
+    d.tick();
+    expect(shown()).toBe('iVBORzen');
+    d.onMessage({ title: 'Next video', duration: 600, ts: now(), playing: true, artId: 0 });
+    expect(shown()).toBe('iVBORzen');
+    expect(s.media?.artPending).toBe(false);
+    d.onMessage({ title: 'Next video', duration: 600, ts: now(), playing: true, artId: 7, art: 'thumb' });
+    await flush();
+    expect(shown()).toBe('thumb');
   });
 });
