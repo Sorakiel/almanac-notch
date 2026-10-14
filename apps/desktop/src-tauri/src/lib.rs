@@ -90,7 +90,9 @@ fn start_claude(app: &AppHandle, hub: Arc<Hub>, usage: Arc<Mutex<Usage>>) -> Opt
         })
     });
     let h = hub.clone();
-    match claude::server::start(Arc::new(move |p| h.handle(p))) {
+    match claude::server::start(Arc::new(move |p, alive: &dyn Fn() -> bool| {
+        h.handle(p, alive)
+    })) {
         Ok(s) => Some(s.port),
         Err(e) => {
             eprintln!("[claude] hook server not started: {e}");

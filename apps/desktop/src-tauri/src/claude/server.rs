@@ -25,9 +25,25 @@ const MAX_BODY: usize = 1 << 20;
 const MAX_CONNS: usize = 64;
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Called with a parsed hook payload; returns the JSON body for the hook client
-/// ("" = no decision). May block while the island waits for the user.
-pub type Handler = Arc<dyn Fn(Value) -> String + Send + Sync>;
+/// Called with a parsed hook payload and a probe "is the hook client still there";
+/// returns the JSON body for the hook client ("" = no decision). May block while the
+/// island waits for the user.
+pub type Handler = Arc<dyn Fn(Value, &dyn Fn() -> bool) -> String + Send + Sync>;
+
+/// Claude Code kills a hook whose decision is no longer needed (the user answered in the
+/// terminal or the Desktop prompt), which closes our socket: peek sees EOF.
+fn client_alive(s: &TcpStream) -> bool {
+    if s.set_nonblocking(true).is_err() {
+        return true;
+    }
+    let r = s.peek(&mut [0u8; 1]);
+    let _ = s.set_nonblocking(false);
+    match r {
+        Ok(0) => false,
+        Ok(_) => true,
+        Err(e) => e.kind() == std::io::ErrorKind::WouldBlock,
+    }
+}
 
 pub struct Server {
     pub port: u16,
@@ -177,7 +193,7 @@ fn serve(stream: TcpStream, port: u16, token: &str, handler: &Handler) {
         let _ = respond(stream, 400, "");
         return;
     };
-    let answer = handler(payload);
+    let answer = handler(payload, &|| client_alive(&stream));
     let _ = respond(stream, 200, &answer);
 }
 
@@ -203,7 +219,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("almanac-srv-{}", std::process::id()));
         std::env::set_var("HOME", &dir);
         std::env::set_var("APPDATA", &dir);
-        let srv = start(Arc::new(|v: Value| json!({ "echo": v["x"] }).to_string())).unwrap();
+        let srv = start(Arc::new(|v: Value, _: &dyn Fn() -> bool| {
+            json!({ "echo": v["x"] }).to_string()
+        }))
+        .unwrap();
         let conn: Value =
             serde_json::from_str(&fs::read_to_string(paths::connection_file()).unwrap()).unwrap();
         let tok = conn["token"].as_str().unwrap().to_string();

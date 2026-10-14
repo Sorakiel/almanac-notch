@@ -190,7 +190,7 @@ export function statusOf(s: IslandState): Status | null {
     let text = E.text;
     if (event.type === 'working') {
       const st = stepAt(s, stepIndex(s));
-      if (st) text = st[1] + ' ' + st[2];
+      if (st) text = st[1] ? st[1] + ' ' + st[2] : st[2];
     }
     if (event.type === 'ratelimit') text = 'Лимит ' + limitText(s);
     if (event.type === 'greeting') {

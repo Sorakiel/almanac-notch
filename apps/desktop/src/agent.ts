@@ -45,6 +45,8 @@ export interface Usage {
 const BUSY: readonly EventType[] = ['working', 'thinking', 'searching'];
 /** A busy state with no hook for this long is stale (Ctrl-C, closed terminal). */
 const STALE_MS = 10 * 60 * 1000;
+/** Pause after a tool before the island says Claude is thinking or writing the reply. */
+const AFTER_TOOL_MS = 1500;
 /** Steps kept for the card (it shows three). */
 const KEEP_STEPS = 12;
 
@@ -52,7 +54,18 @@ const base = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 const firstLine = (t: string): string => (t.split('\n')[0] ?? '').trim();
 
 /** Step targets share the ear with the verb; canvas fillText squeezes longer text unreadably. */
-const STEP_MAX = 24;
+const STEP_MAX = 20;
+/** A caption has no verb before it, but a long one still squeezes; keep its gist. */
+const CAPTION_MAX = 22;
+
+/** "Fix expectation, run tests and parity" -> "Fix expectation": the first action, cut at a word. */
+export function caption(desc: string): string {
+  const first = (desc.split(/\s*(?:[,;:(]|\s[-–—]\s|\s(?:and|then|и|затем|потом)\s)\s*/i)[0] ?? desc).trim();
+  if (first.length <= CAPTION_MAX) return first;
+  const cut = first.slice(0, CAPTION_MAX - 1);
+  const word = cut.lastIndexOf(' ');
+  return (word > 8 ? cut.slice(0, word) : cut).trimEnd() + '…';
+}
 /** The approval card fits about this many mono characters. */
 const ASK_MAX = 54;
 
@@ -67,14 +80,26 @@ export function shortCommand(cmd: string): string {
     .split(/\s*(?:&&|\|\||;|\|)\s*/)
     .map((p) => p.trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, ''))
     .filter((p) => p && !/^cd(\s|$)/.test(p));
-  return clip(parts[0] ?? firstLine(cmd), STEP_MAX);
+  const toks = (parts[0] ?? firstLine(cmd)).split(' ').filter(Boolean);
+  // program + subcommand ("npx prettier", "git commit", "npm run parity"); flags, paths, quotes end it
+  const words = [base(toks[0] ?? '')];
+  for (const tok of toks.slice(1)) {
+    const prev = words[words.length - 1] ?? '';
+    const more = words.length === 1 || (words.length === 2 && RUNNERS.includes(prev));
+    if (!more || !/^[A-Za-z][\w:.-]*$/.test(tok) || tok.length > 20) break;
+    words.push(tok);
+  }
+  return clip(words.join(' '), STEP_MAX);
 }
+
+/** Subcommands that take one more word worth showing: "npm run parity", "pnpm exec vitest". */
+const RUNNERS = ['run', 'exec', 'x', 'dlx'];
 
 /** A tool call as a card step [tag, verb, target, +, −]; null = not shown. */
 export function toolStep(tool: string, input: NonNullable<Hook['tool_input']>): Step | null {
   const st = rawStep(tool, input);
   if (!st) return null;
-  const target = clip(st[2], STEP_MAX);
+  const target = clip(st[2], st[1] ? STEP_MAX : CAPTION_MAX);
   return st[3] === undefined ? [st[0], st[1], target] : [st[0], st[1], target, st[3], st[4] ?? ''];
 }
 
@@ -98,6 +123,9 @@ function rawStep(tool: string, input: NonNullable<Hook['tool_input']>): Step | n
       return diff('Пишет');
     case 'Bash':
     case 'PowerShell':
+      // Claude's own caption of the command ("Run input parity") says more than "cat" or "for i";
+      // Claude Desktop shows the same caption
+      if (input.description) return ['bash', '', caption(input.description)];
       return ['bash', 'Запускает', shortCommand(input.command || '')];
     case 'Grep':
     case 'Glob':
@@ -230,13 +258,25 @@ export interface AgentHost {
 }
 
 export function emptyFeed(): AgentFeed {
-  return { steps: [], stepT: 0, cmd: '', question: null, search: '', limitReset: null, plan: 'Pro', lastActive: null };
+  return {
+    steps: [],
+    stepT: 0,
+    cmd: '',
+    question: null,
+    search: '',
+    think: '',
+    limitReset: null,
+    plan: 'Pro',
+    lastActive: null,
+  };
 }
 
 export class AgentDriver {
   readonly feed: AgentFeed = emptyFeed();
   private queue: Ask[] = [];
   private cur: { ask: Ask; ev: MascotEvent; sent: boolean } | null = null;
+  /** when the last tool ended, while no new hook has come */
+  private afterTool: number | null = null;
 
   constructor(private readonly host: AgentHost) {
     this.attach();
@@ -286,8 +326,12 @@ export class AgentDriver {
       tool = h.tool_name || '',
       input = h.tool_input || {};
     this.feed.lastActive = this.host.now();
-    switch (h.hook_event_name) {
+    const ev = h.hook_event_name;
+    // no hooks fire while Claude writes text: a tool that ended with no next one means it is replying
+    this.afterTool = ev === 'PostToolUse' || (ev === 'PostToolUseFailure' && !h.is_interrupt) ? this.host.now() : null;
+    switch (ev) {
       case 'UserPromptSubmit':
+        this.feed.think = h.prompt ? '«' + clip(h.prompt, 34) + '»' : '';
         this.show('thinking');
         break;
       case 'PreToolUse': {
@@ -388,6 +432,15 @@ export class AgentDriver {
     }
     const now = this.host.now(),
       f = this.feed;
+    if (this.afterTool !== null && now - this.afterTool > AFTER_TOOL_MS) {
+      this.afterTool = null;
+      const ev = s.event;
+      if (ev && (ev.type === 'working' || ev.type === 'searching')) {
+        const st = f.steps[f.steps.length - 1];
+        f.think = st ? 'после: ' + (st[1] ? st[1].toLowerCase() + ' ' + st[2] : st[2]) : '';
+        this.show('thinking');
+      }
+    }
     if (f.limitReset !== null && now >= f.limitReset) {
       f.limitReset = null;
       if (s.event && s.event.type === 'ratelimit') {

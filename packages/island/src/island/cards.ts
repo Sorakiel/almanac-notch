@@ -115,8 +115,8 @@ export function drawFocusCard(
       L(1, 'сброс через ' + limitText(s), T_MUTED);
       L(2, 'план ' + (s.agent ? s.agent.plan : 'Pro') + ' · окно 5 часов', T_MUTED);
     } else if (it.state === 'think') {
-      L(0, 'планирует изменения', '#BFA6FF');
-      L(1, 'смотрит структуру проекта', T_MUTED);
+      L(0, s.agent ? 'думает' : 'планирует изменения', '#BFA6FF');
+      L(1, s.agent ? s.agent.think : 'смотрит структуру проекта', T_MUTED);
     } else {
       L(0, 'свободен');
       L(1, s.agent ? lastSession(s, s.agent.lastActive) : 'последняя сессия 12 мин назад', T_MUTED);

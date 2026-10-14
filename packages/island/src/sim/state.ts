@@ -43,6 +43,8 @@ export interface AgentFeed {
   question: readonly [string, readonly string[]] | null;
   /** second line of the searching card */
   search: string;
+  /** second line of the thinking card: the prompt or the last step */
+  think: string;
   /** plan usage reset, epoch ms; null = no limit hit */
   limitReset: number | null;
   /** plan name for the limit card, e.g. "Pro" */

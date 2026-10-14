@@ -13,7 +13,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// How often a held hook checks that its client is still there.
+const POLL: Duration = Duration::from_millis(200);
 
 use almanac_hook::{is_blocking, ANSWER_WAIT_SECS};
 use serde_json::{json, Map, Value};
@@ -237,8 +240,9 @@ impl Hub {
         }
     }
 
-    /// One hook payload in, the hook client's stdout out.
-    pub fn handle(&self, p: Value) -> String {
+    /// One hook payload in, the hook client's stdout out. `alive` tells whether the hook
+    /// client still waits; once it is gone the prompt is taken off the island at once.
+    pub fn handle(&self, p: Value, alive: &dyn Fn() -> bool) -> String {
         let event = s(&p, "hook_event_name");
         let tool = s(&p, "tool_name");
         let w = who(&p);
@@ -273,13 +277,23 @@ impl Hub {
             "island://agent",
             json!({ "kind": "hook", "id": id, "hook": slim(&p) }),
         );
-        let answer = match rx.recv_timeout(self.wait) {
-            Ok(a) => a,
-            Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {
-                if self.pending.lock().unwrap().remove(&id).is_some() {
-                    (self.emit)("island://agent", json!({ "kind": "resolved", "id": id }));
+        let start = Instant::now();
+        let answer = loop {
+            match rx.recv_timeout(POLL.min(self.wait)) {
+                Ok(a) => break a,
+                Err(RecvTimeoutError::Disconnected) => break String::new(),
+                Err(RecvTimeoutError::Timeout) => {
+                    let gone = !alive();
+                    if gone || start.elapsed() >= self.wait {
+                        if gone {
+                            eprintln!("[claude] #{id} decided elsewhere, hook closed");
+                        }
+                        if self.pending.lock().unwrap().remove(&id).is_some() {
+                            (self.emit)("island://agent", json!({ "kind": "resolved", "id": id }));
+                        }
+                        break String::new();
+                    }
                 }
-                String::new()
             }
         };
         self.held.lock().unwrap().remove(&id);
@@ -342,7 +356,7 @@ mod tests {
     fn approve_from_island() {
         let (h, log) = hub(5000);
         let h2 = h.clone();
-        let t = thread::spawn(move || h2.handle(perm()));
+        let t = thread::spawn(move || h2.handle(perm(), &|| true));
         let id = wait_id(&log);
         h.answer(id, "approve");
         let out: Value = serde_json::from_str(&t.join().unwrap()).unwrap();
@@ -352,7 +366,16 @@ mod tests {
     #[test]
     fn timeout_gives_no_decision() {
         let (h, log) = hub(50);
-        assert_eq!(h.handle(perm()), "");
+        assert_eq!(h.handle(perm(), &|| true), "");
+        assert!(log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
+    }
+
+    #[test]
+    fn killed_hook_closes_the_prompt() {
+        let (h, log) = hub(5000);
+        let t0 = Instant::now();
+        assert_eq!(h.handle(perm(), &|| false), "");
+        assert!(t0.elapsed() < Duration::from_secs(1));
         assert!(log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
     }
 
@@ -360,10 +383,11 @@ mod tests {
     fn answered_in_terminal_cancels() {
         let (h, log) = hub(5000);
         let h2 = h.clone();
-        let t = thread::spawn(move || h2.handle(perm()));
+        let t = thread::spawn(move || h2.handle(perm(), &|| true));
         wait_id(&log);
         h.handle(
             json!({ "hook_event_name": "PostToolUse", "session_id": "s1", "tool_name": "Bash" }),
+            &|| true,
         );
         assert_eq!(t.join().unwrap(), "");
     }
@@ -377,7 +401,7 @@ mod tests {
                 "options": [{ "label": "Vitest" }, { "label": "Jest" }], "multiSelect": false }] }
         });
         let h2 = h.clone();
-        let t = thread::spawn(move || h2.handle(p));
+        let t = thread::spawn(move || h2.handle(p, &|| true));
         let id = wait_id(&log);
         h.answer(id, "opt:1");
         let out: Value = serde_json::from_str(&t.join().unwrap()).unwrap();
@@ -395,7 +419,7 @@ mod tests {
             "tool_input": { "questions": [{ "question": "a", "options": [{ "label": "x" }] },
                                           { "question": "b", "options": [{ "label": "y" }] }] }
         });
-        assert_eq!(h.handle(p), "");
+        assert_eq!(h.handle(p, &|| true), "");
     }
 
     #[test]

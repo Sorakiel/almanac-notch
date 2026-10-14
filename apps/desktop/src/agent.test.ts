@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMascot, defaultSettings, statusOf } from '@almanac-notch/island';
-import { AgentDriver, limitReset, toolStep, type AgentMsg, type Hook } from './agent';
+import { AgentDriver, caption, limitReset, toolStep, type AgentMsg, type Hook } from './agent';
 
 const DT = 1 / 60;
 
@@ -44,10 +44,25 @@ describe('toolStep', () => {
   it('keeps long commands readable in the ear', () => {
     const cmd = 'cd ~/.claude/projects/-Users-sora && FOO=1 grep "stop_hook_summary" a.jsonl | tail -1';
     const st = toolStep('Bash', { command: cmd });
-    expect(st?.[2]).toBe('grep "stop_hook_summary…');
-    expect((st?.[2] ?? '').length).toBeLessThanOrEqual(24);
+    expect(st?.[2]).toBe('grep');
+    expect(toolStep('Bash', { command: 'npx prettier --check docs apps/desktop/src' })?.[2]).toBe('npx prettier');
+    expect(toolStep('Bash', { command: 'npm run parity -- --x' })?.[2]).toBe('npm run parity');
+    expect(toolStep('Bash', { command: 'git commit -q -m "x"' })?.[2]).toBe('git commit');
+    expect(toolStep('Bash', { command: './target/release/almanac-hook install' })?.[2]).toBe('almanac-hook install');
+    expect(toolStep('Bash', { command: 'python3 - <<EOF' })?.[2]).toBe('python3');
+    // Claude's caption wins over the command
+    expect(
+      toolStep('Bash', {
+        command: 'for i in 1 2; do cat x; done',
+        description: 'Wait for old run, rerun input parity',
+      }),
+    ).toEqual(['bash', '', 'Wait for old run']);
     expect(toolStep('Bash', { command: 'npm test' })?.[2]).toBe('npm test');
-    expect(toolStep('Read', { file_path: '/a/' + 'x'.repeat(40) + '.ts' })?.[2]).toHaveLength(24);
+    expect(toolStep('Read', { file_path: '/a/' + 'x'.repeat(40) + '.ts' })?.[2]).toHaveLength(20);
+    expect(caption('Fix expectation, run tests and parity')).toBe('Fix expectation');
+    expect(caption('Check known diffs for approve-click')).toBe('Check known diffs…');
+    expect(caption('Собрать хук и проверить дифф')).toBe('Собрать хук');
+    expect(caption('Run input parity')).toBe('Run input parity');
   });
 });
 
@@ -63,9 +78,22 @@ describe('AgentDriver', () => {
     hook({ hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'Bash', tool_input: { command: 'cargo test' } });
     expect(s.event?.type).toBe('working'); // not toggled off by a second working
     expect(statusOf(s)?.text).toBe('Запускает cargo test');
+    hook({
+      hook_event_name: 'PreToolUse',
+      session_id: 'a',
+      tool_name: 'Bash',
+      tool_input: { command: 'cat x', description: 'Show the log' },
+    });
+    expect(statusOf(s)?.text).toBe('Show the log');
     hook({ hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'Grep', tool_input: { pattern: 'rrect(' } });
     expect(s.event?.type).toBe('searching');
     expect(s.agent?.search).toBe('grep "rrect("');
+    hook({ hook_event_name: 'PostToolUse', session_id: 'a', tool_name: 'Grep' });
+    run(1);
+    expect(s.event?.type).toBe('searching');
+    run(1);
+    expect(s.event?.type).toBe('thinking'); // writing the reply: no hooks for a while
+    expect(s.agent?.think).toBe('после: Show the log');
     hook({ hook_event_name: 'Stop', session_id: 'a' });
     expect(s.event?.type).toBe('success');
     expect(s.event?.label).toBe('Готово');

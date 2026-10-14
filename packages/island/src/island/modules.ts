@@ -18,7 +18,9 @@ export type GlyphItem = ModuleItem | { kind: 'ci'; state: 'run' | 'fail' | 'ok' 
 
 function workShort(s: IslandState): string {
   const st = stepAt(s, stepIndex(s));
-  return st ? st[1].toLowerCase() + ' ' + st[2] : 'работает';
+  if (!st) return 'работает';
+  // a live Bash step may be a caption without a verb
+  return st[1] ? st[1].toLowerCase() + ' ' + st[2] : st[2];
 }
 
 /** proto: modules */
