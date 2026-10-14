@@ -46,6 +46,8 @@ const adapters = {
     tab: (v) => `tab = ${JSON.stringify(v)}`,
     pokes: (n) => `for (let i = 0; i < ${n}; i++) poke(0.2, -0.3)`,
     answer: (v) => `answer(${JSON.stringify(v)})`,
+    tick: (i) => `HABITS[${i}][1] = true`,
+    hits: () => `({ IW, IH, hits: hits.map(h => ({ act: h.act, x: h.x, y: h.y, w: h.w, h: h.h })) })`,
     run: (page, code) => page.evaluate((q) => window.__proto(q), code)
   },
   port: {
@@ -56,7 +58,9 @@ const adapters = {
     tab: (v) => `__notch.setTab(${JSON.stringify(v)})`,
     pokes: (n) => `__notch.poke(${n})`,
     answer: (v) => `__notch.answer(${JSON.stringify(v)})`,
-    run: (page, code) => page.evaluate((q) => (0, eval)(q), code)
+    tick: (i) => `__notch.peek().habits[${i}][1] = true`,
+    hits: () => `(({ IW, IH, hits }) => ({ IW, IH, hits }))(__notch.peek())`,
+    run: (page, code) => page.evaluate((q) => JSON.parse(JSON.stringify((0, eval)(q) ?? null)), code)
   }
 };
 const A = adapters[target];
@@ -68,7 +72,22 @@ const SEED = `(() => { let s = 0x2545F491; Math.random = () => { s |= 0; s = s +
 async function act(page, step, virtual) {
   const advance = (ms) => virtual ? page.clock.runFor(ms) : page.waitForTimeout(ms);
   if (step.wait) return advance(step.wait);
-  for (const k of ['screen', 'nstate', 'trigger', 'focus', 'tab', 'pokes', 'answer']) if (k in step) return A.run(page, A[k](step[k]));
+  for (const k of ['screen', 'nstate', 'trigger', 'focus', 'tab', 'pokes', 'answer', 'tick']) if (k in step) return A.run(page, A[k](step[k]));
+  if (step.key) { await page.keyboard.press(step.key); return advance(16); }
+  if (step.click || step.dbl || step.point) {
+    // a hit zone by its act, read from the page's own hit list; [act, fx] picks a spot along its width
+    const [act, fx] = Array.isArray(step.click || step.dbl || step.point) ? (step.click || step.dbl || step.point) : [step.click || step.dbl || step.point, 0.5];
+    const st = await A.run(page, A.hits());
+    const h = [...st.hits].reverse().find((z) => z.act === act);
+    if (!h) throw new Error('no hit zone ' + act);
+    const b = await page.locator('#island').boundingBox();
+    const x = b.x + (h.x + h.w * fx) * b.width / st.IW, y = b.y + (h.y + h.h / 2) * b.height / st.IH;
+    await page.mouse.move(x, y);
+    await advance(16);
+    if (step.click) await page.mouse.click(x, y);
+    if (step.dbl) await page.mouse.click(x, y, { clickCount: 2 });
+    return advance(16);
+  }
   if (step.hover) {
     const b = await page.locator('#island').boundingBox();
     await page.mouse.move(b.x + b.width / 2 + step.hover[0], b.y + step.hover[1]);

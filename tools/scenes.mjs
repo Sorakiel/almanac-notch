@@ -14,6 +14,10 @@
 //   { answer: 'approve' | 'deny' | 'opt:0' }
 //   { hover: [dx, dy] }              pointer over the island, offset from the island canvas top centre (CSS px)
 //   { leave: true }                  pointer off the island and away from the stage
+//   { click: act | [act, fx] }       click a hit zone by its act ('tab:chat', 'm:seek'...), fx = spot along its width
+//   { dbl: act }  { point: act }     double click / hover a hit zone
+//   { key: 'y' }                     key press
+//   { tick: i }                      tick habit i directly (only 3 of 5 habits are clickable in the prototype)
 //   { shot: 'name', area: 'island' | 'stage' | 'loupe' | 'page' }
 
 const base = [{ leave: true }, { wait: 6500 }]; // let the launch greeting finish
@@ -47,6 +51,26 @@ export const SCENES = [
   { name: 'open-ratelimit', steps: [...base, { nstate: 'open' }, { trigger: 'ratelimit' }, { wait: 1200 }, { shot: 'open-ratelimit', area: 'island' }] },
   { name: 'open-overload', steps: [...base, { nstate: 'auto' }, { pokes: 6 }, { wait: 300 }, { shot: 'overload-0.3s', area: 'island' }, { wait: 900 }, { shot: 'overload-1.2s', area: 'island' }, { shot: 'overload-1.2s-stage', area: 'stage' }, { wait: 2600 }, { shot: 'overload-after', area: 'island' }] },
   { name: 'open-tabs', steps: [...base, { nstate: 'open' }, { tab: 'chat' }, { wait: 400 }, { shot: 'open-tab-chat', area: 'island' }, { tab: 'add' }, { wait: 400 }, { shot: 'open-tab-add', area: 'island' }, { tab: 'settings' }, { wait: 400 }, { shot: 'open-tab-settings', area: 'island' }] },
+
+  // pointer and keyboard input on the open island
+  ...[
+    ['input-tab-chat', [{ click: 'tab:chat' }, { wait: 400 }]],
+    ['input-settings-pref', [{ click: 'tab:settings' }, { wait: 300 }, { click: 'pref:2' }, { wait: 300 }]],
+    ['input-mute', [{ click: 'mute' }, { wait: 300 }]],
+    ['input-focus-chip', [{ click: 'focus:github' }, { wait: 900 }]],
+    ['input-rail-click', [{ focus: 'music' }, { wait: 600 }, { hover: [222, 80] }, { wait: 400 }, { click: 'focus:cal' }, { wait: 900 }]],
+    ['input-player-pause', [{ focus: 'music' }, { wait: 600 }, { click: 'm:toggle' }, { wait: 300 }]],
+    ['input-player-next', [{ focus: 'music' }, { wait: 600 }, { click: 'm:next' }, { wait: 300 }]],
+    ['input-player-controls', [{ focus: 'music' }, { wait: 600 }, { click: ['m:seek', 0.25] }, { click: ['m:vol', 0.3] }, { click: 'm:shuffle' }, { click: 'm:repeat' }, { wait: 300 }]],
+    ['input-habit', [{ focus: 'almanac' }, { wait: 600 }, { click: 'habit:2' }, { wait: 400 }]],
+    ['input-habits-all-done', [{ focus: 'almanac' }, { wait: 600 }, { tick: 4 }, { click: 'habit:2' }, { wait: 1200 }]],
+    ['input-approve-hover', [{ trigger: 'attention' }, { wait: 1200 }, { point: 'approve' }, { wait: 200 }]],
+    ['input-approve-click', [{ trigger: 'attention' }, { wait: 1200 }, { click: 'approve' }, { wait: 1200 }]],
+    ['input-deny-key', [{ trigger: 'attention' }, { wait: 1200 }, { key: 'n' }, { wait: 300 }]],
+    ['input-question-key', [{ trigger: 'question' }, { wait: 1200 }, { key: '2' }, { wait: 300 }]],
+    ['input-question-click', [{ trigger: 'question' }, { wait: 1200 }, { click: 'opt:0' }, { wait: 300 }]],
+    ['input-card-dblclick', [{ dbl: 'mascot' }, { wait: 300 }]],
+  ].map(([name, steps]) => ({ name, steps: [...base, { nstate: 'open' }, { wait: 900 }, ...steps, { shot: name, area: 'island' }] })),
 
   // launch greeting, beat by beat
   { name: 'greeting', steps: [{ leave: true }, { wait: 500 }, ...[300, 900, 1500, 2300, 3000, 3600, 4300].flatMap((ms, i, a) => [{ wait: ms - (i ? a[i - 1] : 0) }, { shot: 'greeting-' + String(ms).padStart(4, '0'), area: 'island' }])] },
