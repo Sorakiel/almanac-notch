@@ -317,9 +317,11 @@ export class MediaDriver {
 /** `island://github` (src-tauri/src/github.rs). */
 export interface GhRepo {
   name: string;
-  state: 'run' | 'fail' | 'ok';
-  /** commit time, epoch ms */
+  state: 'run' | 'fail' | 'ok' | 'none';
+  /** when the checks ran (else the commit), epoch ms */
   at: number;
+  /** last push, epoch ms */
+  pushed: number;
   done: number;
   total: number;
   failed: string | null;
@@ -378,7 +380,8 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
   if (g.auth === 'bad')
     return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят', 'GitHub · токен не принят');
   if (!g.login) return empty(['Нет связи с GitHub', 'попробую снова через минуту'], 'нет связи', 'GitHub · нет связи');
-  const latest = g.repos.reduce<GhRepo | null>((a, r) => (!a || r.at > a.at ? r : a), null);
+  const withCi = g.repos.filter((r): r is GhRepo & { state: 'run' | 'fail' | 'ok' } => r.state !== 'none'),
+    latest = withCi.reduce<(typeof withCi)[number] | null>((a, r) => (!a || r.at > a.at ? r : a), null);
   const commits = commitDays(g.commits, now),
     row = 'GitHub · @' + g.login;
   if (!latest)
@@ -437,7 +440,7 @@ export class GithubDriver {
       for (const r of g.repos) {
         const was = this.seen.get(r.name);
         this.seen.set(r.name, r.state);
-        if (first || was === undefined || was === r.state || r.state === 'run') continue;
+        if (first || was === undefined || was === r.state || r.state === 'run' || r.state === 'none') continue;
         const type: EventType = r.state === 'ok' ? 'success' : 'error';
         // a failure outranks a success from another repository in the same read
         if (!hit || type === 'error')

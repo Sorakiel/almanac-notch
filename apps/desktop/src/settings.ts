@@ -17,7 +17,9 @@ const input = $<HTMLInputElement>('token'),
   dot = $('dot'),
   text = $('status-text'),
   connect = $('connect'),
-  connected = $('connected');
+  connected = $('connected'),
+  repos = $('repos'),
+  list = $('repo-list');
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 
@@ -27,7 +29,38 @@ function plural(n: number, one: string, few: string, many: string): string {
   return n + ' ' + (m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many);
 }
 
+const STATE_TEXT = { ok: 'зелёный', fail: 'упал', run: 'идёт', none: 'нет CI' } as const;
+
+/** "5 мин назад", "3 ч назад", "2 дн назад" */
+function ago(t: number): string {
+  if (!t) return '-';
+  const m = Math.max(0, Math.round((Date.now() - t) / 60_000));
+  return m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : Math.round(m / 1440) + ' дн назад';
+}
+
+/** The list the island picked from: which repositories, their CI and when it last ran. */
+function renderRepos(g: GhState | null): void {
+  list.textContent = '';
+  const rows = g && g.login ? [...g.repos].sort((a, b) => b.at - a.at) : [];
+  repos.hidden = rows.length === 0;
+  for (const r of rows) {
+    const li = document.createElement('li');
+    for (const [cls, txt] of [
+      ['n', r.name],
+      [r.state, STATE_TEXT[r.state]],
+      ['t', r.state === 'none' ? 'пуш ' + ago(r.pushed) : ago(r.at)],
+    ] as const) {
+      const span = document.createElement('span');
+      span.className = cls;
+      span.textContent = txt;
+      li.append(span);
+    }
+    list.append(li);
+  }
+}
+
 function render(g: GhState | null): void {
+  renderRepos(g);
   const on = !!g && g.auth !== 'off' && g.auth !== 'bad' && !!g.login;
   connect.hidden = on;
   connected.hidden = !on;

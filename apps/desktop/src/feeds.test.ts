@@ -184,6 +184,7 @@ describe('github feed', () => {
     name: 'almanac-notch',
     state: 'ok',
     at: T0 - 60 * min,
+    pushed: T0 - 60 * min,
     done: 5,
     total: 5,
     failed: null,

@@ -25,10 +25,12 @@ const DAYS: i64 = 7;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Repo {
     pub name: String,
-    /// "run" | "fail" | "ok"
+    /// "run" | "fail" | "ok" | "none" (no checks on the default branch head)
     pub state: &'static str,
-    /// commit time, epoch ms (the newest repo wins the card)
+    /// newest check start or finish, else the commit time, epoch ms (the newest repo wins the card)
     pub at: f64,
+    /// last push to the repository, epoch ms (shown in the settings list)
+    pub pushed: f64,
     pub done: u32,
     pub total: u32,
     /// name of the first failed check
@@ -87,12 +89,13 @@ const QUERY: &str = "query($since: GitTimestamp!, $author: ID) {
       totalCount
       nodes {
         nameWithOwner
+        pushedAt
         defaultBranchRef { target { ... on Commit {
           committedDate
           statusCheckRollup { state contexts(first: 50) { totalCount nodes {
             __typename
-            ... on CheckRun { name status conclusion }
-            ... on StatusContext { context state }
+            ... on CheckRun { name status conclusion startedAt completedAt }
+            ... on StatusContext { context state createdAt }
           } } }
           history(since: $since, first: 100, author: {id: $author}) { nodes { committedDate } }
         } } }
@@ -220,17 +223,36 @@ fn parse(v: &Value) -> Option<State> {
     };
     for r in repos["nodes"].as_array()? {
         let head = &r["defaultBranchRef"]["target"];
+        // an empty repository has no branch to look at
+        if head.is_null() {
+            continue;
+        }
         for c in head["history"]["nodes"].as_array().into_iter().flatten() {
             if let Some(t) = c["committedDate"].as_str().and_then(parse_time) {
                 out.commits.push(t);
             }
         }
         let roll = &head["statusCheckRollup"];
+        let name = r["nameWithOwner"].as_str().unwrap_or("?");
+        let short = name.rsplit('/').next().unwrap_or(name).to_owned();
+        let commit_at = head["committedDate"].as_str().and_then(parse_time);
+        let pushed = r["pushedAt"].as_str().and_then(parse_time).unwrap_or(0.0);
         let state = match roll["state"].as_str() {
             Some("SUCCESS") => "ok",
             Some("FAILURE" | "ERROR") => "fail",
             Some("PENDING" | "EXPECTED") => "run",
-            _ => continue,
+            _ => {
+                out.repos.push(Repo {
+                    name: short,
+                    state: "none",
+                    at: commit_at.unwrap_or(0.0),
+                    pushed,
+                    done: 0,
+                    total: 0,
+                    failed: None,
+                });
+                continue;
+            }
         };
         let nodes: Vec<&Value> = roll["contexts"]["nodes"]
             .as_array()
@@ -246,15 +268,19 @@ fn parse(v: &Value) -> Option<State> {
                 .or_else(|| c["context"].as_str())
                 .map(str::to_owned)
         });
-        let name = r["nameWithOwner"].as_str().unwrap_or("?");
+        // when the checks ran says more than when the commit was made (re-runs, old commits)
+        let ran = nodes
+            .iter()
+            .flat_map(|c| ["completedAt", "startedAt", "createdAt"].map(|k| c[k].as_str()))
+            .flatten()
+            .filter_map(parse_time)
+            .fold(0.0_f64, f64::max);
         out.repos.push(Repo {
             // the owner is noise in a notch
-            name: name.rsplit('/').next().unwrap_or(name).to_owned(),
+            name: short,
             state,
-            at: head["committedDate"]
-                .as_str()
-                .and_then(parse_time)
-                .unwrap_or(0.0),
+            at: if ran > 0.0 { ran } else { commit_at.unwrap_or(0.0) },
+            pushed,
             done,
             total,
             failed,
@@ -373,7 +399,7 @@ mod tests {
                     "committedDate": "2026-10-14T10:00:00Z",
                     "statusCheckRollup": {"state": "FAILURE", "contexts": {"totalCount": 3, "nodes": [
                         {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
-                        {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "FAILURE"},
+                        {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "FAILURE", "completedAt": "2026-10-14T11:00:00Z"},
                         {"__typename": "StatusContext", "context": "ci/x", "state": "PENDING"}
                     ]}},
                     "history": {"nodes": [{"committedDate": "2026-10-13T09:00:00Z"}, {"committedDate": "2026-10-14T10:00:00Z"}]}
@@ -397,12 +423,15 @@ mod tests {
         assert_eq!((s.repo_count, s.prs), (3, 2));
         assert_eq!(s.commits.len(), 2);
         assert!(s.commits[0] < s.commits[1]);
-        // only the repo with CI is listed
-        assert_eq!(s.repos.len(), 1);
+        // repos without CI are listed too, as "none"
+        assert_eq!(s.repos.len(), 2);
+        assert_eq!(s.repos[1].state, "none");
         let r = &s.repos[0];
         assert_eq!((r.name.as_str(), r.state), ("almanac-notch", "fail"));
         assert_eq!((r.done, r.total), (2, 3));
         assert_eq!(r.failed.as_deref(), Some("build"));
+        // the time of the checks, not of the commit
+        assert_eq!(iso(r.at), "2026-10-14T11:00:00Z");
     }
 
     /// Network: a made-up token must come back as refused, not as "no connection".
