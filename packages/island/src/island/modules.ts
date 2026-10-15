@@ -8,13 +8,15 @@ import { STATE_COL, drawMini } from './crew';
 
 export type ModuleItem =
   | { id: 'claude'; kind: 'agent'; name: string; body: string; seed: number; state: ClaudeState; short: string }
-  | { id: 'github'; kind: 'ci'; name: string; state: 'run' | 'fail' | 'ok'; short: string }
+  | { id: 'github'; kind: 'ci'; name: string; state: CiState; short: string }
   | { id: 'cal'; kind: 'cal'; name: string; mins: number; short: string; state?: undefined }
   | { id: 'music'; kind: 'music'; name: string; playing: boolean; short: string; state?: undefined }
   | { id: 'almanac'; kind: 'habits'; name: string; done: number; total: number; short: string; state?: undefined };
 
 /** what drawGlyph needs; prIcon-free glyphs can be drawn from a bare { kind, state } */
-export type GlyphItem = ModuleItem | { kind: 'ci'; state: 'run' | 'fail' | 'ok' };
+/** 'off' = live GitHub with nothing to show (no token, no CI): a grey ring */
+type CiState = 'run' | 'fail' | 'ok' | 'off';
+export type GlyphItem = ModuleItem | { kind: 'ci'; state: CiState };
 
 function workShort(s: IslandState): string {
   const st = stepAt(s, stepIndex(s));
@@ -27,7 +29,8 @@ function workShort(s: IslandState): string {
 export function modules(s: IslandState): ModuleItem[] {
   const ev = s.event && s.event.type,
     cs = claudeState(s),
-    mins = callMins(s);
+    mins = callMins(s),
+    gh = s.github;
   const idleShorts: Record<Exclude<ClaudeState, 'work'>, string> = {
     think: 'думает',
     search: 'ищет',
@@ -51,8 +54,16 @@ export function modules(s: IslandState): ModuleItem[] {
       id: 'github',
       kind: 'ci',
       name: 'GitHub',
-      state: ev === 'working' ? 'run' : ev === 'error' ? 'fail' : 'ok',
-      short: ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный',
+      state: gh
+        ? gh.auth === 'ok' && gh.ci !== 'none'
+          ? gh.ci
+          : 'off'
+        : ev === 'working'
+          ? 'run'
+          : ev === 'error'
+            ? 'fail'
+            : 'ok',
+      short: gh ? gh.short : ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный',
     },
     {
       id: 'cal',
@@ -129,7 +140,12 @@ export function focusTint(s: IslandState, f: ModuleId): { c: string; a: number }
   const ev = s.event && s.event.type,
     cs = claudeState(s);
   if (f === 'claude' && cs !== 'idle') return { c: STATE_COL[cs] as string, a: 0.3 };
-  if (f === 'github') {
+  if (f === 'github' && s.github) {
+    const ci = s.github.auth === 'ok' ? s.github.ci : 'none';
+    if (ci === 'fail') return { c: '#FF453A', a: 0.45 };
+    if (ci === 'ok') return { c: '#34C759', a: 0.45 };
+    if (ci === 'run') return { c: '#3D8BFF', a: 0.22 };
+  } else if (f === 'github') {
     if (ev === 'error') return { c: '#FF453A', a: 0.45 };
     if (ev === 'success') return { c: '#34C759', a: 0.45 };
     if (ev === 'working') return { c: '#3D8BFF', a: 0.22 };
@@ -177,6 +193,7 @@ export function drawGlyph(s: IslandState, c: Ctx, it: GlyphItem, x: number, y: n
   const r = sz * 0.85;
   if (it.kind === 'ci') {
     if (it.state === 'run') ring(c, x, y, r, lw, 0.26, '#3D8BFF', t * 5);
+    else if (it.state === 'off') ring(c, x, y, r, lw, 0, '#8E8E93', 0);
     else {
       const fail = it.state === 'fail';
       ring(c, x, y, r, lw, 1, fail ? '#FF453A' : '#34C759', 0);

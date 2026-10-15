@@ -94,6 +94,31 @@ export interface MediaFeed {
   out: string[];
 }
 
+/**
+ * Live GitHub data (stage 6). Null = the prototype's stubs (harness, parity). With a feed the
+ * module shows only real data: CI of the newest default-branch commit, PRs waiting for review,
+ * commits of 7 days. Without a token (`auth !== 'ok'`) the card says how to connect.
+ */
+export interface GithubFeed {
+  /** "off" no token, "bad" the token was refused, "ok" data is shown */
+  auth: 'off' | 'bad' | 'ok';
+  /** CI of the newest commit; "none" = no repository has checks */
+  ci: 'run' | 'fail' | 'ok' | 'none';
+  /** first card line: "almanac · CI зелёный · 5 из 5" */
+  ciText: string;
+  /** the rail's and the ears' short text */
+  short: string;
+  prs: number;
+  /** second card line: "2 PR ждут ревью" */
+  prText: string;
+  /** commits per day, 7 values, today last */
+  commits: number[];
+  /** the card's two lines while there is nothing to show (no token, no CI) */
+  hint: [string, string];
+  /** settings row: "GitHub · @login" */
+  row: string;
+}
+
 export interface Particle {
   type: 'bit' | 'note' | 'z';
   color: string | undefined;
@@ -209,6 +234,9 @@ export interface IslandState {
   agent: AgentFeed | null;
   cal: CalFeed | null;
   media: MediaFeed | null;
+  github: GithubFeed | null;
+  /** requests for the host app, drained by the shell each frame: "settings:github" */
+  requests: string[];
   wander: { x: number; y: number; next: number };
   sqOverride: { val: number; until: number } | null;
   particles: Particle[];
@@ -308,6 +336,8 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     agent: null,
     cal: null,
     media: null,
+    github: null,
+    requests: [],
     wander: { x: 0, y: 0, next: 0 },
     sqOverride: null,
     particles: [],

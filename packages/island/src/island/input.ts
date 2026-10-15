@@ -58,7 +58,8 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
       s.happyUntil = s.t + 0.8;
       hop(s, 3);
     }
-  } else if (act.startsWith('pref:')) {
+  } else if (act === 'open:github') s.requests.push('settings:github');
+  else if (act.startsWith('pref:')) {
     const pr = s.prefs[+act.slice(5)];
     if (pr) pr[1] = !pr[1];
   } else if (act.startsWith('m:') && s.media) mediaAct(s, act, h, p);

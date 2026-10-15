@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { createMascot, defaultSettings } from '@almanac-notch/island';
-import { CalDriver, MediaDriver, artSeed, calFeed, whenText, type Calendar } from './feeds';
+import {
+  CalDriver,
+  GithubDriver,
+  MediaDriver,
+  artSeed,
+  calFeed,
+  commitDays,
+  githubFeed,
+  whenText,
+  type Calendar,
+  type GhRepo,
+  type GhState,
+} from './feeds';
 
 const T0 = new Date(2026, 9, 14, 14, 30).getTime(); // local 14:30
 const min = 60_000;
@@ -164,5 +176,87 @@ describe('media driver', () => {
     d.onMessage({ title: 'Next video', duration: 600, ts: now(), playing: true, artId: 7, art: 'thumb' });
     await flush();
     expect(shown()).toBe('thumb');
+  });
+});
+
+describe('github feed', () => {
+  const repo = (o: Partial<GhRepo> = {}): GhRepo => ({
+    name: 'almanac-notch',
+    state: 'ok',
+    at: T0 - 60 * min,
+    done: 5,
+    total: 5,
+    failed: null,
+    ...o,
+  });
+  const gh = (o: Partial<GhState> = {}): GhState => ({
+    auth: 'ok',
+    login: 'sora',
+    repos: [repo()],
+    repo_count: 4,
+    prs: 2,
+    commits: [],
+    ...o,
+  });
+  it('no token or a refused one: a hint, no numbers', () => {
+    const off = githubFeed({ ...gh(), auth: 'off', login: null }, T0);
+    expect(off.auth).toBe('off');
+    expect(off.hint[1]).toBe('Настройки → GitHub');
+    expect(off.row).toBe('GitHub · не подключён');
+    expect(githubFeed({ ...gh(), auth: 'bad', login: null }, T0).auth).toBe('bad');
+    expect(githubFeed(null, T0).auth).toBe('off');
+  });
+  it('shows the newest repository, PR count with the right verb', () => {
+    const f = githubFeed(gh({ repos: [repo({ name: 'old', at: 1 }), repo({ state: 'run', done: 2, total: 5 })] }), T0);
+    expect(f.ci).toBe('run');
+    expect(f.ciText).toBe('almanac-notch · CI идёт · 2 из 5');
+    expect(f.short).toBe('CI идёт');
+    expect(githubFeed(gh({ prs: 1 }), T0).prText).toBe('1 PR ждёт ревью');
+    expect(f.prText).toBe('2 PR ждут ревью');
+    expect(githubFeed(gh({ prs: 0 }), T0).prText).toBe('ревью не ждут');
+  });
+  it('a failure names the failed check; text stays short', () => {
+    const f = githubFeed(gh({ repos: [repo({ state: 'fail', failed: 'build-and-deploy-production' })] }), T0);
+    expect(f.ci).toBe('fail');
+    expect(f.ciText.length).toBeLessThanOrEqual(34);
+    expect(f.ciText.startsWith('almanac-notch · упал на build')).toBe(true);
+  });
+  it('commits fall into the last seven days, today last', () => {
+    const day = 24 * 60 * min;
+    expect(commitDays([T0, T0 - 60_000, T0 - day, T0 - 6 * day, T0 - 7 * day], T0)).toEqual([1, 0, 0, 0, 0, 1, 2]);
+  });
+  it('no repository with checks: says so, still shows PRs', () => {
+    const f = githubFeed(gh({ repos: [] }), T0);
+    expect(f.ci).toBe('none');
+    expect(f.auth).toBe('ok');
+    expect(f.ciText).toBe('CI не настроен · 4 репо');
+  });
+  it('driver: no event on the first read, an event on a change to ok or fail', () => {
+    const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+    const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(gh({ repos: [repo({ state: 'run' })] }));
+    expect(m.state.event).toBeNull();
+    d.onState(gh({ repos: [repo({ state: 'ok' })] }));
+    expect(m.state.event?.type).toBe('success');
+    expect(m.state.event?.label).toBe('CI прошёл · almanac-n…');
+    expect(m.state.event?.src).toBeUndefined();
+    d.onState(gh({ repos: [repo({ state: 'fail' })] }));
+    expect(m.state.event?.type).toBe('error');
+    expect(m.state.github?.ci).toBe('fail');
+  });
+  it('driver: a new repository or a start of a run is not an event; a prompt holds the result back', () => {
+    const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+    const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(gh({ repos: [] }));
+    d.onState(gh({ repos: [repo({ state: 'fail' })] }));
+    expect(m.state.event).toBeNull();
+    d.onState(gh({ repos: [repo({ state: 'run' })] }));
+    expect(m.state.event).toBeNull();
+    m.trigger('attention');
+    d.onState(gh({ repos: [repo({ state: 'ok' })] }));
+    expect(m.state.event?.type).toBe('attention');
+    m.state.event = null;
+    d.tick();
+    expect((m.state.event as { type: string } | null)?.type).toBe('success');
   });
 });

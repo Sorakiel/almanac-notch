@@ -84,6 +84,13 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
+        "settings",
+        "Настройки…",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&MenuItem::with_id(
         app,
@@ -101,6 +108,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             let id = e.id().as_ref();
             if id == "quit" {
                 app.exit(0);
+                return;
+            }
+            if id == "settings" {
+                crate::settings::open(app);
                 return;
             }
             if id == "calendar:access" {

@@ -20,6 +20,8 @@ getrandom = "0.3"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 almanac-hook = { path = "../hook" }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+ureq = { version = "3", default-features = false, features = ["json", "native-tls", "gzip"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

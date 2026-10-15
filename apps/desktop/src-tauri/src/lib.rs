@@ -7,8 +7,10 @@
 
 mod calendar;
 mod claude;
+mod github;
 mod media;
 mod platform;
+mod settings;
 mod tray;
 
 use std::sync::mpsc;
@@ -82,6 +84,7 @@ struct Feeds {
     calendar: Option<calendar::Calendar>,
     media: Option<serde_json::Value>,
     volume: Option<f32>,
+    github: Option<github::State>,
 }
 
 #[derive(Serialize)]
@@ -89,6 +92,7 @@ struct FeedsSnapshot {
     calendar: Option<calendar::Calendar>,
     media: Option<serde_json::Value>,
     volume: Option<f32>,
+    github: Option<github::State>,
 }
 
 #[tauri::command]
@@ -98,7 +102,27 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
         calendar: f.calendar.clone(),
         media: f.media.clone(),
         volume: f.volume,
+        github: f.github.clone(),
     }
+}
+
+/// Connect a GitHub token: checked against GitHub, then kept in the keychain. Returns the login.
+#[tauri::command]
+async fn github_connect(token: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || github::connect(&token))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn github_disconnect() {
+    let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
+}
+
+/// Settings window (a regular window; the island panel never takes the keyboard).
+#[tauri::command]
+fn open_settings(app: AppHandle) {
+    settings::open(&app);
 }
 
 /// Player command from the island ("toggle", "next", "seek 42", ...); unknown ones are dropped.
@@ -119,6 +143,11 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     calendar::start(move |c| {
         f2.lock().unwrap().calendar = Some(c.clone());
         let _ = app2.emit("island://calendar", c);
+    });
+    let (app2, f2) = (app.clone(), feeds.clone());
+    github::start(move |g| {
+        f2.lock().unwrap().github = Some(g.clone());
+        let _ = app2.emit("island://github", g);
     });
     let app2 = app.clone();
     media::start(Arc::new(move |name: &str, v: serde_json::Value| {
@@ -257,7 +286,10 @@ pub fn run() {
             claude_usage,
             feeds_state,
             media_cmd,
-            set_volume
+            set_volume,
+            github_connect,
+            github_disconnect,
+            open_settings
         ])
         .setup(move |app| {
             // Not in the Dock and not in Cmd-Tab.

@@ -2,7 +2,7 @@
 // (`island://calendar`, `island://media`, `island://volume`); these drivers pick the next call,
 // keep the player clock running between updates and send the island's player buttons back.
 // Pure logic over the island state, so it runs in vitest without Tauri.
-import type { CalFeed, IslandState, MediaFeed } from '@almanac-notch/island';
+import type { CalFeed, EventType, GithubFeed, IslandState, MediaFeed } from '@almanac-notch/island';
 import { clip } from './agent';
 
 export interface CalEvent {
@@ -310,5 +310,160 @@ export class MediaDriver {
     const p = this.elapsed + (Math.max(0, now - this.ts) / 1000) * this.rate;
     const len = this.s.media?.len ?? 0;
     return Math.max(0, len > 0 ? Math.min(p, len) : p);
+  }
+}
+
+// ---------- github ----------
+/** `island://github` (src-tauri/src/github.rs). */
+export interface GhRepo {
+  name: string;
+  state: 'run' | 'fail' | 'ok';
+  /** commit time, epoch ms */
+  at: number;
+  done: number;
+  total: number;
+  failed: string | null;
+}
+
+export interface GhState {
+  auth: 'off' | 'ok' | 'bad' | 'net';
+  login: string | null;
+  repos: GhRepo[];
+  repo_count: number;
+  prs: number;
+  /** my commits of 7 days, epoch ms */
+  commits: number[];
+}
+
+const GH_CI_MAX = 34;
+const GH_REPO_MAX = 13;
+const SETTINGS_HINT = 'Настройки → GitHub';
+
+function dayIndex(t: number): number {
+  const d = new Date(t);
+  return Math.round(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86_400_000);
+}
+
+/** Commit times -> 7 per-day counts, today last. */
+export function commitDays(times: number[], now: number): number[] {
+  const today = dayIndex(now),
+    out = [0, 0, 0, 0, 0, 0, 0];
+  for (const t of times) {
+    const i = 6 - (today - dayIndex(t));
+    if (i >= 0 && i <= 6) out[i] = (out[i] as number) + 1;
+  }
+  return out;
+}
+
+function prText(n: number): string {
+  if (n === 0) return 'ревью не ждут';
+  return n === 1 ? '1 PR ждёт ревью' : n + ' PR ждут ревью';
+}
+
+/** proto: the github card's three lines, from the account's real repositories. */
+export function githubFeed(g: GhState | null, now: number): GithubFeed {
+  const empty = (hint: [string, string], short: string, row: string): GithubFeed => ({
+    auth: g && g.auth === 'bad' ? 'bad' : 'off',
+    ci: 'none',
+    ciText: '',
+    short,
+    prs: 0,
+    prText: '',
+    commits: [0, 0, 0, 0, 0, 0, 0],
+    hint,
+    row,
+  });
+  if (!g || g.auth === 'off')
+    return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена', 'GitHub · не подключён');
+  if (g.auth === 'bad')
+    return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят', 'GitHub · токен не принят');
+  if (!g.login) return empty(['Нет связи с GitHub', 'попробую снова через минуту'], 'нет связи', 'GitHub · нет связи');
+  const latest = g.repos.reduce<GhRepo | null>((a, r) => (!a || r.at > a.at ? r : a), null);
+  const commits = commitDays(g.commits, now),
+    row = 'GitHub · @' + g.login;
+  if (!latest)
+    return {
+      auth: 'ok',
+      ci: 'none',
+      ciText: clip('CI не настроен · ' + g.repo_count + ' репо', GH_CI_MAX),
+      short: 'нет CI',
+      prs: g.prs,
+      prText: prText(g.prs),
+      commits,
+      hint: ['', ''],
+      row,
+    };
+  const repo = clip(latest.name, GH_REPO_MAX),
+    parts = {
+      ok: ['CI зелёный', 'CI зелёный · ' + latest.done + ' из ' + latest.total],
+      run: ['CI идёт', 'CI идёт · ' + latest.done + ' из ' + latest.total],
+      fail: ['CI упал', latest.failed ? 'упал на ' + clip(latest.failed, 12) : 'CI упал'],
+    }[latest.state] as [string, string];
+  return {
+    auth: 'ok',
+    ci: latest.state,
+    ciText: clip(repo + ' · ' + parts[1], GH_CI_MAX),
+    short: parts[0],
+    prs: g.prs,
+    prText: prText(g.prs),
+    commits,
+    hint: ['', ''],
+    row,
+  };
+}
+
+/** Prompts keep the island; a CI result waits until they are answered. */
+const PROMPTS: readonly string[] = ['attention', 'question'];
+
+export class GithubDriver {
+  private g: GhState | null = null;
+  private lastMin = -1;
+  /** last CI state per repository; a change to ok or fail is an event */
+  private seen = new Map<string, GhRepo['state']>();
+  private pending: { type: EventType; label: string } | null = null;
+  constructor(
+    private s: IslandState,
+    private m: { trigger: (t: EventType) => void },
+    private now: () => number,
+  ) {
+    s.github = githubFeed(null, now());
+  }
+
+  onState(g: GhState): void {
+    // the first read after start only seeds the states: no event for what was already so
+    const first = this.seen.size === 0 && this.g === null;
+    let hit: { type: EventType; label: string } | null = null;
+    if (g.login) {
+      for (const r of g.repos) {
+        const was = this.seen.get(r.name);
+        this.seen.set(r.name, r.state);
+        if (first || was === undefined || was === r.state || r.state === 'run') continue;
+        const type: EventType = r.state === 'ok' ? 'success' : 'error';
+        // a failure outranks a success from another repository in the same read
+        if (!hit || type === 'error')
+          hit = { type, label: (type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 10) };
+      }
+    } else if (g.auth === 'off' || g.auth === 'bad') this.seen.clear();
+    this.g = g;
+    this.lastMin = -1;
+    if (hit) this.pending = hit;
+    this.tick();
+  }
+
+  /** Per frame: the feed's relative day, a waiting CI event. */
+  tick(): void {
+    const now = this.now(),
+      min = Math.floor(now / 60_000);
+    if (min !== this.lastMin) {
+      this.lastMin = min;
+      this.s.github = githubFeed(this.g, now);
+    }
+    const p = this.pending,
+      ev = this.s.event;
+    if (p && !(ev && PROMPTS.includes(ev.type))) {
+      this.pending = null;
+      this.m.trigger(p.type);
+      if (this.s.event) this.s.event.label = p.label;
+    }
   }
 }

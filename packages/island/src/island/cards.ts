@@ -122,25 +122,37 @@ export function drawFocusCard(
       L(0, 'свободен');
       L(1, s.agent ? lastSession(s, s.agent.lastActive) : 'последняя сессия 12 мин назад', T_MUTED);
     }
+  } else if (it.kind === 'ci' && s.github && s.github.auth !== 'ok') {
+    // live GitHub with nothing to show: say why and where to connect
+    L(0, s.github.hint[0], '#FFFFFF');
+    L(1, s.github.hint[1], T_MUTED);
   } else if (it.kind === 'ci') {
-    const ciCol = it.state === 'fail' ? '#FF6B61' : it.state === 'run' ? '#7FB0FF' : '#5FD27D';
+    const gh = s.github,
+      ciCol =
+        it.state === 'fail' ? '#FF6B61' : it.state === 'run' ? '#7FB0FF' : it.state === 'off' ? '#8E8E93' : '#5FD27D';
     drawGlyph(s, c, { kind: 'ci', state: it.state }, tx + 6, y0 + 40, 6.8);
     textAt(
       c,
-      it.state === 'fail' ? 'деплой упал на build' : it.state === 'run' ? 'CI идёт · 2 из 5' : 'CI зелёный · 5 из 5',
+      gh
+        ? gh.ciText
+        : it.state === 'fail'
+          ? 'деплой упал на build'
+          : it.state === 'run'
+            ? 'CI идёт · 2 из 5'
+            : 'CI зелёный · 5 из 5',
       tx + 18,
       y0 + 40.5,
       { size: 11.5, weight: 400, color: ciCol, max: tmax - 18 },
     );
     prIcon(c, tx + 6, y0 + 59);
-    textAt(c, '2 PR ждут ревью', tx + 18, y0 + 59.5, {
+    textAt(c, gh ? gh.prText : '2 PR ждут ревью', tx + 18, y0 + 59.5, {
       size: 11.5,
       weight: 400,
       color: 'rgba(255,255,255,0.8)',
       max: tmax - 18,
     });
     // commits over the last 7 days, today on the right
-    const CM = [4, 0, 6, 9, 3, 7, 5],
+    const CM = gh ? gh.commits : [4, 0, 6, 9, 3, 7, 5],
       mxc = Math.max(...CM),
       bw = 6,
       bg = 3,

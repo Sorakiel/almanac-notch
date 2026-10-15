@@ -28,7 +28,11 @@ export function miniCrew(s: IslandState): MiniItem[] {
   const ev = s.event && s.event.type;
   return [
     { body: MODULE_COL.claude.body, seed: 0, state: claudeState(s) },
-    { body: MODULE_COL.github.body, seed: 1, state: ev === 'error' ? 'fail' : 'idle' },
+    {
+      body: MODULE_COL.github.body,
+      seed: 1,
+      state: (s.github ? s.github.auth === 'ok' && s.github.ci === 'fail' : ev === 'error') ? 'fail' : 'idle',
+    },
     { body: MODULE_COL.cal.body, seed: 2, state: callMins(s) <= 5 ? 'ask' : 'idle' },
     { body: MODULE_COL.music.body, seed: 3, state: 'idle' },
   ];

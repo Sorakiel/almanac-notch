@@ -26,7 +26,7 @@ import {
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
-import { CalDriver, MediaDriver, type Calendar, type MediaMsg } from './feeds';
+import { CalDriver, GithubDriver, MediaDriver, type Calendar, type GhState, type MediaMsg } from './feeds';
 
 interface Geometry {
   hasNotch: boolean;
@@ -185,11 +185,13 @@ island.addEventListener('dblclick', (e) => islandDoubleClick(s, domPoint(e)));
 let agent: AgentDriver | null = null;
 let cal: CalDriver | null = null;
 let media: MediaDriver | null = null;
+let github: GithubDriver | null = null;
 
 interface Feeds {
   calendar: Calendar | null;
   media: MediaMsg | null;
   volume: number | null;
+  github: GhState | null;
 }
 
 async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
@@ -249,7 +251,13 @@ if (inTauri) {
     wake();
     media?.onVolume(e.payload);
   });
+  github = new GithubDriver(s, m, Date.now);
+  await listen<GhState>('island://github', (e) => {
+    wake();
+    github?.onState(e.payload);
+  });
   const f = await invoke<Feeds>('feeds_state');
+  if (f.github) github.onState(f.github);
   if (f.calendar) cal.onCalendar(f.calendar);
   if (f.media) media.onMessage(f.media);
   media.onVolume(f.volume);
@@ -312,6 +320,8 @@ function tick(now: number, id: number): void {
   agent?.tick();
   cal?.tick();
   media?.tick();
+  github?.tick();
+  for (const r of s.requests.splice(0)) if (r === 'settings:github') void invoke('open_settings');
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();

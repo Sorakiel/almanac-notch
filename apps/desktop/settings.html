@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Almanac Notch</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+  </head>
+  <body>
+    <aside>
+      <h1>Настройки</h1>
+      <nav>
+        <button class="item on" data-section="github">GitHub</button>
+      </nav>
+    </aside>
+    <main id="github">
+      <h2>GitHub</h2>
+      <p class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">…</span></p>
+
+      <section id="connect">
+        <label for="token">Токен доступа</label>
+        <div class="row">
+          <input
+            id="token"
+            type="password"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="github_pat_…"
+          />
+          <button id="go" class="primary">Подключить</button>
+        </div>
+        <p class="note" id="error" role="alert"></p>
+      </section>
+
+      <section id="connected" hidden>
+        <button id="off">Отключить</button>
+      </section>
+
+      <section class="help">
+        <h3>Как получить токен</h3>
+        <ol>
+          <li>Откройте github.com → Settings → Developer settings → Fine-grained tokens → Generate new token.</li>
+          <li>Repository access: все репозитории или только нужные.</li>
+          <li>Права только на чтение: Contents, Pull requests, Commit statuses, Checks (Metadata добавится сама).</li>
+        </ol>
+        <h3>Что читается и куда уходит</h3>
+        <p>
+          Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и
+          время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке
+          ключей системы и не попадает ни в файлы, ни в остров.
+        </p>
+      </section>
+    </main>
+    <script type="module" src="/src/settings.ts"></script>
+  </body>
+</html>
