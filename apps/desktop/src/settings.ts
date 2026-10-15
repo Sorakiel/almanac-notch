@@ -41,12 +41,12 @@ function ago(t: number): string {
 /** The list the island picked from: which repositories, their CI and when it last ran. */
 function renderRepos(g: GhState | null): void {
   list.textContent = '';
-  const rows = g && g.login ? [...g.repos].sort((a, b) => b.at - a.at) : [];
+  const rows = g && g.login ? g.repos.filter((r) => r.state !== 'none').sort((a, b) => b.at - a.at) : [];
   repos.hidden = rows.length === 0;
   for (const r of rows) {
     const li = document.createElement('li');
     for (const [cls, txt] of [
-      ['n', repoLabel(r)],
+      ['n', repoLabel(r, 80)],
       [r.state, STATE_TEXT[r.state]],
       ['t', r.state === 'none' ? 'ветка без CI' : ago(r.at)],
     ] as const) {
@@ -72,7 +72,7 @@ function render(g: GhState | null): void {
       ' · ' +
       plural(g.repo_count, 'репозиторий', 'репозитория', 'репозиториев') +
       ' · CI в ' +
-      g.repos.length +
+      g.repos.filter((r) => r.state !== 'none').length +
       (g.auth === 'net' ? ' · нет связи' : '');
   } else if (g && g.auth === 'bad') text.textContent = 'GitHub не принял сохранённый токен';
   else text.textContent = 'Не подключён';

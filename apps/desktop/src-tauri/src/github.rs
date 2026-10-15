@@ -98,7 +98,7 @@ const QUERY: &str = "query($since: GitTimestamp!, $author: ID) {
           history(since: $since, first: 100, author: {id: $author}) { nodes { committedDate } }
         } } }
         refs(refPrefix: \"refs/heads/\", first: 100) { nodes { name target { ... on Commit {
-          id committedDate author { user { id } }
+          id committedDate author { user { id } } committer { user { id } }
         } } } }
       }
     }
@@ -119,7 +119,9 @@ const ROLLUPS: &str = "query($ids: [ID!]!) {
 }";
 
 /// Branches whose checks are read: the newest commits of mine across all repositories.
-const BRANCHES: usize = 10;
+const BRANCHES: usize = 25;
+/// Of them, the ones with checks that the island keeps.
+const WITH_CI: usize = 10;
 
 fn post(token: &str, body: &Value) -> Result<Value, Failure> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -272,7 +274,13 @@ fn parse_branches(v: &Value, me: &str) -> Option<(State, Vec<Pick>)> {
         }
         for b in r["refs"]["nodes"].as_array().into_iter().flatten() {
             let t = &b["target"];
-            if t["author"]["user"]["id"].as_str() != Some(me) {
+            // a commit with an email GitHub cannot link to anyone (no user) is still the
+            // owner's more often than not; another account's commit is not
+            let mine = [&t["author"]["user"]["id"], &t["committer"]["user"]["id"]]
+                .iter()
+                .any(|u| u.as_str() == Some(me));
+            let unlinked = t["author"]["user"].is_null();
+            if !mine && !unlinked {
                 continue;
             }
             let (Some(id), Some(at)) = (
@@ -368,6 +376,9 @@ fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
         });
     }
     out.sort_by(|a, b| b.at.total_cmp(&a.at));
+    // branches without checks only took a slot in the query; they are not shown
+    out.retain(|r| r.state != "none");
+    out.truncate(WITH_CI);
     out
 }
 
@@ -529,7 +540,8 @@ mod tests {
         assert_eq!(r[0].failed.as_deref(), Some("build"));
         // the time of the checks, not of the commit
         assert_eq!(iso(r[0].at), "2026-10-14T11:00:00Z");
-        assert_eq!(r.iter().find(|x| x.branch == "main" && x.name == "site").unwrap().state, "none");
+        // a branch without checks is dropped
+        assert!(r.iter().all(|x| x.name != "site"));
         assert_eq!(iso(r.iter().find(|x| x.state == "ok").unwrap().at), "2026-10-10T10:05:00Z");
     }
 
