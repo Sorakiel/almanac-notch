@@ -165,7 +165,8 @@ export function drawFocusCard(
       c.fill();
     });
     const nC = CM.reduce((a, b) => a + b, 0);
-    textAt(c, nC + commitsWord(nC) + ' за 7 дн', tx + CM.length * (bw + bg) + 6, base - 6, {
+    // live: the word does not fit next to the bars without being squeezed
+    textAt(c, gh ? nC + ' за 7 дн' : nC + commitsWord(nC) + ' за 7 дн', tx + CM.length * (bw + bg) + 6, base - 6, {
       size: 11,
       weight: 400,
       color: T_MUTED,

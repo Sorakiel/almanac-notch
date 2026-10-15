@@ -211,7 +211,7 @@ describe('github feed', () => {
   it('shows the newest repository, PR count with the right verb', () => {
     const f = githubFeed(gh({ repos: [repo({ name: 'old', at: 1 }), repo({ state: 'run', done: 2, total: 5 })] }), T0);
     expect(f.ci).toBe('run');
-    expect(f.ciText).toBe('almanac-notch · CI идёт · 2 из 5');
+    expect(f.ciText).toBe('almanac-not… · идёт 2/5');
     expect(f.short).toBe('CI идёт');
     expect(githubFeed(gh({ prs: 1 }), T0).prText).toBe('1 PR ждёт ревью');
     expect(f.prText).toBe('2 PR ждут ревью');
@@ -220,16 +220,16 @@ describe('github feed', () => {
   it('a failure names the failed check; text stays short', () => {
     const f = githubFeed(gh({ repos: [repo({ state: 'fail', failed: 'build-and-deploy-production' })] }), T0);
     expect(f.ci).toBe('fail');
-    expect(f.ciText.length).toBeLessThanOrEqual(34);
-    expect(f.ciText.startsWith('almanac-notch · упал на build')).toBe(true);
+    expect(f.ciText.length).toBeLessThanOrEqual(24);
+    expect(f.ciText).toBe('almanac-… · упал: build…');
   });
   it('commits fall into the last seven days, today last', () => {
     const day = 24 * 60 * min;
     expect(commitDays([T0, T0 - 60_000, T0 - day, T0 - 6 * day, T0 - 7 * day], T0)).toEqual([1, 0, 0, 0, 0, 1, 2]);
   });
-  it('a branch other than main is named; each branch is its own CI', () => {
+  it('the card names the repository only; each branch is its own CI', () => {
     const f = githubFeed(gh({ repos: [repo({ branch: 'feat-x' })] }), T0);
-    expect(f.ciText.startsWith('almanac-…/feat-x · CI зелёный')).toBe(true);
+    expect(f.ciText).toBe('almanac-notch · зелёный');
     const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
     const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
     d.onState(gh({ repos: [repo({ state: 'run' })] }));
@@ -242,7 +242,7 @@ describe('github feed', () => {
     const f = githubFeed(gh({ repos: [] }), T0);
     expect(f.ci).toBe('none');
     expect(f.auth).toBe('ok');
-    expect(f.ciText).toBe('CI не настроен · 4 репо');
+    expect(f.ciText).toBe('CI не настроен');
   });
   it('driver: no event on the first read, an event on a change to ok or fail', () => {
     const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });

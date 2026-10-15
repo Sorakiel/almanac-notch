@@ -338,8 +338,8 @@ export interface GhState {
   commits: number[];
 }
 
-const GH_CI_MAX = 34;
-const GH_REPO_MAX = 16;
+/** characters of the CI line that stay readable next to the glyph (the prototype's longest is 20) */
+const GH_LINE = 23;
 const SETTINGS_HINT = 'Настройки → GitHub';
 
 function dayIndex(t: number): number {
@@ -398,7 +398,7 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
     return {
       auth: 'ok',
       ci: 'none',
-      ciText: clip('CI не настроен · ' + g.repo_count + ' репо', GH_CI_MAX),
+      ciText: 'CI не настроен',
       short: 'нет CI',
       prs: g.prs,
       prText: prText(g.prs),
@@ -406,16 +406,21 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
       hint: ['', ''],
       row,
     };
-  const repo = repoLabel(latest, GH_REPO_MAX),
-    parts = {
-      ok: ['CI зелёный', 'CI зелёный · ' + latest.done + ' из ' + latest.total],
-      run: ['CI идёт', 'CI идёт · ' + latest.done + ' из ' + latest.total],
-      fail: ['CI упал', latest.failed ? 'упал на ' + clip(latest.failed, 12) : 'CI упал'],
-    }[latest.state] as [string, string];
+  // the card line is narrow: the status is short, the repository gets what is left
+  const st =
+      latest.state === 'ok'
+        ? 'зелёный'
+        : latest.state === 'run'
+          ? 'идёт ' + latest.done + '/' + latest.total
+          : latest.failed
+            ? 'упал: ' + clip(latest.failed, 6)
+            : 'упал',
+    repo = clip(latest.name, Math.max(9, GH_LINE - 3 - st.length)),
+    parts: [string, string] = [{ ok: 'CI зелёный', run: 'CI идёт', fail: 'CI упал' }[latest.state], st];
   return {
     auth: 'ok',
     ci: latest.state,
-    ciText: clip(repo + ' · ' + parts[1], GH_CI_MAX),
+    ciText: repo + ' · ' + parts[1],
     short: parts[0],
     prs: g.prs,
     prText: prText(g.prs),
@@ -455,7 +460,7 @@ export class GithubDriver {
         const type: EventType = r.state === 'ok' ? 'success' : 'error';
         // a failure outranks a success from another repository in the same read
         if (!hit || type === 'error')
-          hit = { type, label: (type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + repoLabel(r, 12) };
+          hit = { type, label: (type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12) };
       }
     } else if (g.auth === 'off' || g.auth === 'bad') this.seen.clear();
     this.g = g;

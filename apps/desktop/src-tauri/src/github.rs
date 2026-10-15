@@ -120,6 +120,8 @@ const ROLLUPS: &str = "query($ids: [ID!]!) {
 
 /// Branches whose checks are read: the newest commits of mine across all repositories.
 const BRANCHES: usize = 25;
+/// At most this many branches of one repository are read.
+const PER_REPO: usize = 3;
 /// Of them, the ones with checks that the island keeps.
 const WITH_CI: usize = 10;
 
@@ -290,6 +292,10 @@ fn parse_branches(v: &Value, me: &str) -> Option<(State, Vec<Pick>)> {
                 continue;
             };
             let branch = b["name"].as_str().unwrap_or("?").to_owned();
+            // a deploy branch is rewritten by a bot after every push: not my work
+            if branch == "gh-pages" {
+                continue;
+            }
             // two branches at one commit are one CI: the default branch wins
             if let Some(p) = picks.iter_mut().find(|p| p.id == id) {
                 if branch == default {
@@ -308,6 +314,13 @@ fn parse_branches(v: &Value, me: &str) -> Option<(State, Vec<Pick>)> {
     }
     out.commits.sort_by(|a, b| a.total_cmp(b));
     picks.sort_by(|a, b| b.committed.total_cmp(&a.committed));
+    // one busy repository must not take every slot
+    let mut per_repo: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    picks.retain(|p| {
+        let n = per_repo.entry(p.repo.clone()).or_insert(0);
+        *n += 1;
+        *n <= PER_REPO
+    });
     picks.truncate(BRANCHES);
     Some((out, picks))
 }
@@ -378,6 +391,9 @@ fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
     out.sort_by(|a, b| b.at.total_cmp(&a.at));
     // branches without checks only took a slot in the query; they are not shown
     out.retain(|r| r.state != "none");
+    // one row per repository: its newest branch
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|r| seen.insert(r.name.clone()));
     out.truncate(WITH_CI);
     out
 }
@@ -494,6 +510,7 @@ mod tests {
                      {"name": "main", "target": {"id": "C1", "committedDate": "2026-10-10T10:00:00Z", "author": {"user": {"id": "U1"}}}},
                      {"name": "same-as-main", "target": {"id": "C1", "committedDate": "2026-10-10T10:00:00Z", "author": {"user": {"id": "U1"}}}},
                      {"name": "feat", "target": {"id": "C2", "committedDate": "2026-10-14T10:00:00Z", "author": {"user": {"id": "U1"}}}},
+                     {"name": "gh-pages", "target": {"id": "C5", "committedDate": "2026-10-16T10:00:00Z", "author": {"user": {"id": "U1"}}}},
                      {"name": "theirs", "target": {"id": "C3", "committedDate": "2026-10-15T10:00:00Z", "author": {"user": {"id": "U2"}}}}
                  ]}},
                 {"nameWithOwner": "sora/site", "pushedAt": "2026-10-12T10:00:00Z",
@@ -532,6 +549,7 @@ mod tests {
         // not the other author's branch; two branches at one commit count once, default name wins
         let names: Vec<_> = picks.iter().map(|p| (p.repo.as_str(), p.branch.as_str())).collect();
         assert_eq!(names, [("almanac-app", "feat"), ("site", "main"), ("almanac-app", "main")]);
+        assert!(picks.iter().all(|p| p.branch != "gh-pages"));
 
         let r = apply_rollups(&picks, &rollups());
         // newest check first: the failed build of the feature branch
@@ -542,7 +560,8 @@ mod tests {
         assert_eq!(iso(r[0].at), "2026-10-14T11:00:00Z");
         // a branch without checks is dropped
         assert!(r.iter().all(|x| x.name != "site"));
-        assert_eq!(iso(r.iter().find(|x| x.state == "ok").unwrap().at), "2026-10-10T10:05:00Z");
+        // one row per repository: the feature branch hides the older main
+        assert_eq!(r.len(), 1);
     }
 
     /// Network: a made-up token must come back as refused, not as "no connection".
