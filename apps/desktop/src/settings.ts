@@ -7,7 +7,7 @@ import '@fontsource/onest/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { GhState } from './feeds';
+import { repoLabel, type GhState } from './feeds';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const input = $<HTMLInputElement>('token'),
@@ -46,9 +46,9 @@ function renderRepos(g: GhState | null): void {
   for (const r of rows) {
     const li = document.createElement('li');
     for (const [cls, txt] of [
-      ['n', r.name],
+      ['n', repoLabel(r)],
       [r.state, STATE_TEXT[r.state]],
-      ['t', r.state === 'none' ? 'пуш ' + ago(r.pushed) : ago(r.at)],
+      ['t', r.state === 'none' ? 'ветка без CI' : ago(r.at)],
     ] as const) {
       const span = document.createElement('span');
       span.className = cls;

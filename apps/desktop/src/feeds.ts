@@ -317,6 +317,7 @@ export class MediaDriver {
 /** `island://github` (src-tauri/src/github.rs). */
 export interface GhRepo {
   name: string;
+  branch: string;
   state: 'run' | 'fail' | 'ok' | 'none';
   /** when the checks ran (else the commit), epoch ms */
   at: number;
@@ -338,7 +339,7 @@ export interface GhState {
 }
 
 const GH_CI_MAX = 34;
-const GH_REPO_MAX = 13;
+const GH_REPO_MAX = 16;
 const SETTINGS_HINT = 'Настройки → GitHub';
 
 function dayIndex(t: number): number {
@@ -347,6 +348,15 @@ function dayIndex(t: number): number {
 }
 
 /** Commit times -> 7 per-day counts, today last. */
+const isMain = (b: string): boolean => b === 'main' || b === 'master';
+
+/** "almanac-app" on the main branch, "almanac-a/feat-x" (cut) on any other. */
+export function repoLabel(r: { name: string; branch: string }, max = 16): string {
+  if (isMain(r.branch)) return clip(r.name, max);
+  const half = Math.floor((max - 1) / 2);
+  return clip(r.name, max - 1 - Math.min(r.branch.length, half)) + '/' + clip(r.branch, half);
+}
+
 export function commitDays(times: number[], now: number): number[] {
   const today = dayIndex(now),
     out = [0, 0, 0, 0, 0, 0, 0];
@@ -396,7 +406,7 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
       hint: ['', ''],
       row,
     };
-  const repo = clip(latest.name, GH_REPO_MAX),
+  const repo = repoLabel(latest, GH_REPO_MAX),
     parts = {
       ok: ['CI зелёный', 'CI зелёный · ' + latest.done + ' из ' + latest.total],
       run: ['CI идёт', 'CI идёт · ' + latest.done + ' из ' + latest.total],
@@ -438,13 +448,14 @@ export class GithubDriver {
     let hit: { type: EventType; label: string } | null = null;
     if (g.login) {
       for (const r of g.repos) {
-        const was = this.seen.get(r.name);
-        this.seen.set(r.name, r.state);
+        const key = r.name + '#' + r.branch,
+          was = this.seen.get(key);
+        this.seen.set(key, r.state);
         if (first || was === undefined || was === r.state || r.state === 'run' || r.state === 'none') continue;
         const type: EventType = r.state === 'ok' ? 'success' : 'error';
         // a failure outranks a success from another repository in the same read
         if (!hit || type === 'error')
-          hit = { type, label: (type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 10) };
+          hit = { type, label: (type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + repoLabel(r, 12) };
       }
     } else if (g.auth === 'off' || g.auth === 'bad') this.seen.clear();
     this.g = g;

@@ -25,6 +25,7 @@ const DAYS: i64 = 7;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Repo {
     pub name: String,
+    pub branch: String,
     /// "run" | "fail" | "ok" | "none" (no checks on the default branch head)
     pub state: &'static str,
     /// newest check start or finish, else the commit time, epoch ms (the newest repo wins the card)
@@ -82,6 +83,9 @@ enum Failure {
     Net,
 }
 
+/// Step 1: my branches (commit time, author) of the freshest repositories, my commits of 7 days
+/// on each default branch, the PRs waiting for me. No checks yet: that is step 2, only for the
+/// few branches that matter.
 const QUERY: &str = "query($since: GitTimestamp!, $author: ID) {
   viewer { login id
     repositories(first: 30, orderBy: {field: PUSHED_AT, direction: DESC}, isArchived: false,
@@ -90,20 +94,32 @@ const QUERY: &str = "query($since: GitTimestamp!, $author: ID) {
       nodes {
         nameWithOwner
         pushedAt
-        defaultBranchRef { target { ... on Commit {
-          committedDate
-          statusCheckRollup { state contexts(first: 50) { totalCount nodes {
-            __typename
-            ... on CheckRun { name status conclusion startedAt completedAt }
-            ... on StatusContext { context state createdAt }
-          } } }
+        defaultBranchRef { name target { ... on Commit {
           history(since: $since, first: 100, author: {id: $author}) { nodes { committedDate } }
         } } }
+        refs(refPrefix: \"refs/heads/\", first: 100) { nodes { name target { ... on Commit {
+          id committedDate author { user { id } }
+        } } } }
       }
     }
   }
   prs: search(query: \"is:pr is:open review-requested:@me archived:false\", type: ISSUE, first: 1) { issueCount }
 }";
+
+/// Step 2: the checks of the chosen commits.
+const ROLLUPS: &str = "query($ids: [ID!]!) {
+  nodes(ids: $ids) { ... on Commit {
+    id
+    statusCheckRollup { state contexts(first: 50) { totalCount nodes {
+      __typename
+      ... on CheckRun { name status conclusion startedAt completedAt }
+      ... on StatusContext { context state createdAt }
+    } } }
+  } }
+}";
+
+/// Branches whose checks are read: the newest commits of mine across all repositories.
+const BRANCHES: usize = 10;
 
 fn post(token: &str, body: &Value) -> Result<Value, Failure> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -145,7 +161,13 @@ fn fetch(token: &str, now_ms: f64) -> Result<State, Failure> {
         token,
         &json!({"query": QUERY, "variables": {"since": since, "author": id}}),
     )?;
-    parse(&v).ok_or(Failure::Net)
+    let (mut out, picked) = parse_branches(&v, &id).ok_or(Failure::Net)?;
+    if !picked.is_empty() {
+        let ids: Vec<&str> = picked.iter().map(|c| c.id.as_str()).collect();
+        let r = post(token, &json!({"query": ROLLUPS, "variables": {"ids": ids}}))?;
+        out.repos = apply_rollups(&picked, &r);
+    }
+    Ok(out)
 }
 
 /// Seconds-precision UTC "2026-10-14T12:00:00Z" from epoch ms.
@@ -208,8 +230,20 @@ fn is_done(c: &Value) -> bool {
     }
 }
 
-/// One GraphQL answer -> State (auth "ok"). None = not the shape we expect.
-fn parse(v: &Value) -> Option<State> {
+/// A branch head of mine whose checks are worth reading.
+#[derive(Debug, PartialEq)]
+struct Pick {
+    /// commit node id
+    id: String,
+    repo: String,
+    branch: String,
+    committed: f64,
+    pushed: f64,
+}
+
+/// Step 1 answer -> State without CI (auth "ok") and the newest branches of mine.
+/// None = not the shape we expect.
+fn parse_branches(v: &Value, me: &str) -> Option<(State, Vec<Pick>)> {
     let user = v["data"]["viewer"].as_object()?;
     let login = user.get("login")?.as_str()?.to_owned();
     let repos = user.get("repositories")?;
@@ -221,32 +255,79 @@ fn parse(v: &Value) -> Option<State> {
         prs: v["data"]["prs"]["issueCount"].as_u64().unwrap_or(0) as u32,
         commits: Vec::new(),
     };
+    let mut picks: Vec<Pick> = Vec::new();
     for r in repos["nodes"].as_array()? {
-        let head = &r["defaultBranchRef"]["target"];
-        // an empty repository has no branch to look at
-        if head.is_null() {
-            continue;
-        }
-        for c in head["history"]["nodes"].as_array().into_iter().flatten() {
+        let name = r["nameWithOwner"].as_str().unwrap_or("?");
+        let short = name.rsplit('/').next().unwrap_or(name).to_owned();
+        let pushed = r["pushedAt"].as_str().and_then(parse_time).unwrap_or(0.0);
+        let default = r["defaultBranchRef"]["name"].as_str().unwrap_or("");
+        for c in r["defaultBranchRef"]["target"]["history"]["nodes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
             if let Some(t) = c["committedDate"].as_str().and_then(parse_time) {
                 out.commits.push(t);
             }
         }
-        let roll = &head["statusCheckRollup"];
-        let name = r["nameWithOwner"].as_str().unwrap_or("?");
-        let short = name.rsplit('/').next().unwrap_or(name).to_owned();
-        let commit_at = head["committedDate"].as_str().and_then(parse_time);
-        let pushed = r["pushedAt"].as_str().and_then(parse_time).unwrap_or(0.0);
+        for b in r["refs"]["nodes"].as_array().into_iter().flatten() {
+            let t = &b["target"];
+            if t["author"]["user"]["id"].as_str() != Some(me) {
+                continue;
+            }
+            let (Some(id), Some(at)) = (
+                t["id"].as_str(),
+                t["committedDate"].as_str().and_then(parse_time),
+            ) else {
+                continue;
+            };
+            let branch = b["name"].as_str().unwrap_or("?").to_owned();
+            // two branches at one commit are one CI: the default branch wins
+            if let Some(p) = picks.iter_mut().find(|p| p.id == id) {
+                if branch == default {
+                    p.branch = branch;
+                }
+                continue;
+            }
+            picks.push(Pick {
+                id: id.to_owned(),
+                repo: short.clone(),
+                branch,
+                committed: at,
+                pushed,
+            });
+        }
+    }
+    out.commits.sort_by(|a, b| a.total_cmp(b));
+    picks.sort_by(|a, b| b.committed.total_cmp(&a.committed));
+    picks.truncate(BRANCHES);
+    Some((out, picks))
+}
+
+/// Step 2 answer -> one Repo per picked branch, newest check first.
+fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
+    let nodes: Vec<&Value> = v["data"]["nodes"]
+        .as_array()
+        .map(|a| a.iter().collect())
+        .unwrap_or_default();
+    let mut out: Vec<Repo> = Vec::new();
+    for p in picks {
+        let roll = nodes
+            .iter()
+            .find(|n| n["id"].as_str() == Some(p.id.as_str()))
+            .map(|n| &n["statusCheckRollup"])
+            .unwrap_or(&Value::Null);
         let state = match roll["state"].as_str() {
             Some("SUCCESS") => "ok",
             Some("FAILURE" | "ERROR") => "fail",
             Some("PENDING" | "EXPECTED") => "run",
             _ => {
-                out.repos.push(Repo {
-                    name: short,
+                out.push(Repo {
+                    name: p.repo.clone(),
+                    branch: p.branch.clone(),
                     state: "none",
-                    at: commit_at.unwrap_or(0.0),
-                    pushed,
+                    at: p.committed,
+                    pushed: p.pushed,
                     done: 0,
                     total: 0,
                     failed: None,
@@ -254,40 +335,40 @@ fn parse(v: &Value) -> Option<State> {
                 continue;
             }
         };
-        let nodes: Vec<&Value> = roll["contexts"]["nodes"]
+        let ctx: Vec<&Value> = roll["contexts"]["nodes"]
             .as_array()
             .map(|a| a.iter().collect())
             .unwrap_or_default();
         let total = roll["contexts"]["totalCount"]
             .as_u64()
-            .unwrap_or(nodes.len() as u64) as u32;
-        let done = (nodes.iter().filter(|c| is_done(c)).count() as u32).min(total);
-        let failed = nodes.iter().find(|c| is_failed(c)).and_then(|c| {
+            .unwrap_or(ctx.len() as u64) as u32;
+        let done = (ctx.iter().filter(|c| is_done(c)).count() as u32).min(total);
+        let failed = ctx.iter().find(|c| is_failed(c)).and_then(|c| {
             c["name"]
                 .as_str()
                 .or_else(|| c["context"].as_str())
                 .map(str::to_owned)
         });
-        // when the checks ran says more than when the commit was made (re-runs, old commits)
-        let ran = nodes
+        // when the checks ran says more than when the commit was made (re-runs)
+        let ran = ctx
             .iter()
             .flat_map(|c| ["completedAt", "startedAt", "createdAt"].map(|k| c[k].as_str()))
             .flatten()
             .filter_map(parse_time)
             .fold(0.0_f64, f64::max);
-        out.repos.push(Repo {
-            // the owner is noise in a notch
-            name: short,
+        out.push(Repo {
+            name: p.repo.clone(),
+            branch: p.branch.clone(),
             state,
-            at: if ran > 0.0 { ran } else { commit_at.unwrap_or(0.0) },
-            pushed,
+            at: if ran > 0.0 { ran } else { p.committed },
+            pushed: p.pushed,
             done,
             total,
             failed,
         });
     }
-    out.commits.sort_by(|a, b| a.total_cmp(b));
-    Some(out)
+    out.sort_by(|a, b| b.at.total_cmp(&a.at));
+    out
 }
 
 // ---------- worker ----------
@@ -392,46 +473,64 @@ mod tests {
         assert_eq!(parse_time("2000-03-01T00:00:00Z"), Some(951_868_800_000.0));
     }
 
-    fn fixture() -> Value {
+    fn branches() -> Value {
         json!({"data": {
             "viewer": {"login": "sora", "id": "U1", "repositories": {"totalCount": 3, "nodes": [
-                {"nameWithOwner": "sora/almanac-notch", "defaultBranchRef": {"target": {
-                    "committedDate": "2026-10-14T10:00:00Z",
-                    "statusCheckRollup": {"state": "FAILURE", "contexts": {"totalCount": 3, "nodes": [
-                        {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
-                        {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "FAILURE", "completedAt": "2026-10-14T11:00:00Z"},
-                        {"__typename": "StatusContext", "context": "ci/x", "state": "PENDING"}
-                    ]}},
-                    "history": {"nodes": [{"committedDate": "2026-10-13T09:00:00Z"}, {"committedDate": "2026-10-14T10:00:00Z"}]}
-                }}},
-                {"nameWithOwner": "sora/site", "defaultBranchRef": {"target": {
-                    "committedDate": "2026-10-12T10:00:00Z",
-                    "statusCheckRollup": null,
-                    "history": {"nodes": []}
-                }}},
-                {"nameWithOwner": "org/empty", "defaultBranchRef": null}
+                {"nameWithOwner": "sora/almanac-app", "pushedAt": "2026-10-14T10:00:00Z",
+                 "defaultBranchRef": {"name": "main", "target": {"history": {"nodes": [
+                     {"committedDate": "2026-10-13T09:00:00Z"}, {"committedDate": "2026-10-14T10:00:00Z"}]}}},
+                 "refs": {"nodes": [
+                     {"name": "main", "target": {"id": "C1", "committedDate": "2026-10-10T10:00:00Z", "author": {"user": {"id": "U1"}}}},
+                     {"name": "same-as-main", "target": {"id": "C1", "committedDate": "2026-10-10T10:00:00Z", "author": {"user": {"id": "U1"}}}},
+                     {"name": "feat", "target": {"id": "C2", "committedDate": "2026-10-14T10:00:00Z", "author": {"user": {"id": "U1"}}}},
+                     {"name": "theirs", "target": {"id": "C3", "committedDate": "2026-10-15T10:00:00Z", "author": {"user": {"id": "U2"}}}}
+                 ]}},
+                {"nameWithOwner": "sora/site", "pushedAt": "2026-10-12T10:00:00Z",
+                 "defaultBranchRef": {"name": "main", "target": {"history": {"nodes": []}}},
+                 "refs": {"nodes": [
+                     {"name": "main", "target": {"id": "C4", "committedDate": "2026-10-12T10:00:00Z", "author": {"user": {"id": "U1"}}}}
+                 ]}},
+                {"nameWithOwner": "org/empty", "pushedAt": null, "defaultBranchRef": null, "refs": {"nodes": []}}
             ]}},
             "prs": {"issueCount": 2}
         }})
     }
 
+    fn rollups() -> Value {
+        json!({"data": {"nodes": [
+            {"id": "C1", "statusCheckRollup": {"state": "SUCCESS", "contexts": {"totalCount": 1, "nodes": [
+                {"__typename": "CheckRun", "name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS",
+                 "startedAt": "2026-10-10T10:01:00Z", "completedAt": "2026-10-10T10:05:00Z"}]}}},
+            {"id": "C2", "statusCheckRollup": {"state": "FAILURE", "contexts": {"totalCount": 3, "nodes": [
+                {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "FAILURE",
+                 "completedAt": "2026-10-14T11:00:00Z"},
+                {"__typename": "StatusContext", "context": "ci/x", "state": "PENDING"}]}}},
+            {"id": "C4", "statusCheckRollup": null}
+        ]}})
+    }
+
     #[test]
-    fn parses_ci_prs_and_commits() {
-        let s = parse(&fixture()).unwrap();
-        assert_eq!(s.auth, "ok");
-        assert_eq!(s.login.as_deref(), Some("sora"));
+    fn picks_my_newest_branches_and_reads_their_checks() {
+        let (s, picks) = parse_branches(&branches(), "U1").unwrap();
+        assert_eq!((s.auth, s.login.as_deref()), ("ok", Some("sora")));
         assert_eq!((s.repo_count, s.prs), (3, 2));
+        // 7-day commits of the default branches, sorted
         assert_eq!(s.commits.len(), 2);
         assert!(s.commits[0] < s.commits[1]);
-        // repos without CI are listed too, as "none"
-        assert_eq!(s.repos.len(), 2);
-        assert_eq!(s.repos[1].state, "none");
-        let r = &s.repos[0];
-        assert_eq!((r.name.as_str(), r.state), ("almanac-notch", "fail"));
-        assert_eq!((r.done, r.total), (2, 3));
-        assert_eq!(r.failed.as_deref(), Some("build"));
+        // not the other author's branch; two branches at one commit count once, default name wins
+        let names: Vec<_> = picks.iter().map(|p| (p.repo.as_str(), p.branch.as_str())).collect();
+        assert_eq!(names, [("almanac-app", "feat"), ("site", "main"), ("almanac-app", "main")]);
+
+        let r = apply_rollups(&picks, &rollups());
+        // newest check first: the failed build of the feature branch
+        assert_eq!((r[0].name.as_str(), r[0].branch.as_str(), r[0].state), ("almanac-app", "feat", "fail"));
+        assert_eq!((r[0].done, r[0].total), (2, 3));
+        assert_eq!(r[0].failed.as_deref(), Some("build"));
         // the time of the checks, not of the commit
-        assert_eq!(iso(r.at), "2026-10-14T11:00:00Z");
+        assert_eq!(iso(r[0].at), "2026-10-14T11:00:00Z");
+        assert_eq!(r.iter().find(|x| x.branch == "main" && x.name == "site").unwrap().state, "none");
+        assert_eq!(iso(r.iter().find(|x| x.state == "ok").unwrap().at), "2026-10-10T10:05:00Z");
     }
 
     /// Network: a made-up token must come back as refused, not as "no connection".
@@ -443,6 +542,6 @@ mod tests {
 
     #[test]
     fn wrong_shape_is_none() {
-        assert!(parse(&json!({"errors": [{"message": "x"}]})).is_none());
+        assert!(parse_branches(&json!({"errors": [{"message": "x"}]}), "U1").is_none());
     }
 }

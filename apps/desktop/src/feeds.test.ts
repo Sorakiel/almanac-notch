@@ -182,6 +182,7 @@ describe('media driver', () => {
 describe('github feed', () => {
   const repo = (o: Partial<GhRepo> = {}): GhRepo => ({
     name: 'almanac-notch',
+    branch: 'main',
     state: 'ok',
     at: T0 - 60 * min,
     pushed: T0 - 60 * min,
@@ -226,6 +227,17 @@ describe('github feed', () => {
     const day = 24 * 60 * min;
     expect(commitDays([T0, T0 - 60_000, T0 - day, T0 - 6 * day, T0 - 7 * day], T0)).toEqual([1, 0, 0, 0, 0, 1, 2]);
   });
+  it('a branch other than main is named; each branch is its own CI', () => {
+    const f = githubFeed(gh({ repos: [repo({ branch: 'feat-x' })] }), T0);
+    expect(f.ciText.startsWith('almanac-…/feat-x · CI зелёный')).toBe(true);
+    const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+    const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(gh({ repos: [repo({ state: 'run' })] }));
+    d.onState(gh({ repos: [repo({ state: 'run' }), repo({ branch: 'feat-x', state: 'ok' })] }));
+    expect(m.state.event).toBeNull();
+    d.onState(gh({ repos: [repo({ state: 'run' }), repo({ branch: 'feat-x', state: 'fail' })] }));
+    expect(m.state.event?.type).toBe('error');
+  });
   it('no repository with checks: says so, still shows PRs', () => {
     const f = githubFeed(gh({ repos: [] }), T0);
     expect(f.ci).toBe('none');
@@ -239,7 +251,7 @@ describe('github feed', () => {
     expect(m.state.event).toBeNull();
     d.onState(gh({ repos: [repo({ state: 'ok' })] }));
     expect(m.state.event?.type).toBe('success');
-    expect(m.state.event?.label).toBe('CI прошёл · almanac-n…');
+    expect(m.state.event?.label).toBe('CI прошёл · almanac-not…');
     expect(m.state.event?.src).toBeUndefined();
     d.onState(gh({ repos: [repo({ state: 'fail' })] }));
     expect(m.state.event?.type).toBe('error');
