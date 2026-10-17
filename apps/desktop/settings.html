@@ -7,160 +7,210 @@
     <link rel="stylesheet" href="/src/settings.css" />
   </head>
   <body>
-    <aside>
-      <h1>Настройки</h1>
-      <nav>
-        <button class="item on" data-section="github">GitHub</button>
-        <button class="item" data-section="calendar">Календарь</button>
-        <button class="item" data-section="claude">Claude Code</button>
-        <button class="item" data-section="island">Остров</button>
-      </nav>
-    </aside>
-    <main id="github">
-      <h2>GitHub</h2>
-      <p class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">…</span></p>
+    <header class="tabs" role="tablist">
+      <button class="tab on" data-tab="general" role="tab">Общие</button>
+      <button class="tab" data-tab="modules" role="tab">Модули</button>
+    </header>
 
-      <section id="connect">
-        <label for="token">Токен доступа</label>
-        <div class="row">
-          <input
-            id="token"
-            type="password"
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            placeholder="github_pat_…"
-          />
-          <button id="go" class="primary">Подключить</button>
+    <div class="pane" id="tab-general">
+      <main>
+        <h2>Остров</h2>
+        <h3>Состояние</h3>
+        <div class="seg" role="radiogroup" aria-label="Состояние острова">
+          <label><input type="radio" name="nstate" value="auto" />Авто</label>
+          <label><input type="radio" name="nstate" value="closed" />Закрыто</label>
+          <label><input type="radio" name="nstate" value="half" />Полуоткрыто</label>
+          <label><input type="radio" name="nstate" value="open" />Открыто</label>
         </div>
-        <p class="note" id="error" role="alert"></p>
-      </section>
-
-      <section id="connected" hidden>
-        <button id="off">Отключить</button>
-      </section>
-
-      <section class="help">
-        <h3>Как получить токен</h3>
-        <ol>
-          <li>Откройте github.com → Settings → Developer settings → Fine-grained tokens → Generate new token.</li>
-          <li>Repository access: все репозитории или только нужные.</li>
-          <li>Права только на чтение: Contents, Pull requests, Commit statuses, Actions (Metadata добавится сама).</li>
-        </ol>
-        <h3>Что читается и куда уходит</h3>
-        <p>
-          Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и
-          время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке
-          ключей системы и не попадает ни в файлы, ни в остров.
-        </p>
-      </section>
-    </main>
-    <main id="calendar" hidden>
-      <h2>Календарь</h2>
-      <p class="status"><span class="dot" id="cal-dot"></span><span id="cal-status">…</span></p>
-
-      <section id="cal-pick" hidden>
-        <div class="choice" role="radiogroup" aria-label="Источник календаря">
-          <label class="opt">
-            <input type="radio" name="cal" value="outlook" />
-            <span><b>Outlook</b><small id="cal-outlook-note">классический Outlook на этом компьютере</small></span>
-          </label>
-          <label class="opt">
-            <input type="radio" name="cal" value="ical" />
-            <span><b>Ссылка iCal</b><small>Google, Outlook.com, iCloud, Яндекс и другие</small></span>
-          </label>
-          <label class="opt">
-            <input type="radio" name="cal" value="off" />
-            <span><b>Ничего</b><small>карточка календаря пустая</small></span>
-          </label>
+        <h3>Проверить события</h3>
+        <div class="events">
+          <button data-ev="attention">Внимание</button>
+          <button data-ev="working">Работает</button>
+          <button data-ev="thinking">Думает</button>
+          <button data-ev="searching">Ищет</button>
+          <button data-ev="question">Вопрос</button>
+          <button data-ev="ratelimit">Лимит</button>
+          <button data-ev="success">Успех</button>
+          <button data-ev="error">Ошибка</button>
+          <button data-ev="dance">Праздник</button>
+          <button data-ev="greeting">Привет</button>
+          <button data-ev="sleep">Сон</button>
         </div>
+        <h3>Приложение</h3>
+        <button id="quit">Выйти из Almanac Notch</button>
+      </main>
+    </div>
 
-        <section id="cal-ical" hidden>
-          <label for="cal-url">Секретная ссылка на календарь</label>
+    <div class="pane" id="tab-modules" hidden>
+      <aside class="list">
+        <button class="mod on" data-module="claude">
+          <span class="ico" style="--c: #d97757"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" /></svg
+          ></span>
+          <span class="name">Claude Code<small id="li-claude">…</small></span>
+          <span class="dot" id="li-claude-dot"></span>
+        </button>
+        <button class="mod" data-module="calendar">
+          <span class="ico" style="--c: #f5a524"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="15" rx="3" />
+              <path d="M4 10h16M9 3v4M15 3v4" /></svg
+          ></span>
+          <span class="name">Календарь<small id="li-calendar">…</small></span>
+          <span class="dot" id="li-calendar-dot"></span>
+        </button>
+        <button class="mod" data-module="music">
+          <span class="ico" style="--c: #ff5e8a"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 18V6l10-2v12" />
+              <circle cx="6.5" cy="18" r="2.5" />
+              <circle cx="16.5" cy="16" r="2.5" /></svg
+          ></span>
+          <span class="name">Музыка<small id="li-music">…</small></span>
+          <span class="dot" id="li-music-dot"></span>
+        </button>
+        <button class="mod" data-module="github">
+          <span class="ico" style="--c: #8e8e93"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="7" cy="6" r="2" />
+              <circle cx="7" cy="18" r="2" />
+              <circle cx="17" cy="8" r="2" />
+              <path d="M7 8v8M17 10c0 4-10 2-10 6" /></svg
+          ></span>
+          <span class="name">GitHub<small id="li-github">…</small></span>
+          <span class="dot" id="li-github-dot"></span>
+        </button>
+      </aside>
+      <div class="detail">
+        <main id="claude">
+          <h2>Claude Code</h2>
+          <p class="status"><span class="dot" id="hooks-dot"></span><span id="hooks-status">…</span></p>
           <div class="row">
-            <input
-              id="cal-url"
-              type="password"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-              placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-            />
-            <button id="cal-go" class="primary">Подключить</button>
+            <button id="hooks-install" class="primary">Установить хуки…</button>
+            <button id="hooks-uninstall">Удалить хуки…</button>
           </div>
-          <div class="help">
-            <h3>Где взять ссылку</h3>
+          <section class="help">
+            <h3>Что это</h3>
+            <p>
+              Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа
+              на разрешения и вопросы. Перед записью покажу, что изменится, и сделаю копию файла. Ваши другие хуки не
+              трогаю.
+            </p>
+          </section>
+        </main>
+        <main id="calendar" hidden>
+          <h2>Календарь</h2>
+          <p class="status"><span class="dot" id="cal-dot"></span><span id="cal-status">…</span></p>
+
+          <section id="cal-pick" hidden>
+            <div class="seg" role="radiogroup" aria-label="Источник календаря">
+              <label><input type="radio" name="cal" value="outlook" />Outlook</label>
+              <label><input type="radio" name="cal" value="ical" />Ссылка iCal</label>
+              <label><input type="radio" name="cal" value="off" />Ничего</label>
+            </div>
+            <p class="plain under" id="cal-src-note"></p>
+
+            <section id="cal-ical" hidden>
+              <label for="cal-url">Секретная ссылка на календарь</label>
+              <div class="row">
+                <input
+                  id="cal-url"
+                  type="password"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+                />
+                <button id="cal-go" class="primary">Подключить</button>
+              </div>
+              <div class="help">
+                <h3>Где взять ссылку</h3>
+                <ol>
+                  <li>
+                    Google: calendar.google.com → ⚙ Настройки → слева ваш календарь → «Секретный адрес в формате iCal» →
+                    копировать.
+                  </li>
+                  <li>Outlook.com: Параметры → Календарь → Общие календари → Опубликовать календарь → ссылка ICS.</li>
+                  <li>iCloud: Календарь → значок доступа у календаря → «Публичный календарь» → копировать ссылку.</li>
+                </ol>
+              </div>
+            </section>
+            <p class="note" id="cal-error" role="alert"></p>
+          </section>
+
+          <section id="cal-mac" hidden>
+            <p class="plain">
+              На Mac остров читает системный Календарь: в нём уже есть ваши аккаунты Google, iCloud и Exchange
+              (Системные настройки → Интернет-аккаунты).
+            </p>
+            <button id="cal-access">Доступ к календарю…</button>
+          </section>
+
+          <section class="help">
+            <h3>Что читается и куда уходит</h3>
+            <p>
+              Только название и время встреч на 48 часов вперёд. Outlook читается на этом компьютере, без сети. Ссылка
+              iCal открывается раз в 5 минут, других запросов нет; сама ссылка - секрет и хранится в системном хранилище
+              паролей.
+            </p>
+          </section>
+        </main>
+        <main id="music" hidden>
+          <h2>Музыка</h2>
+          <p class="status"><span class="dot" id="music-dot"></span><span id="music-status">…</span></p>
+          <p class="plain" id="music-src"></p>
+          <section class="help">
+            <h3>Что читается и куда уходит</h3>
+            <p>
+              Что играет в системе: название, исполнитель, альбом, обложка, позиция, и громкость. Обложку отдаёт сам
+              плеер, сети нет. Кнопки острова управляют тем плеером, который сейчас играет.
+            </p>
+          </section>
+        </main>
+        <main id="github" hidden>
+          <h2>GitHub</h2>
+          <p class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">…</span></p>
+
+          <section id="connect">
+            <label for="token">Токен доступа</label>
+            <div class="row">
+              <input
+                id="token"
+                type="password"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="github_pat_…"
+              />
+              <button id="go" class="primary">Подключить</button>
+            </div>
+            <p class="note" id="error" role="alert"></p>
+          </section>
+
+          <section id="connected" hidden>
+            <button id="off">Отключить</button>
+          </section>
+
+          <section class="help">
+            <h3>Как получить токен</h3>
             <ol>
+              <li>Откройте github.com → Settings → Developer settings → Fine-grained tokens → Generate new token.</li>
+              <li>Repository access: все репозитории или только нужные.</li>
               <li>
-                Google: calendar.google.com → ⚙ Настройки → слева ваш календарь → «Секретный адрес в формате iCal» →
-                копировать.
+                Права только на чтение: Contents, Pull requests, Commit statuses, Actions (Metadata добавится сама).
               </li>
-              <li>Outlook.com: Параметры → Календарь → Общие календари → Опубликовать календарь → ссылка ICS.</li>
-              <li>iCloud: Календарь → значок доступа у календаря → «Публичный календарь» → копировать ссылку.</li>
             </ol>
-          </div>
-        </section>
-        <p class="note" id="cal-error" role="alert"></p>
-      </section>
-
-      <section id="cal-mac" hidden>
-        <p class="plain">
-          На Mac остров читает системный Календарь: в нём уже есть ваши аккаунты Google, iCloud и Exchange (Системные
-          настройки → Интернет-аккаунты).
-        </p>
-        <button id="cal-access">Доступ к календарю…</button>
-      </section>
-
-      <section class="help">
-        <h3>Что читается и куда уходит</h3>
-        <p>
-          Только название и время встреч на 48 часов вперёд. Outlook читается на этом компьютере, без сети. Ссылка iCal
-          открывается раз в 5 минут, других запросов нет; сама ссылка - секрет и хранится в системном хранилище паролей.
-        </p>
-      </section>
-    </main>
-    <main id="claude" hidden>
-      <h2>Claude Code</h2>
-      <p class="status"><span class="dot" id="hooks-dot"></span><span id="hooks-status">…</span></p>
-      <div class="row">
-        <button id="hooks-install" class="primary">Установить хуки…</button>
-        <button id="hooks-uninstall">Удалить хуки…</button>
+            <h3>Что читается и куда уходит</h3>
+            <p>
+              Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и
+              время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в
+              связке ключей системы и не попадает ни в файлы, ни в остров.
+            </p>
+          </section>
+        </main>
       </div>
-      <section class="help">
-        <h3>Что это</h3>
-        <p>
-          Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа на
-          разрешения и вопросы. Перед записью покажу, что изменится, и сделаю копию файла. Ваши другие хуки не трогаю.
-        </p>
-      </section>
-    </main>
-
-    <main id="island" hidden>
-      <h2>Остров</h2>
-      <h3>Состояние</h3>
-      <div class="seg" role="radiogroup" aria-label="Состояние острова">
-        <label><input type="radio" name="nstate" value="auto" />Авто</label>
-        <label><input type="radio" name="nstate" value="closed" />Закрыто</label>
-        <label><input type="radio" name="nstate" value="half" />Полуоткрыто</label>
-        <label><input type="radio" name="nstate" value="open" />Открыто</label>
-      </div>
-      <h3>Проверить события</h3>
-      <div class="events">
-        <button data-ev="attention">Внимание</button>
-        <button data-ev="working">Работает</button>
-        <button data-ev="thinking">Думает</button>
-        <button data-ev="searching">Ищет</button>
-        <button data-ev="question">Вопрос</button>
-        <button data-ev="ratelimit">Лимит</button>
-        <button data-ev="success">Успех</button>
-        <button data-ev="error">Ошибка</button>
-        <button data-ev="dance">Праздник</button>
-        <button data-ev="greeting">Привет</button>
-        <button data-ev="sleep">Сон</button>
-      </div>
-      <h3>Приложение</h3>
-      <button id="quit">Выйти из Almanac Notch</button>
-    </main>
+    </div>
 
     <script type="module" src="/src/settings.ts"></script>
   </body>

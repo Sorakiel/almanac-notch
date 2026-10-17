@@ -66,13 +66,64 @@ input.addEventListener('keydown', (e) => {
 });
 off.addEventListener('click', () => void invoke('github_disconnect'));
 
-// ---------- sections ----------
-const sections = [...document.querySelectorAll<HTMLElement>('main')];
-for (const b of document.querySelectorAll<HTMLButtonElement>('nav .item'))
-  b.addEventListener('click', () => {
-    for (const x of document.querySelectorAll('nav .item')) x.classList.toggle('on', x === b);
-    for (const m of sections) m.hidden = m.id !== b.dataset.section;
-  });
+// ---------- tabs and the module list (Raycast-like) ----------
+const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tab')],
+  mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
+function showTab(name: string): void {
+  for (const t of tabs) t.classList.toggle('on', t.dataset.tab === name);
+  for (const p of document.querySelectorAll<HTMLElement>('.pane')) p.hidden = p.id !== 'tab-' + name;
+}
+function showModule(name: string): void {
+  showTab('modules');
+  for (const m of mods) m.classList.toggle('on', m.dataset.module === name);
+  for (const m of document.querySelectorAll<HTMLElement>('.detail > main')) m.hidden = m.id !== name;
+}
+for (const t of tabs) t.addEventListener('click', () => showTab(t.dataset.tab ?? 'general'));
+for (const m of mods) m.addEventListener('click', () => showModule(m.dataset.module ?? 'claude'));
+/** "island" and "general" open the general tab, module names open their page */
+function showSection(sec: string): void {
+  if (mods.some((m) => m.dataset.module === sec)) showModule(sec);
+  else showTab('general');
+}
+
+// each module's status line and dot, repeated in the list
+const STATUS: Record<string, [string, string]> = {
+  claude: ['hooks-status', 'hooks-dot'],
+  calendar: ['cal-status', 'cal-dot'],
+  music: ['music-status', 'music-dot'],
+  github: ['status-text', 'dot'],
+};
+for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
+  const copy = (): void => {
+    $('li-' + k).textContent = $(textId).textContent;
+    $('li-' + k + '-dot').className = $(dotId).className;
+  };
+  const o = new MutationObserver(copy);
+  o.observe($(textId), { childList: true, characterData: true, subtree: true });
+  o.observe($(dotId), { attributes: true });
+  copy();
+}
+
+// ---------- music ----------
+interface MediaNow {
+  none?: boolean;
+  off?: boolean;
+  title?: string;
+  artist?: string;
+  app?: string;
+  playing?: boolean;
+}
+function renderMusic(m: MediaNow | null): void {
+  const on = !!m && !m.off && !m.none && !!m.title;
+  $('music-dot').className = 'dot' + (on && m.playing ? ' ok' : m && m.off ? ' bad' : '');
+  $('music-status').textContent = !m
+    ? 'Ничего не играет'
+    : m.off
+      ? 'Музыка недоступна на этой системе'
+      : on
+        ? (m.playing ? '' : 'Пауза · ') + [m.title, m.artist, m.app].filter(Boolean).join(' · ')
+        : 'Ничего не играет';
+}
 
 // ---------- calendar ----------
 interface CalConfig {
@@ -119,10 +170,15 @@ function renderPick(): void {
   calPick.hidden = mac;
   const outlook = radios.find((r) => r.value === 'outlook');
   if (outlook) outlook.disabled = !calCfg.outlook;
-  $('cal-outlook-note').textContent = calCfg.outlook
-    ? 'классический Outlook на этом компьютере'
-    : 'классический Outlook не установлен (новый Outlook - через ссылку iCal)';
   const picked = radios.find((r) => r.checked)?.value ?? calCfg.source;
+  $('cal-src-note').textContent =
+    picked === 'outlook'
+      ? 'Календарь по умолчанию из классического Outlook на этом компьютере, без сети.'
+      : picked === 'ical'
+        ? 'Google, Outlook.com, iCloud, Яндекс и другие: секретная ссылка на календарь в формате iCal.'
+        : calCfg.outlook
+          ? 'Карточка календаря пустая.'
+          : 'Карточка календаря пустая. Классический Outlook не найден: новый Outlook подключается ссылкой iCal.';
   for (const r of radios) r.checked = r.value === picked;
   calIcal.hidden = picked !== 'ical';
   calGo.textContent = calCfg.ical && picked === 'ical' ? 'Заменить' : 'Подключить';
@@ -191,11 +247,17 @@ window.addEventListener('focus', () => void refreshIsland());
 render(null);
 renderCal(null);
 renderIsland({ state: 'auto', hooks: false });
+renderMusic(null);
+$('music-src').textContent = navigator.userAgent.includes('Windows')
+  ? 'Windows: системный медиа-сеанс - любой плеер, который показывает себя в регуляторе громкости (Spotify, браузеры, Я.Музыка).'
+  : 'Mac: любой плеер из «Исполняется» в Пункте управления, включая браузеры.';
 if (inTauri) {
   await listen<Calendar>('island://calendar', (e) => renderCal(e.payload));
   await listen<GhState>('island://github', (e) => render(e.payload));
-  const f = await invoke<{ github: GhState | null; calendar: Calendar | null }>('feeds_state');
+  const f = await invoke<{ github: GhState | null; calendar: Calendar | null; media: MediaNow | null }>('feeds_state');
   render(f.github);
+  renderMusic(f.media);
+  await listen<MediaNow>('island://media', (e) => renderMusic(e.payload));
   renderCal(f.calendar);
   calCfg = await invoke<CalConfig>('calendar_config');
   renderPick();
@@ -204,8 +266,7 @@ if (inTauri) {
     for (const r of states) r.checked = r.value === e.payload;
   });
   // the island's rows open the window on their section
-  const show = (sec: string): void => document.querySelector<HTMLButtonElement>(`[data-section="${sec}"]`)?.click();
-  if (location.hash) show(location.hash.slice(1));
-  await listen<string>('settings://section', (e) => show(e.payload));
+  if (location.hash) showSection(location.hash.slice(1));
+  await listen<string>('settings://section', (e) => showSection(e.payload));
   input.focus();
 }

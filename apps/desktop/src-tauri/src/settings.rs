@@ -30,7 +30,7 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
             .into(),
         ))
             .title("Almanac Notch")
-            .inner_size(680.0, 480.0)
+            .inner_size(720.0, 520.0)
             .resizable(false)
             .maximizable(false)
             .center()

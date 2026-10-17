@@ -382,7 +382,7 @@ function prText(n: number): string {
 
 /** proto: the github card's three lines, from the account's real repositories. */
 export function githubFeed(g: GhState | null, now: number): GithubFeed {
-  const empty = (hint: [string, string], short: string, row: string): GithubFeed => ({
+  const empty = (hint: [string, string], short: string): GithubFeed => ({
     auth: g && g.auth === 'bad' ? 'bad' : 'off',
     ci: 'none',
     ciText: '',
@@ -391,17 +391,13 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
     prText: '',
     commits: [0, 0, 0, 0, 0, 0, 0],
     hint,
-    row,
   });
-  if (!g || g.auth === 'off')
-    return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена', 'GitHub · не подключён');
-  if (g.auth === 'bad')
-    return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят', 'GitHub · токен не принят');
-  if (!g.login) return empty(['Нет связи с GitHub', 'попробую снова через минуту'], 'нет связи', 'GitHub · нет связи');
+  if (!g || g.auth === 'off') return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена');
+  if (g.auth === 'bad') return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят');
+  if (!g.login) return empty(['Нет связи с GitHub', 'попробую снова через минуту'], 'нет связи');
   const withCi = g.repos.filter((r): r is GhRepo & { state: 'run' | 'fail' | 'ok' } => r.state !== 'none'),
     latest = withCi.reduce<(typeof withCi)[number] | null>((a, r) => (!a || r.at > a.at ? r : a), null);
-  const commits = commitDays(g.commits, now),
-    row = 'GitHub · @' + g.login;
+  const commits = commitDays(g.commits, now);
   if (!latest)
     return {
       auth: 'ok',
@@ -412,7 +408,6 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
       prText: prText(g.prs),
       commits,
       hint: ['', ''],
-      row,
     };
   // the card line is narrow: the status is short, the repository gets what is left
   const st =
@@ -434,7 +429,6 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
     prText: prText(g.prs),
     commits,
     hint: ['', ''],
-    row,
   };
 }
 

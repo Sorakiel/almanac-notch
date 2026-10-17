@@ -215,7 +215,6 @@ describe('github feed', () => {
     const off = githubFeed({ ...gh(), auth: 'off', login: null }, T0);
     expect(off.auth).toBe('off');
     expect(off.hint[1]).toBe('Настройки → GitHub');
-    expect(off.row).toBe('GitHub · не подключён');
     expect(githubFeed({ ...gh(), auth: 'bad', login: null }, T0).auth).toBe('bad');
     expect(githubFeed(null, T0).auth).toBe('off');
   });

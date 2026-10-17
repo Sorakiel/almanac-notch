@@ -64,22 +64,22 @@ export function drawAdd(s: IslandState, c: Ctx, X0: number, X1: number, y0: numb
 
 /** proto: drawSettings */
 export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
-  // live GitHub: a row that opens the settings window (not in the prototype, docs/CHANGES.md)
+  // in the app: a row that opens the settings window with every module (not in the prototype, docs/CHANGES.md)
   const rows: [string, boolean | null][] = [...s.prefs, ['Язык · Русский', null]];
-  if (s.github) rows.push([s.github.row, null]);
-  const ghRow = s.github ? rows.length - 1 : -1,
+  if (s.settingsLink) rows.push(['Все настройки', null]);
+  const linkRow = s.settingsLink ? rows.length - 1 : -1,
     gap = 6,
     h = (y1 - y0 - gap * (rows.length - 1)) / rows.length;
   rows.forEach((r, i) => {
     const y = y0 + i * (h + gap),
-      hov = (r[1] !== null || i === ghRow) && hovering(s, X0, y, X1 - X0, h);
+      hov = (r[1] !== null || i === linkRow) && hovering(s, X0, y, X1 - X0, h);
     c.fillStyle = hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
     rrect(c, X0, y, X1 - X0, h, 10);
     c.fill();
     textAt(c, r[0], X0 + 12, y + h / 2 + 0.5, { size: 12, max: X1 - X0 - 40 });
-    if (i === ghRow) {
+    if (i === linkRow) {
       textAt(c, '›', X1 - 18, y + h / 2 + 0.5, { size: 14, color: 'rgba(255,255,255,0.5)', align: 'center' });
-      addHit(s, c, { x: X0, y, w: X1 - X0, h, act: 'open:github' });
+      addHit(s, c, { x: X0, y, w: X1 - X0, h, act: 'open:settings' });
     }
     if (r[1] !== null) {
       const sx = X1 - 40,

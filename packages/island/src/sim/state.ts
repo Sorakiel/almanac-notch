@@ -115,8 +115,6 @@ export interface GithubFeed {
   commits: number[];
   /** the card's two lines while there is nothing to show (no token, no CI) */
   hint: [string, string];
-  /** settings row: "GitHub · @login" */
-  row: string;
 }
 
 export interface Particle {
@@ -235,8 +233,10 @@ export interface IslandState {
   cal: CalFeed | null;
   media: MediaFeed | null;
   github: GithubFeed | null;
-  /** requests for the host app, drained by the shell each frame: "settings:github" */
+  /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
+  /** the host app has a settings window: the settings tab gets a row that opens it */
+  settingsLink: boolean;
   wander: { x: number; y: number; next: number };
   sqOverride: { val: number; until: number } | null;
   particles: Particle[];
@@ -338,6 +338,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     media: null,
     github: null,
     requests: [],
+    settingsLink: false,
     wander: { x: 0, y: 0, next: 0 },
     sqOverride: null,
     particles: [],

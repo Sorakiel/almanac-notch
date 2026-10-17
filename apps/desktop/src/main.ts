@@ -55,6 +55,7 @@ const S = defaultSettings(matchMedia('(prefers-reduced-motion: reduce)').matches
 const m = createMascot({ settings: S, now: performance.now() });
 const s = m.state;
 s.bare = true;
+s.settingsLink = true;
 
 const island = document.getElementById('island') as HTMLCanvasElement,
   ic = island.getContext('2d') as CanvasRenderingContext2D;
@@ -322,7 +323,7 @@ function tick(now: number, id: number): void {
   media?.tick();
   github?.tick();
   for (const r of s.requests.splice(0))
-    if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) });
+    if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();
