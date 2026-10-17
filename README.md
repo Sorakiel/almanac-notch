@@ -9,7 +9,19 @@
 - `docs/` - спецификация, архитектура, план, сверка с прототипом.
 - `tools/` - съёмка эталона и сравнение реализации с ним.
 
-Кода приложения пока нет: его пишут по `docs/PLAN.md`.
+- `packages/island` - рендер острова и маскота, `apps/harness` - стенд сверки, `apps/desktop` - приложение (Tauri 2 + Rust).
+
+## Запуск и сборка
+
+Нужны Node 22+, Rust (rustup) и зависимости Tauri 2 для своей системы: на Mac - Xcode Command Line Tools, на Windows - Visual Studio Build Tools (C++) и WebView2 (в Windows 11 уже есть).
+
+```
+npm install
+npm run desktop:dev                        # приложение в режиме разработки
+cd apps/desktop && npx tauri build         # Mac: .app, Windows: установщик NSIS
+```
+
+Установщик Windows - `apps/desktop/src-tauri/target/release/bundle/nsis/Almanac Notch_*_x64-setup.exe`. Ставится без прав администратора. Подписи пока нет: SmartScreen попросит «Подробнее → Выполнить в любом случае».
 
 ## Прототип
 
