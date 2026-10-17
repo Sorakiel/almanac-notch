@@ -423,7 +423,8 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
         let mut last: Option<State> = None;
         let mut wait = PERIOD;
         loop {
-            let next = match token() {
+            let next = match token().filter(|_| crate::modules::is_on("github")) {
+                // no token, or the module is switched off: no requests
                 None => {
                     wait = PERIOD;
                     State::off()

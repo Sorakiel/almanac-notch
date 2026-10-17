@@ -23,6 +23,7 @@ import {
   notchState,
   type EventType,
   type IslandPoint,
+  type ModuleId,
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
@@ -56,6 +57,7 @@ const m = createMascot({ settings: S, now: performance.now() });
 const s = m.state;
 s.bare = true;
 s.settingsLink = true;
+s.iconSet = 'solid';
 
 const island = document.getElementById('island') as HTMLCanvasElement,
   ic = island.getContext('2d') as CanvasRenderingContext2D;
@@ -204,6 +206,8 @@ async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
   }
 }
 
+const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac'];
+
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
 function debug(id: string): void {
@@ -257,6 +261,17 @@ if (inTauri) {
     wake();
     github?.onState(e.payload);
   });
+  // modules switched off in settings and the chat tab (stage 7)
+  const applyModules = (c: { off: string[]; chat: boolean }): void => {
+    s.off = c.off.filter((id): id is ModuleId => MODULE_IDS.includes(id as ModuleId));
+    s.chatOff = !c.chat;
+    if (s.chatOff && s.tab === 'chat') s.tab = 'home';
+  };
+  await listen<{ off: string[]; chat: boolean }>('island://modules', (e) => {
+    wake();
+    applyModules(e.payload);
+  });
+  applyModules(await invoke('modules_get'));
   const f = await invoke<Feeds>('feeds_state');
   if (f.github) github.onState(f.github);
   if (f.calendar) cal.onCalendar(f.calendar);

@@ -88,6 +88,7 @@ function showSection(sec: string): void {
 
 // each module's status line and dot, repeated in the list
 const STATUS: Record<string, [string, string]> = {
+  almanac: ['almanac-status', 'almanac-dot'],
   claude: ['hooks-status', 'hooks-dot'],
   calendar: ['cal-status', 'cal-dot'],
   music: ['music-status', 'music-dot'],
@@ -103,6 +104,57 @@ for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   o.observe($(dotId), { attributes: true });
   copy();
 }
+
+// ---------- switching modules and the chat on and off ----------
+interface Modules {
+  off: string[];
+  chat: boolean;
+}
+const toggles = [...document.querySelectorAll<HTMLInputElement>('input[data-mod]')],
+  chatOn = $<HTMLInputElement>('chat-on'),
+  toast = $('toast');
+/** settings page name -> the island's module id */
+const MOD_OF: Record<string, string> = {
+  claude: 'claude',
+  calendar: 'cal',
+  music: 'music',
+  github: 'github',
+  almanac: 'almanac',
+};
+let modCfg: Modules = { off: [], chat: true };
+let toastTimer = 0;
+function say(text: string): void {
+  toast.textContent = text;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => (toast.hidden = true), 3500);
+}
+function renderModules(c: Modules): void {
+  modCfg = c;
+  for (const t of toggles) t.checked = !c.off.includes(t.dataset.mod ?? '');
+  chatOn.checked = c.chat;
+  for (const m of mods) m.classList.toggle('off', c.off.includes(MOD_OF[m.dataset.module ?? ''] ?? ''));
+}
+async function saveModules(next: Modules): Promise<void> {
+  if (Object.values(MOD_OF).every((id) => next.off.includes(id))) {
+    say('Хотя бы один модуль должен остаться включённым');
+    renderModules(modCfg);
+    return;
+  }
+  try {
+    renderModules(await invoke<Modules>('modules_set', { off: next.off, chat: next.chat }));
+  } catch (e) {
+    say(String(e));
+    renderModules(modCfg);
+  }
+}
+for (const t of toggles)
+  t.addEventListener('change', () => {
+    const id = t.dataset.mod ?? '',
+      off = modCfg.off.filter((x) => x !== id);
+    void saveModules({ ...modCfg, off: t.checked ? off : [...off, id] });
+  });
+chatOn.addEventListener('change', () => void saveModules({ ...modCfg, chat: chatOn.checked }));
 
 // ---------- music ----------
 interface MediaNow {
@@ -248,6 +300,7 @@ render(null);
 renderCal(null);
 renderIsland({ state: 'auto', hooks: false });
 renderMusic(null);
+renderModules(modCfg);
 $('music-src').textContent = navigator.userAgent.includes('Windows')
   ? 'Windows: системный медиа-сеанс - любой плеер, который показывает себя в регуляторе громкости (Spotify, браузеры, Я.Музыка).'
   : 'Mac: любой плеер из «Исполняется» в Пункте управления, включая браузеры.';
@@ -262,6 +315,8 @@ if (inTauri) {
   calCfg = await invoke<CalConfig>('calendar_config');
   renderPick();
   await refreshIsland();
+  renderModules(await invoke<Modules>('modules_get'));
+  await listen<Modules>('island://modules', (e) => renderModules(e.payload));
   await listen<string>('island://state', (e) => {
     for (const r of states) r.checked = r.value === e.payload;
   });

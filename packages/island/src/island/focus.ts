@@ -62,15 +62,20 @@ export function habitsDone(s: IslandState): number {
 
 /** proto: autoFocus */
 export function autoFocus(s: IslandState): ModuleId {
-  const ev = s.event && s.event.type;
+  const ev = s.event && s.event.type,
+    on = (id: ModuleId): boolean => !s.off.includes(id);
   // a real Claude Code session finishing or failing belongs to its own card
-  if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent') return 'claude';
-  if (ev === 'success' || ev === 'error') return 'github';
-  if (claudeState(s) !== 'idle') return 'claude';
-  if (callMins(s) <= 30) return 'cal';
-  if (s.musicPlaying) return 'music';
-  return 'almanac';
+  if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent' && on('claude')) return 'claude';
+  if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
+  if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
+  if (callMins(s) <= 30 && on('cal')) return 'cal';
+  if (s.musicPlaying && on('music')) return 'music';
+  // switched-off modules (the app): the first one left
+  return FALLBACK.find(on) ?? 'almanac';
 }
+
+/** the rest card when nothing is going on; the app keeps at least one module on */
+const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github'];
 
 /**
  * Not in the prototype (docs/CHANGES.md): a busy Claude (working, thinking, searching) stays on its
@@ -89,7 +94,7 @@ export function busyAside(s: IslandState): boolean {
 
 /** proto: effectiveFocus - also records when the shown card changed */
 export function effectiveFocus(s: IslandState): ModuleId {
-  const f = s.focusId || autoFocus(s);
+  const f = (s.focusId && !s.off.includes(s.focusId) && s.focusId) || autoFocus(s);
   if (f !== s.shownFocus) {
     s.shownFocus = f;
     s.focusStart = s.t;

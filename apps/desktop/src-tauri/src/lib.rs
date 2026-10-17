@@ -14,6 +14,7 @@ mod ical;
 #[cfg(windows)]
 mod outlook;
 mod media;
+mod modules;
 mod platform;
 mod settings;
 mod tray;
@@ -169,6 +170,23 @@ fn island_status() -> IslandStatus {
     }
 }
 
+/// Switched-off modules and the chat tab.
+#[tauri::command]
+fn modules_get() -> modules::Config {
+    modules::get()
+}
+
+/// Save from the settings window; refuses to switch every module off. The island and the
+/// settings window hear `island://modules`; providers check `modules::is_on` on their next round.
+#[tauri::command]
+fn modules_set(app: AppHandle, off: Vec<String>, chat: bool) -> Result<modules::Config, String> {
+    let c = modules::set(off, chat)?;
+    let _ = app.emit("island://modules", &c);
+    github::poke();
+    calendar::poke();
+    Ok(c)
+}
+
 /// Settings window (a regular window; the island panel never takes the keyboard).
 #[tauri::command]
 fn open_settings(app: AppHandle, section: Option<String>) {
@@ -201,6 +219,10 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     });
     let app2 = app.clone();
     media::start(Arc::new(move |name: &str, v: serde_json::Value| {
+        // switched off: the player is still watched locally, nothing reaches the island
+        if !modules::is_on("music") {
+            return;
+        }
         {
             let mut f = feeds.lock().unwrap();
             if name == "island://volume" {
@@ -344,6 +366,8 @@ pub fn run() {
             calendar_access,
             island_action,
             island_status,
+            modules_get,
+            modules_set,
             open_settings
         ])
         .setup(move |app| {

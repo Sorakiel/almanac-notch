@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createState } from '../sim/state';
 import { defaultSettings } from '../sim/settings';
 import { mulberry32, PARITY_SEED } from '../sim/rng';
-import { notchState } from './focus';
+import { autoFocus, effectiveFocus, notchState } from './focus';
+import { modules } from './modules';
+import { miniCrew } from './crew';
 
 function make() {
   const s = createState(defaultSettings(), mulberry32(PARITY_SEED), 0);
@@ -107,5 +109,35 @@ describe('notchState (SPEC 2.1)', () => {
     s.petting = true;
     s.overloadUntil = s.t + 1;
     expect(notchState(s)).toBe('open');
+  });
+});
+
+describe('switched-off modules (the app, stage 7)', () => {
+  it('none off: the prototype order', () => {
+    const s = make();
+    s.event = ev('success');
+    expect(autoFocus(s)).toBe('github');
+    expect(modules(s).map((m) => m.id)).toEqual(['claude', 'github', 'cal', 'music', 'almanac']);
+  });
+  it('skips an off module and falls back to the first one left', () => {
+    const s = make();
+    s.event = ev('success');
+    s.off = ['github'];
+    expect(autoFocus(s)).not.toBe('github');
+    s.event = null;
+    s.off = ['almanac', 'claude'];
+    s.musicPlaying = false;
+    // the stub call is 1-14 min away, so the calendar wins anyway; with it off too - music
+    expect(autoFocus(s)).toBe('cal');
+    s.off = ['almanac', 'claude', 'cal'];
+    expect(autoFocus(s)).toBe('music');
+    expect(modules(s).map((m) => m.id)).toEqual(['github', 'music']);
+    expect(miniCrew(s)).toHaveLength(2);
+  });
+  it('a picked card of an off module gives way', () => {
+    const s = make();
+    s.focusId = 'music';
+    s.off = ['music'];
+    expect(effectiveFocus(s)).not.toBe('music');
   });
 });

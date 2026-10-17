@@ -267,6 +267,10 @@ impl Hub {
     /// One hook payload in, the hook client's stdout out. `alive` tells whether the hook
     /// client still waits; once it is gone the prompt is taken off the island at once.
     pub fn handle(&self, p: Value, alive: &dyn Fn() -> bool) -> String {
+        // module switched off: Claude Code goes on as if the island were not there
+        if !crate::modules::is_on("claude") {
+            return String::new();
+        }
         let event = s(&p, "hook_event_name");
         let tool = s(&p, "tool_name");
         let w = who(&p);

@@ -113,7 +113,7 @@ mod choice {
     /// true = fetch the link again now (it was just changed)
     static POKE: Mutex<Option<Sender<bool>>> = Mutex::new(None);
 
-    fn poke(refetch: bool) {
+    pub fn poke(refetch: bool) {
         if let Some(tx) = POKE.lock().unwrap().as_ref() {
             let _ = tx.send(refetch);
         }
@@ -341,7 +341,12 @@ mod choice {
             let mut last: Option<Calendar> = None;
             let mut refetch = false;
             loop {
-                let src = source();
+                // switched off: read nothing, as if no source were picked
+                let src = if crate::modules::is_on("cal") {
+                    source()
+                } else {
+                    "off".into()
+                };
                 if src != "ical" {
                     cache.ical_text = None;
                     cache.ical_at = None;
@@ -359,6 +364,13 @@ mod choice {
             }
         });
     }
+}
+
+#[cfg(target_os = "macos")]
+pub use mac::poke;
+#[cfg(not(target_os = "macos"))]
+pub fn poke() {
+    choice::poke(false);
 }
 
 #[cfg(target_os = "macos")]
@@ -439,7 +451,7 @@ mod mac {
         }
     }
 
-    fn poke() {
+    pub fn poke() {
         if let Some(tx) = POKE.lock().unwrap().as_ref() {
             let _ = tx.send(());
         }
@@ -496,7 +508,11 @@ mod mac {
             let mut last: Option<Calendar> = None;
             loop {
                 let access = access();
-                let cal = if access == "ok" {
+                let cal = if !crate::modules::is_on("cal") {
+                    // switched off in settings: no reading
+                    store = None;
+                    Calendar::empty("off", "none")
+                } else if access == "ok" {
                     // a store made before access was granted stays empty; make it after
                     let st = store.get_or_insert_with(new_store);
                     Calendar {

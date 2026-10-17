@@ -237,6 +237,12 @@ export interface IslandState {
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
   settingsLink: boolean;
+  /** modules the user switched off in the app: no chip, rail item, card or mini mascot */
+  off: ModuleId[];
+  /** the chat tab is switched off: no chat icon in the top bar */
+  chatOff: boolean;
+  /** top-bar icons: the prototype's outlines, or filled ones (the app, docs/CHANGES.md) */
+  iconSet: 'proto' | 'solid';
   wander: { x: number; y: number; next: number };
   sqOverride: { val: number; until: number } | null;
   particles: Particle[];
@@ -339,6 +345,9 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     github: null,
     requests: [],
     settingsLink: false,
+    off: [],
+    chatOff: false,
+    iconSet: 'proto',
     wander: { x: 0, y: 0, next: 0 },
     sqOverride: null,
     particles: [],

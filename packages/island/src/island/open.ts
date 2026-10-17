@@ -17,6 +17,7 @@ type IconKind = 'home' | 'chat' | 'add' | 'gear' | 'sound';
 
 /** proto: icon */
 export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
+  if (s.iconSet === 'solid') return solidIcon(s, c, kind, x, y, active);
   c.save();
   c.strokeStyle = c.fillStyle = active ? '#FFFFFF' : 'rgba(255,255,255,0.6)';
   c.lineWidth = 1.5;
@@ -90,13 +91,96 @@ export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: numbe
   c.restore();
 }
 
+// Filled top-bar icons for the app (docs/CHANGES.md 2026-10-17): drawn on a 24-unit grid,
+// scaled to the prototype's ~13 px glyph box. Paths are our own, not a system symbol set.
+const SOLID_SCALE = 0.62;
+const P_HOME =
+  'M12 3.3c.4 0 .8.1 1.1.4l8.2 7.1c.7.6.3 1.7-.6 1.7H19.5v7.4c0 .9-.7 1.6-1.6 1.6h-3.4v-5.2c0-.6-.4-1-1-1h-3c-.6 0-1 .4-1 1v5.2H6.1c-.9 0-1.6-.7-1.6-1.6v-7.4H3.3c-.9 0-1.3-1.1-.6-1.7l8.2-7.1c.3-.3.7-.4 1.1-.4Z';
+const P_CHAT =
+  'M6.2 4h11.6c2 0 3.7 1.7 3.7 3.7v6.1c0 2-1.7 3.7-3.7 3.7h-6.9l-4.6 3.3c-.6.4-1.4-.1-1.2-.8l.6-2.6c-1.7-.4-3.2-1.9-3.2-3.6V7.7C2.5 5.7 4.2 4 6.2 4Z';
+const P_SPEAKER =
+  'M4 8.6h2.9l4.5-3.8c.7-.6 1.7-.1 1.7.8v12.8c0 .9-1 1.4-1.7.8l-4.5-3.8H4c-.8 0-1.5-.7-1.5-1.5V10.1c0-.8.7-1.5 1.5-1.5Z';
+const pathCache = new Map<string, Path2D>();
+function path(d: string): Path2D {
+  let p = pathCache.get(d);
+  if (!p) pathCache.set(d, (p = new Path2D(d)));
+  return p;
+}
+/** a cog: 8 rounded teeth around a ring, the hole cut out (even-odd) */
+function gearPath(): Path2D {
+  let p = pathCache.get('gear');
+  if (p) return p;
+  p = new Path2D();
+  const teeth = 8,
+    rIn = 7.4,
+    rOut = 10.2,
+    half = (Math.PI / teeth) * 0.42;
+  for (let i = 0; i < teeth * 2; i++) {
+    const a = (i / (teeth * 2)) * Math.PI * 2 - Math.PI / 2,
+      r = i % 2 === 0 ? rOut : rIn,
+      w = i % 2 === 0 ? half : half * 1.25;
+    const x0 = 12 + Math.cos(a - w) * r,
+      y0 = 12 + Math.sin(a - w) * r;
+    if (i === 0) p.moveTo(x0, y0);
+    else p.lineTo(x0, y0);
+    p.lineTo(12 + Math.cos(a + w) * r, 12 + Math.sin(a + w) * r);
+  }
+  p.closePath();
+  p.moveTo(12 + 3.1, 12);
+  p.arc(12, 12, 3.1, 0, Math.PI * 2);
+  pathCache.set('gear', p);
+  return p;
+}
+
+function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
+  c.save();
+  const col = active ? '#FFFFFF' : 'rgba(255,255,255,0.55)';
+  c.fillStyle = c.strokeStyle = col;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.translate(x - 12 * SOLID_SCALE, y - 12 * SOLID_SCALE);
+  c.scale(SOLID_SCALE, SOLID_SCALE);
+  if (kind === 'home') c.fill(path(P_HOME));
+  else if (kind === 'chat') c.fill(path(P_CHAT));
+  else if (kind === 'add') {
+    c.lineWidth = 2.6;
+    c.beginPath();
+    c.moveTo(12, 4.5);
+    c.lineTo(12, 19.5);
+    c.moveTo(4.5, 12);
+    c.lineTo(19.5, 12);
+    c.stroke();
+  } else if (kind === 'gear') {
+    // stroke-join softens the teeth corners
+    c.lineWidth = 1.4;
+    c.fill(gearPath(), 'evenodd');
+    c.stroke(gearPath());
+  } else {
+    c.fill(path(P_SPEAKER));
+    c.lineWidth = 2;
+    c.beginPath();
+    if (s.muted) {
+      c.moveTo(16, 9.5);
+      c.lineTo(21, 14.5);
+      c.moveTo(21, 9.5);
+      c.lineTo(16, 14.5);
+    } else {
+      c.arc(13.5, 12, 3.6, -0.85, 0.85);
+      c.moveTo(13.5 + Math.cos(-0.85) * 7, 12 + Math.sin(-0.85) * 7);
+      c.arc(13.5, 12, 7, -0.85, 0.85);
+    }
+    c.stroke();
+  }
+  c.restore();
+}
+
 /** proto: topBar */
 export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number): void {
   const tabs: [Tab & IconKind, string][] = [
     ['home', 'tab:home'],
     ['chat', 'tab:chat'],
     ['add', 'tab:add'],
-  ];
+  ].filter(([k]) => !(s.chatOff && k === 'chat')) as [Tab & IconKind, string][];
   tabs.forEach(([k, act], i) => {
     const x = x0 + 22 + i * 30,
       on = s.tab === k,
@@ -175,7 +259,7 @@ export function drawOpenBody(
   cy1: number,
   fx: WorkFx | null,
 ): void {
-  if (s.tab === 'chat') return drawChat(s, c, X0, X1, cy0, cy1);
+  if (s.tab === 'chat' && !s.chatOff) return drawChat(s, c, X0, X1, cy0, cy1);
   if (s.tab === 'add') return drawAdd(s, c, X0, X1, cy0, cy1);
   if (s.tab === 'settings') return drawSettings(s, c, X0, X1, cy0, cy1);
   const split = X0 + (X1 - X0) * 0.52,

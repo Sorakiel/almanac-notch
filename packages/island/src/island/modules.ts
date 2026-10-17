@@ -40,7 +40,7 @@ export function modules(s: IslandState): ModuleItem[] {
     idle: 'свободен',
   };
   const done = habitsDone(s);
-  return [
+  const all: ModuleItem[] = [
     {
       id: 'claude',
       kind: 'agent',
@@ -97,6 +97,7 @@ export function modules(s: IslandState): ModuleItem[] {
       short: 'привычки ' + done + ' из ' + s.habits.length,
     },
   ];
+  return s.off.length ? all.filter((m) => !s.off.includes(m.id)) : all;
 }
 
 /** proto: isHot */

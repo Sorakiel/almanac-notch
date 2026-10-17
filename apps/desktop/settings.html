@@ -22,6 +22,10 @@
           <label><input type="radio" name="nstate" value="half" />Полуоткрыто</label>
           <label><input type="radio" name="nstate" value="open" />Открыто</label>
         </div>
+        <h3>Вкладки</h3>
+        <label class="switch-row"
+          ><span>Чат в острове</span><input type="checkbox" class="toggle" id="chat-on"
+        /></label>
         <h3>Проверить события</h3>
         <div class="events">
           <button data-ev="attention">Внимание</button>
@@ -81,10 +85,20 @@
           <span class="name">GitHub<small id="li-github">…</small></span>
           <span class="dot" id="li-github-dot"></span>
         </button>
+        <button class="mod" data-module="almanac">
+          <span class="ico" style="--c: #34c759"
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" /></svg
+          ></span>
+          <span class="name">Almanac<small id="li-almanac">…</small></span>
+          <span class="dot" id="li-almanac-dot"></span>
+        </button>
       </aside>
       <div class="detail">
         <main id="claude">
           <h2>Claude Code</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="claude"
+          /></label>
           <p class="status"><span class="dot" id="hooks-dot"></span><span id="hooks-status">…</span></p>
           <div class="row">
             <button id="hooks-install" class="primary">Установить хуки…</button>
@@ -101,6 +115,9 @@
         </main>
         <main id="calendar" hidden>
           <h2>Календарь</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="cal"
+          /></label>
           <p class="status"><span class="dot" id="cal-dot"></span><span id="cal-status">…</span></p>
 
           <section id="cal-pick" hidden>
@@ -158,6 +175,9 @@
         </main>
         <main id="music" hidden>
           <h2>Музыка</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="music"
+          /></label>
           <p class="status"><span class="dot" id="music-dot"></span><span id="music-status">…</span></p>
           <p class="plain" id="music-src"></p>
           <section class="help">
@@ -170,6 +190,9 @@
         </main>
         <main id="github" hidden>
           <h2>GitHub</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="github"
+          /></label>
           <p class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">…</span></p>
 
           <section id="connect">
@@ -209,8 +232,21 @@
             </p>
           </section>
         </main>
+        <main id="almanac" hidden>
+          <h2>Almanac</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="almanac"
+          /></label>
+          <p class="status"><span class="dot" id="almanac-dot"></span><span id="almanac-status">Пока заглушка</span></p>
+          <p class="plain">
+            Привычки дня. Сейчас это заглушка из прототипа; подключение к Almanac появится позже (локальное API или
+            файл). Сети нет.
+          </p>
+        </main>
       </div>
     </div>
+
+    <div class="toast" id="toast" role="alert" hidden></div>
 
     <script type="module" src="/src/settings.ts"></script>
   </body>

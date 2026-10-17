@@ -1,6 +1,6 @@
 // The idle "crew": tiny mascots of the modules in the right ear (docs/SPEC.md 2.3).
 import { rrect, type Ctx } from '../util/draw';
-import type { IslandState } from '../sim/state';
+import type { IslandState, ModuleId } from '../sim/state';
 import { bodyPath } from '../mascot/shape';
 import { MODULE_COL, callMins, claudeState, type ClaudeState } from './focus';
 
@@ -26,16 +26,18 @@ export const STATE_COL: Readonly<Record<string, string>> = {
 /** proto: miniCrew */
 export function miniCrew(s: IslandState): MiniItem[] {
   const ev = s.event && s.event.type;
-  return [
-    { body: MODULE_COL.claude.body, seed: 0, state: claudeState(s) },
+  const all: (MiniItem & { id: ModuleId })[] = [
+    { id: 'claude', body: MODULE_COL.claude.body, seed: 0, state: claudeState(s) },
     {
+      id: 'github',
       body: MODULE_COL.github.body,
       seed: 1,
       state: (s.github ? s.github.auth === 'ok' && s.github.ci === 'fail' : ev === 'error') ? 'fail' : 'idle',
     },
-    { body: MODULE_COL.cal.body, seed: 2, state: callMins(s) <= 5 ? 'ask' : 'idle' },
-    { body: MODULE_COL.music.body, seed: 3, state: 'idle' },
+    { id: 'cal', body: MODULE_COL.cal.body, seed: 2, state: callMins(s) <= 5 ? 'ask' : 'idle' },
+    { id: 'music', body: MODULE_COL.music.body, seed: 3, state: 'idle' },
   ];
+  return s.off.length ? all.filter((m) => !s.off.includes(m.id)) : all;
 }
 
 /** proto: drawMini - a tiny flat mascot with its state as a dot */
