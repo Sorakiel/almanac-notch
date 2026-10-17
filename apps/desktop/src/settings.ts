@@ -164,8 +164,33 @@ calUrl.addEventListener('keydown', (e) => {
 });
 $('cal-access').addEventListener('click', () => void invoke('calendar_access'));
 
+// ---------- Claude Code, island ----------
+interface IslandStatus {
+  state: string;
+  hooks: boolean;
+}
+const states = [...document.querySelectorAll<HTMLInputElement>('input[name=nstate]')];
+function renderIsland(st: IslandStatus): void {
+  $('hooks-dot').className = 'dot' + (st.hooks ? ' ok' : '');
+  $('hooks-status').textContent = st.hooks ? 'Хуки установлены' : 'Хуки не установлены';
+  for (const r of states) r.checked = r.value === st.state;
+}
+async function refreshIsland(): Promise<void> {
+  if (inTauri) renderIsland(await invoke<IslandStatus>('island_status'));
+}
+const act = (id: string): void => void invoke('island_action', { id });
+for (const r of states) r.addEventListener('change', () => act('nstate:' + r.value));
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-ev]'))
+  b.addEventListener('click', () => act('ev:' + b.dataset.ev));
+$('hooks-install').addEventListener('click', () => act('hooks:install'));
+$('hooks-uninstall').addEventListener('click', () => act('hooks:uninstall'));
+$('quit').addEventListener('click', () => act('quit'));
+// the hook dialogs finish outside this window; read the status again when it is back in front
+window.addEventListener('focus', () => void refreshIsland());
+
 render(null);
 renderCal(null);
+renderIsland({ state: 'auto', hooks: false });
 if (inTauri) {
   await listen<Calendar>('island://calendar', (e) => renderCal(e.payload));
   await listen<GhState>('island://github', (e) => render(e.payload));
@@ -174,6 +199,10 @@ if (inTauri) {
   renderCal(f.calendar);
   calCfg = await invoke<CalConfig>('calendar_config');
   renderPick();
+  await refreshIsland();
+  await listen<string>('island://state', (e) => {
+    for (const r of states) r.checked = r.value === e.payload;
+  });
   // the island's rows open the window on their section
   const show = (sec: string): void => document.querySelector<HTMLButtonElement>(`[data-section="${sec}"]`)?.click();
   if (location.hash) show(location.hash.slice(1));

@@ -147,6 +147,28 @@ fn calendar_access() {
     calendar::open_access();
 }
 
+/// A tray item run from the settings window or the island ("nstate:open", "ev:dance",
+/// "hooks:install", "quit", ...).
+#[tauri::command]
+fn island_action(app: AppHandle, id: String) {
+    tray::action(&app, &id);
+}
+
+/// What the settings window shows about the island and Claude Code.
+#[derive(Serialize)]
+struct IslandStatus {
+    state: &'static str,
+    hooks: bool,
+}
+
+#[tauri::command]
+fn island_status() -> IslandStatus {
+    IslandStatus {
+        state: tray::state(),
+        hooks: almanac_hook::install::is_installed(&almanac_hook::paths::claude_settings()),
+    }
+}
+
 /// Settings window (a regular window; the island panel never takes the keyboard).
 #[tauri::command]
 fn open_settings(app: AppHandle, section: Option<String>) {
@@ -320,6 +342,8 @@ pub fn run() {
             calendar_config,
             calendar_choose,
             calendar_access,
+            island_action,
+            island_status,
             open_settings
         ])
         .setup(move |app| {

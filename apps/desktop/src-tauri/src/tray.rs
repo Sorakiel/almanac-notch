@@ -5,7 +5,55 @@
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Wry};
+use std::sync::Mutex;
+
+use tauri::{AppHandle, Emitter, Manager, Wry};
+
+/// The state submenu's items, kept so a choice made elsewhere checks the right one.
+struct Checks(Mutex<Vec<CheckMenuItem<Wry>>>);
+
+/// The island state last picked (tray or settings window); "auto" at launch.
+static STATE: Mutex<&'static str> = Mutex::new("auto");
+
+pub fn state() -> &'static str {
+    *STATE.lock().unwrap()
+}
+
+/// Tray items and the same actions from the settings window and the island (decision
+/// 2026-10-15: everything in the tray is reachable without it). Unknown ids do nothing.
+pub fn action(app: &AppHandle, id: &str) {
+    match id {
+        "quit" => app.exit(0),
+        "settings" => crate::settings::open(app, None),
+        // Mac: the system access dialog; Windows: the source is picked in settings
+        "calendar:access" if cfg!(target_os = "macos") => crate::calendar::open_access(),
+        "calendar:access" => crate::settings::open(app, Some("calendar")),
+        "hooks:install" | "hooks:uninstall" => {
+            crate::claude::hooks_ui::run(app, id == "hooks:install")
+        }
+        _ => {
+            if let Some(st) = id.strip_prefix("nstate:") {
+                let Some((known, _)) = STATES.iter().find(|(s, _)| *s == st) else {
+                    return;
+                };
+                *STATE.lock().unwrap() = known;
+                // radio behaviour: exactly one state is checked
+                if let Some(c) = app.try_state::<Checks>() {
+                    for c in c.0.lock().unwrap().iter() {
+                        let _ = c.set_checked(c.id().as_ref() == id);
+                    }
+                }
+                let _ = app.emit("island://state", *known);
+            } else if !id
+                .strip_prefix("ev:")
+                .is_some_and(|ev| EVENTS.iter().any(|(_, e, _)| *e == ev))
+            {
+                return;
+            }
+            let _ = app.emit("island://debug", id);
+        }
+    }
+}
 
 /// Prototype event buttons in order: key, event type, label.
 const EVENTS: [(&str, &str, &str); 11] = [
@@ -80,7 +128,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&MenuItem::with_id(
         app,
         "calendar:access",
-        "Доступ к календарю…",
+        if cfg!(target_os = "macos") {
+            "Доступ к календарю…"
+        } else {
+            "Календарь…"
+        },
         true,
         None::<&str>,
     )?)?;
@@ -100,36 +152,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?)?;
 
+    app.manage(Checks(Mutex::new(checks)));
     let mut tray = TrayIconBuilder::with_id("debug")
         .tooltip("Almanac Notch")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .on_menu_event(move |app, e| {
-            let id = e.id().as_ref();
-            if id == "quit" {
-                app.exit(0);
-                return;
-            }
-            if id == "settings" {
-                crate::settings::open(app, None);
-                return;
-            }
-            if id == "calendar:access" {
-                crate::calendar::open_access();
-                return;
-            }
-            if let Some(what) = id.strip_prefix("hooks:") {
-                crate::claude::hooks_ui::run(app, what == "install");
-                return;
-            }
-            if id.starts_with("nstate:") {
-                // Radio behaviour: exactly one state is checked.
-                for c in &checks {
-                    let _ = c.set_checked(c.id().as_ref() == id);
-                }
-            }
-            let _ = app.emit("island://debug", id);
-        });
+        .on_menu_event(move |app, e| action(app, e.id().as_ref()));
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

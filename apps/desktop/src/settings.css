@@ -198,3 +198,27 @@ button:disabled {
   color: var(--muted);
   margin: 0 0 12px;
 }
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field);
+}
+.seg label {
+  margin: 0;
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-weight: 400;
+}
+.seg label:has(input:checked) {
+  background: rgba(255, 255, 255, 0.14);
+}
+.seg input {
+  display: none;
+}
+.events {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}

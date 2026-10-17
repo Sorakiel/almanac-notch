@@ -12,6 +12,8 @@
       <nav>
         <button class="item on" data-section="github">GitHub</button>
         <button class="item" data-section="calendar">Календарь</button>
+        <button class="item" data-section="claude">Claude Code</button>
+        <button class="item" data-section="island">Остров</button>
       </nav>
     </aside>
     <main id="github">
@@ -117,6 +119,49 @@
         </p>
       </section>
     </main>
+    <main id="claude" hidden>
+      <h2>Claude Code</h2>
+      <p class="status"><span class="dot" id="hooks-dot"></span><span id="hooks-status">…</span></p>
+      <div class="row">
+        <button id="hooks-install" class="primary">Установить хуки…</button>
+        <button id="hooks-uninstall">Удалить хуки…</button>
+      </div>
+      <section class="help">
+        <h3>Что это</h3>
+        <p>
+          Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа на
+          разрешения и вопросы. Перед записью покажу, что изменится, и сделаю копию файла. Ваши другие хуки не трогаю.
+        </p>
+      </section>
+    </main>
+
+    <main id="island" hidden>
+      <h2>Остров</h2>
+      <h3>Состояние</h3>
+      <div class="seg" role="radiogroup" aria-label="Состояние острова">
+        <label><input type="radio" name="nstate" value="auto" />Авто</label>
+        <label><input type="radio" name="nstate" value="closed" />Закрыто</label>
+        <label><input type="radio" name="nstate" value="half" />Полуоткрыто</label>
+        <label><input type="radio" name="nstate" value="open" />Открыто</label>
+      </div>
+      <h3>Проверить события</h3>
+      <div class="events">
+        <button data-ev="attention">Внимание</button>
+        <button data-ev="working">Работает</button>
+        <button data-ev="thinking">Думает</button>
+        <button data-ev="searching">Ищет</button>
+        <button data-ev="question">Вопрос</button>
+        <button data-ev="ratelimit">Лимит</button>
+        <button data-ev="success">Успех</button>
+        <button data-ev="error">Ошибка</button>
+        <button data-ev="dance">Праздник</button>
+        <button data-ev="greeting">Привет</button>
+        <button data-ev="sleep">Сон</button>
+      </div>
+      <h3>Приложение</h3>
+      <button id="quit">Выйти из Almanac Notch</button>
+    </main>
+
     <script type="module" src="/src/settings.ts"></script>
   </body>
 </html>
