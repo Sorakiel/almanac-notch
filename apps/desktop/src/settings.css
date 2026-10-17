@@ -63,6 +63,11 @@ body {
   border-right: 1px solid var(--line);
   overflow: auto;
 }
+.list-note {
+  margin: 10px 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 .mod {
   display: flex;
   align-items: center;

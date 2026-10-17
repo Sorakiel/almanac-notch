@@ -4,7 +4,7 @@ import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { limitText, stepAt, stepIndex } from '../sim/events';
 import { TRACKS } from '../stub';
-import { MODULE_COL, callMins, claudeState, habitsDone, minsText, type ClaudeState } from './focus';
+import { MODULE_COL, callMins, claudeState, habitsDone, hasModule, minsText, type ClaudeState } from './focus';
 import { STATE_COL, drawMini } from './crew';
 
 export type ModuleItem =
@@ -12,12 +12,13 @@ export type ModuleItem =
   | { id: 'github'; kind: 'ci'; name: string; state: CiState; short: string }
   | { id: 'cal'; kind: 'cal'; name: string; mins: number; short: string; state?: undefined }
   | { id: 'music'; kind: 'music'; name: string; playing: boolean; short: string; state?: undefined }
-  | { id: 'almanac'; kind: 'habits'; name: string; done: number; total: number; short: string; state?: undefined };
+  | { id: 'almanac'; kind: 'habits'; name: string; done: number; total: number; short: string; state?: undefined }
+  | { id: 'vercel'; kind: 'deploy'; name: string; state: CiState; short: string };
 
 /** what drawGlyph needs; prIcon-free glyphs can be drawn from a bare { kind, state } */
 /** 'off' = live GitHub with nothing to show (no token, no CI): a grey ring */
 type CiState = 'run' | 'fail' | 'ok' | 'off';
-export type GlyphItem = ModuleItem | { kind: 'ci'; state: CiState };
+export type GlyphItem = ModuleItem | { kind: 'ci'; state: CiState } | { kind: 'deploy'; state: CiState };
 
 function workShort(s: IslandState): string {
   const st = stepAt(s, stepIndex(s));
@@ -103,7 +104,17 @@ export function modules(s: IslandState): ModuleItem[] {
       short: tr(s, 'привычки {0} из {1}', done, s.habits.length),
     },
   ];
-  return s.off.length ? all.filter((m) => !s.off.includes(m.id)) : all;
+  // not in the prototype (docs/CHANGES.md): Vercel, only where the app feeds it
+  const vc = s.vercel;
+  if (vc)
+    all.push({
+      id: 'vercel',
+      kind: 'deploy',
+      name: 'Vercel',
+      state: vc.auth === 'ok' && vc.state !== 'none' ? vc.state : 'off',
+      short: vc.short,
+    });
+  return s.off.length || vc ? all.filter((m) => hasModule(s, m.id)) : all;
 }
 
 /** proto: isHot */
@@ -156,6 +167,11 @@ export function focusTint(s: IslandState, f: ModuleId): { c: string; a: number }
     if (ev === 'error') return { c: '#FF453A', a: 0.45 };
     if (ev === 'success') return { c: '#34C759', a: 0.45 };
     if (ev === 'working') return { c: '#3D8BFF', a: 0.22 };
+  }
+  if (f === 'vercel' && s.vercel && s.vercel.auth === 'ok') {
+    const st = s.vercel.state;
+    if (st === 'fail') return { c: '#FF453A', a: 0.45 };
+    if (st === 'run') return { c: '#3D8BFF', a: 0.22 };
   }
   if (f === 'cal' && callMins(s) <= 5) return { c: '#F5A524', a: 0.35 };
   if (f === 'music' && s.musicPlaying) return { c: '#9EE6B8', a: 0.16 };
@@ -221,6 +237,8 @@ export function drawGlyph(s: IslandState, c: Ctx, it: GlyphItem, x: number, y: n
         c.stroke();
       }
     }
+  } else if (it.kind === 'deploy') {
+    deployDot(c, x, y, r * 0.75, it.state, t);
   } else if (it.kind === 'cal') {
     ring(c, x, y, r, lw, it.mins / 60, it.mins <= 5 ? '#F5A524' : '#FFFFFF', -Math.PI / 2);
     if (sz > 7.5)
@@ -241,6 +259,25 @@ export function drawGlyph(s: IslandState, c: Ctx, it: GlyphItem, x: number, y: n
       c.fill();
     }
   }
+  c.restore();
+}
+
+/** Not in the prototype (docs/CHANGES.md): Vercel's mark - a status dot, as coucou's rows; it breathes while building. */
+export function deployDot(c: Ctx, x: number, y: number, r: number, st: CiState, t: number): void {
+  if (st === 'off') {
+    c.strokeStyle = 'rgba(255,255,255,0.3)';
+    c.lineWidth = Math.max(1, r * 0.35);
+    c.beginPath();
+    c.arc(x, y, r * 0.85, 0, Math.PI * 2);
+    c.stroke();
+    return;
+  }
+  c.save();
+  if (st === 'run') c.globalAlpha *= 0.55 + 0.45 * Math.sin(t * 5);
+  c.fillStyle = st === 'fail' ? '#FF453A' : st === 'run' ? '#3D8BFF' : '#34C759';
+  c.beginPath();
+  c.arc(x, y, r, 0, Math.PI * 2);
+  c.fill();
   c.restore();
 }
 

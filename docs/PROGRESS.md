@@ -3,13 +3,13 @@
 Обновляется в конце каждой сессии. Новая сессия начинает с этого файла.
 
 ## Сейчас
-- Этап: 8, первая часть - EN и RU (ветка `stage-8-i18n` от `stage-7-windows`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про язык.
+- Этап: 8b - Vercel (ветка `stage-8-vercel` от `stage-8-i18n`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Vercel (карточка, лимит модулей). 8a (EN и RU) тоже ждёт проверки, замечаний пока не было.
 - Порядок этапа 8 (выбор владельца 2026-10-18, PLAN): EN/RU → Vercel → Notion → Grafana → Almanac → полноценный удобный релиз. Obsidian, n8n, почта, чат, телефон пока не берём.
 - Этап 7 (Windows) формально не принят: владелец проверит на Windows позже (`npm run installer`, README). Если пришлёт замечания - сначала исправить в `stage-7-windows`, затем влить в ветки этапа 8.
-- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18).
+- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18).
 - Репозиторий публичный: https://github.com/Sorakiel/almanac-notch. `master` - только каркас этапа 0. Пушить можно (разрешение владельца).
 - `npm run installer` (корень) собирает релиз для своей ОС и кладёт в `release/`: Windows - `Almanac Notch Setup.exe`, Mac - `Almanac Notch.app`. В Cargo.toml `[profile.release.build-override] strip = false` (иначе ломаются proc-macro на Mac).
-- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
+- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
 
 ## Сделано
 - Монорепо на npm workspaces: `packages/island`, `apps/harness`, `apps/desktop`.
@@ -152,9 +152,18 @@
 - Проверки: тесты пакета 61, фронта 32 (у каждой русской строки острова, `settings.html` и `settings.ts` есть английская; английские ленты), Rust 21, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76 (0.11% - известный шрифт), `parity:inputs` весь зелёный (75 строк). Кадры острова на английском (15 сцен) просмотрены: всё влезает.
 - Не проверено (нужен владелец, на собранном `.app`): окно настроек на английском, переключение языка на лету (трей, остров, окно), «Как в системе» на английской системе, диалоги хуков на английском.
 
+### Этап 8b - Vercel (ветка `stage-8-vercel`)
+- Rust `src-tauri/src/vercel.rs` по образцу `github.rs`: токен в keyring (`dev.almanac.notch` / `vercel-token`), `ureq` + `native-tls`, поток раз в минуту (401/403 - пауза 5 мин, нет сети - растущая пауза), только при `modules::is_on("vercel")` и с токеном. `/v2/user`, `/v2/teams` (до 5), `/v6/deployments?limit=20` по личному аккаунту и командам; 10 самых свежих деплоев. Команды `vercel_connect`, `vercel_disconnect`, `vercel_open(id)` (URL `inspectorUrl` берётся из данных Rust, только `https://vercel.com/…`, открывается `open` / `rundll32 url.dll` / `xdg-open`). `feeds_state.vercel`, событие `island://vercel`. 4 теста (разбор, дубли, id команд в URL, чужая ссылка), сетевой `--ignored bogus` (выдуманный токен → «не принят») проходит.
+- Лимит модулей как в coucou (владелец, DECISIONS): Claude Code - основной, из остальных включено не больше 4 (`modules::MAX_ON`, `clean` выключает самый новый при переполнении, `set` отказывает, окно показывает тост и подсказку). Vercel по умолчанию выключен - у всех, кто обновится, остров как раньше.
+- Пакет: `ModuleId` += `'vercel'`, `VercelFeed` (`rows` - три последних деплоя), `s.vercel` (null в харнессе - модуля нет), `hasModule(s, id)` в `focus.ts` (выключен или нет данных - модуля нет), `event.src = 'vercel'` → `autoFocus` даёт карточку Vercel, `FALLBACK` += vercel, `MODULE_COL.vercel` серо-сиреневый, предмет `rocket` (`mascot/props/rocket.ts`), карточка `deployHead` + строки в `cards.ts`, значок `deployDot` в `modules.ts`, `miniCrew` - не больше 4 мини-маскотов. Сетка 2×2 не тронута.
+- Фронт: `vercelFeed`, `agoText` («сейчас», «5 мин», «2 ч», «6 дн»), `VercelDriver` (первое чтение - без событий; ready/error по id деплоя; новый деплой, которого не видели сборкой, - событие, только если создан после первого чтения; canceled - не событие; вопрос и разрешение держат результат). Кнопка ↗: `s.requests` `vercel:<id>` → `vercel_open`.
+- Окно настроек: страница Vercel (переключатель, статус «@user · N проектов», токен, «Как получить токен», «Что читается и куда уходит»), строка в списке модулей, подсказка о лимите.
+- Проверки: тесты 100 (фронт + пакет), Rust 25, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76, `parity:inputs` - см. отчёт. Кадры варианта (окно в браузере, `window.__state.vercel = …`) владелец видел.
+- Не проверено (нужен владелец, собранный `.app` и свой токен Vercel): реальный деплой в карточке, событие при готовом и упавшем деплое, ↗ открывает страницу, команды (`/v2/teams` у токена с узким scope), тост лимита в окне.
+
 ## Дальше
 - Этап 7: проверка владельцем на Windows и исправления по ней.
-- Этап 8: после ответа владельца по EN/RU - Vercel (ветка `stage-8-vercel` от `stage-8-i18n`), затем Notion, Grafana, Almanac, релиз.
+- Этап 8: после ответа владельца по EN/RU и Vercel - Notion (ветка `stage-8-notion` от `stage-8-vercel`, предмет-карандаш заготовлен в `props/index.ts`), затем Grafana, Almanac, релиз. Новый модуль включается с учётом лимита 4 (`modules.rs`).
 - Поведение в полноэкранных приложениях: сейчас `fullScreenAuxiliary` - остров виден поверх. В ARCHITECTURE по умолчанию «прячется» - решить вместе с вопросом из DECISIONS.
 
 ## Грабли и решения
@@ -191,3 +200,5 @@
 - Заглушка `llvm-rc` для проверки под Windows: shell-скрипт в начале `PATH`, пишет пустой файл по аргументу `/fo` (в этой сессии лежала в scratchpad).
 - `npx tauri build --debug --bundles app` перезаписывает `target/debug/almanac-notch` - запущенный dev-остров это не ломает.
 - **Тексты и язык (с этапа 8).** Любой новый текст острова - через `tr(s, 'русский')` и строка в `EN` (`packages/island/src/i18n.ts`); текст окна настроек - в `settings.html`/`t()` и строка в `SETTINGS_EN`; текст Rust - `lang::t(ru, en)`. Тесты `i18n.test.ts` и `settings-i18n.test.ts` падают на русской строке без перевода. Живые данные (названия) через `tr` не пропускать нарочно не нужно: незнакомая строка возвращается как есть.
+- **Новый модуль (с этапа 8b).** Шаги: `modules::ALL` + `MAX_ON` (по умолчанию новый - выключен), `ModuleId`, свой `*Feed` в `state.ts` (null в харнессе - модуля нет, `hasModule`), `modules()`, `miniCrew`, `autoFocus` (`event.src`), `FALLBACK`, `MODULE_COL`, `MODULE_PROPS`, карточка в `cards.ts`, значок в `drawGlyph`, `MODULE_IDS` в `main.ts`, `MOD_OF` и страница в окне настроек, тексты в `EN`/`SETTINGS_EN`/`lang::t`. Вид проверять в окне `npm run dev:web -w apps/desktop` (порт 1420) через `window.__state`, не в харнессе.
+- Вопросы владельцу - по-русски и простыми словами (вопрос по-английски он не понял).

@@ -71,6 +71,20 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Habits of the day. For now this is the prototype stub; the Almanac connection comes later (a local API or a file). No network.',
   // dynamic texts (src/settings.ts)
   'GitHub не принял сохранённый токен': 'GitHub rejected the saved token',
+  // Vercel, the module limit
+  'Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один':
+    'Besides Claude Code, at most 4 modules can be on - switch one off first',
+  'Кроме Claude Code включено не больше 4 модулей': 'Besides Claude Code, at most 4 modules are on',
+  'Токен Vercel': 'Vercel token',
+  'Откройте vercel.com → Account Settings → Tokens → Create Token.':
+    'Open vercel.com → Account Settings → Tokens → Create Token.',
+  'Scope: личный аккаунт или команда, срок - на ваш выбор.': 'Scope: your personal account or a team, any expiration.',
+  'Имя пользователя, список команд и последние деплои ваших проектов: название проекта, состояние сборки, продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на api.vercel.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
+    'Your username, team list and the latest deployments of your projects: project name, build state, production or preview, branch and time. Code, environment variables and logs are not read. Requests go only to api.vercel.com, once a minute, and only while the module is on. The token is kept in the system keychain and never gets into files or the island.',
+  'Vercel не принял сохранённый токен': 'Vercel rejected the saved token',
+  проект: 'project',
+  проекта: 'projects',
+  проектов: 'projects',
   'Не подключён': 'Not connected',
   'Хотя бы один модуль должен остаться включённым': 'At least one module must stay on',
   'Ничего не играет': 'Nothing playing',

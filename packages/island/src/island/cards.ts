@@ -10,9 +10,9 @@ import { TRACKS, type ToolKind } from '../stub';
 import type { WorkFx } from './fx';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
-import { minsText } from './focus';
+import { MODULE_COL, minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
-import { drawGlyph, modules, prIcon, type ModuleItem } from './modules';
+import { deployDot, drawGlyph, modules, prIcon, type ModuleItem } from './modules';
 
 /** proto: QUESTION */
 export const QUESTION: readonly [string, readonly string[]] = [
@@ -82,6 +82,41 @@ function commitsWord(s: IslandState, n: number): string {
       : ' коммитов';
 }
 
+/** Not in the prototype (docs/CHANGES.md): coucou's card head - a dot in the module colour, the name, "Деплои", an arrow to vercel.com. */
+function deployHead(s: IslandState, c: Ctx, name: string, tx: number, y0: number, x1: number): void {
+  c.fillStyle = MODULE_COL.vercel.body;
+  c.beginPath();
+  c.arc(tx + 4, y0 + 18, 4, 0, Math.PI * 2);
+  c.fill();
+  textAt(c, name, tx + 14, y0 + 18.5, { size: 13, weight: 600 });
+  c.save();
+  c.font = '600 13px Onest, system-ui, sans-serif';
+  const nw = c.measureText(name).width;
+  c.restore();
+  textAt(c, tr(s, 'Деплои'), tx + 20 + nw, y0 + 18.5, { size: 12, weight: 400, color: T_MUTED });
+  const top = s.vercel && s.vercel.auth === 'ok' ? s.vercel.rows[0] : undefined;
+  if (!top) return;
+  const bx = x1 - 20,
+    by = y0 + 17,
+    hov = hovering(s, bx - 11, by - 11, 22, 22);
+  c.fillStyle = hov ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.09)';
+  c.beginPath();
+  c.arc(bx, by, 11, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = hov ? '#FFFFFF' : 'rgba(255,255,255,0.6)';
+  c.lineWidth = 1.4;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(bx - 3.5, by + 3.5);
+  c.lineTo(bx + 3.5, by - 3.5);
+  c.moveTo(bx - 2, by - 3.5);
+  c.lineTo(bx + 3.5, by - 3.5);
+  c.lineTo(bx + 3.5, by + 2);
+  c.stroke();
+  addHit(s, c, { x: bx - 11, y: by - 11, w: 22, h: 22, act: 'vercel:' + top.id });
+}
+
 /** proto: drawFocusCard - the large card of the module in focus */
 export function drawFocusCard(
   s: IslandState,
@@ -98,8 +133,11 @@ export function drawFocusCard(
   cardMascot(s, c, x0, y0, y1, f, f === 'claude' ? fx : null, propFor(s, f));
   const tx = x0 + 84,
     tmax = x1 - tx - 10;
-  drawGlyph(s, c, it, tx + 6, y0 + 18, 5.5);
-  textAt(c, it.name, tx + 17, y0 + 18.5, { size: 13, weight: 600, max: tmax - 17 });
+  if (it.kind === 'deploy') deployHead(s, c, it.name, tx, y0, x1);
+  else {
+    drawGlyph(s, c, it, tx + 6, y0 + 18, 5.5);
+    textAt(c, it.name, tx + 17, y0 + 18.5, { size: 13, weight: 600, max: tmax - 17 });
+  }
   const L = (i: number, str: string, color?: string, mono?: boolean): void =>
     textAt(c, str, tx, y0 + 40 + i * 18, {
       size: mono ? 11 : 11.5,
@@ -177,6 +215,33 @@ export function drawFocusCard(
       color: T_MUTED,
       max: tmax - CM.length * (bw + bg) - 6,
     });
+  } else if (it.kind === 'deploy' && s.vercel) {
+    // not in the prototype (docs/CHANGES.md): the newest deployments, as coucou's card
+    const vc = s.vercel;
+    if (vc.auth !== 'ok' || !vc.rows.length) {
+      L(0, vc.hint[0], '#FFFFFF');
+      if (vc.hint[1]) L(1, vc.hint[1], T_MUTED);
+    } else
+      vc.rows.forEach((r, i) => {
+        const y = y0 + 40 + i * 18;
+        if (i === 0) {
+          c.fillStyle = 'rgba(255,255,255,0.06)';
+          rrect(c, tx - 6, y - 9, tmax + 6, 18, 6);
+          c.fill();
+        }
+        deployDot(c, tx + 3, y + 0.5, 2.6, r.state, s.t);
+        c.save();
+        c.font = '600 11.5px Onest, system-ui, sans-serif';
+        const nw = Math.min(c.measureText(r.name).width, tmax - 60);
+        c.restore();
+        textAt(c, r.name, tx + 12, y + 0.5, {
+          size: 11.5,
+          weight: 600,
+          color: i === 0 ? '#FFFFFF' : 'rgba(255,255,255,0.75)',
+          max: tmax - 60,
+        });
+        textAt(c, r.ago, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED, max: tmax - 18 - nw });
+      });
   } else if (it.kind === 'cal' && s.cal) {
     const cal = s.cal;
     if (cal.mins === null) {

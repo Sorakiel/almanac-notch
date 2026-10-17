@@ -25,6 +25,8 @@ export const MODULE_COL: Readonly<Record<ModuleId, MascotColor>> = {
   cal: { body: '#FFD27A', shade: '#D6A23E', eye: '#16171A' },
   music: { body: '#9EE6B8', shade: '#5DB884', eye: '#16171A' },
   almanac: { body: '#F4A9C6', shade: '#C9708F', eye: '#16171A' },
+  // not in the prototype (docs/CHANGES.md): grey-lilac, the owner's pick
+  vercel: { body: '#C9C3E8', shade: '#918AC0', eye: '#16171A' },
 };
 
 export type ClaudeState = 'work' | 'think' | 'search' | 'ask' | 'question' | 'limit' | 'idle';
@@ -64,9 +66,10 @@ export function habitsDone(s: IslandState): number {
 /** proto: autoFocus */
 export function autoFocus(s: IslandState): ModuleId {
   const ev = s.event && s.event.type,
-    on = (id: ModuleId): boolean => !s.off.includes(id);
+    on = (id: ModuleId): boolean => hasModule(s, id);
   // a real Claude Code session finishing or failing belongs to its own card
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent' && on('claude')) return 'claude';
+  if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'vercel' && on('vercel')) return 'vercel';
   if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
   if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
   if (callMins(s) <= 30 && on('cal')) return 'cal';
@@ -76,7 +79,12 @@ export function autoFocus(s: IslandState): ModuleId {
 }
 
 /** the rest card when nothing is going on; the app keeps at least one module on */
-const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github'];
+const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github', 'vercel'];
+
+/** The module is shown: not switched off, and Vercel only where the app feeds it (not in the prototype). */
+export function hasModule(s: IslandState, id: ModuleId): boolean {
+  return !s.off.includes(id) && (id !== 'vercel' || s.vercel !== null);
+}
 
 /**
  * Not in the prototype (docs/CHANGES.md): a busy Claude (working, thinking, searching) stays on its
@@ -95,7 +103,7 @@ export function busyAside(s: IslandState): boolean {
 
 /** proto: effectiveFocus - also records when the shown card changed */
 export function effectiveFocus(s: IslandState): ModuleId {
-  const f = (s.focusId && !s.off.includes(s.focusId) && s.focusId) || autoFocus(s);
+  const f = (s.focusId && hasModule(s, s.focusId) && s.focusId) || autoFocus(s);
   if (f !== s.shownFocus) {
     s.shownFocus = f;
     s.focusStart = s.t;

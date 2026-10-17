@@ -2,7 +2,7 @@
 import { rrect, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { bodyPath } from '../mascot/shape';
-import { MODULE_COL, callMins, claudeState, type ClaudeState } from './focus';
+import { MODULE_COL, callMins, claudeState, hasModule, type ClaudeState } from './focus';
 
 export type MiniState = ClaudeState | 'fail';
 
@@ -37,7 +37,16 @@ export function miniCrew(s: IslandState): MiniItem[] {
     { id: 'cal', body: MODULE_COL.cal.body, seed: 2, state: callMins(s) <= 5 ? 'ask' : 'idle' },
     { id: 'music', body: MODULE_COL.music.body, seed: 3, state: 'idle' },
   ];
-  return s.off.length ? all.filter((m) => !s.off.includes(m.id)) : all;
+  // not in the prototype (docs/CHANGES.md): Vercel, only where the app feeds it
+  if (s.vercel)
+    all.push({
+      id: 'vercel',
+      body: MODULE_COL.vercel.body,
+      seed: 4,
+      state: s.vercel.auth === 'ok' && s.vercel.state === 'fail' ? 'fail' : s.vercel.state === 'run' ? 'work' : 'idle',
+    });
+  // the ear holds a 2 × 2 crew: with Vercel on, the first four of those switched on
+  return s.off.length || s.vercel ? all.filter((m) => hasModule(s, m.id)).slice(0, 4) : all;
 }
 
 /** proto: drawMini - a tiny flat mascot with its state as a dot */

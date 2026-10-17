@@ -8,6 +8,7 @@
 mod calendar;
 mod claude;
 mod github;
+mod vercel;
 // on Mac only its tests use it: the choice of sources is Windows-only
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 mod ical;
@@ -92,6 +93,7 @@ struct Feeds {
     media: Option<serde_json::Value>,
     volume: Option<f32>,
     github: Option<github::State>,
+    vercel: Option<vercel::State>,
 }
 
 #[derive(Serialize)]
@@ -100,6 +102,7 @@ struct FeedsSnapshot {
     media: Option<serde_json::Value>,
     volume: Option<f32>,
     github: Option<github::State>,
+    vercel: Option<vercel::State>,
 }
 
 #[tauri::command]
@@ -110,6 +113,7 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
         media: f.media.clone(),
         volume: f.volume,
         github: f.github.clone(),
+        vercel: f.vercel.clone(),
     }
 }
 
@@ -124,6 +128,33 @@ async fn github_connect(token: String) -> Result<String, String> {
 #[tauri::command]
 async fn github_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
+}
+
+/// Connect a Vercel token: checked against Vercel, then kept in the keychain. Returns the username.
+#[tauri::command]
+async fn vercel_connect(token: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || vercel::connect(&token))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The card's arrow: open a deployment's page; the URL is looked up here, not sent by the page.
+#[tauri::command]
+fn vercel_open(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
+    let url = feeds.lock().unwrap().vercel.as_ref().and_then(|v| {
+        v.deploys
+            .iter()
+            .find(|d| d.id == id)
+            .and_then(|d| d.url.clone())
+    });
+    if let Some(u) = url {
+        vercel::open(&u);
+    }
+}
+
+#[tauri::command]
+async fn vercel_disconnect() {
+    let _ = tauri::async_runtime::spawn_blocking(vercel::disconnect).await;
 }
 
 /// Calendar source as the settings window shows it.
@@ -184,6 +215,7 @@ fn modules_set(app: AppHandle, off: Vec<String>, chat: bool) -> Result<modules::
     let c = modules::set(off, chat)?;
     let _ = app.emit("island://modules", &c);
     github::poke();
+    vercel::poke();
     calendar::poke();
     Ok(c)
 }
@@ -232,6 +264,11 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     github::start(move |g| {
         f2.lock().unwrap().github = Some(g.clone());
         let _ = app2.emit("island://github", g);
+    });
+    let (app2, f2) = (app.clone(), feeds.clone());
+    vercel::start(move |v| {
+        f2.lock().unwrap().vercel = Some(v.clone());
+        let _ = app2.emit("island://vercel", v);
     });
     let app2 = app.clone();
     media::start(Arc::new(move |name: &str, v: serde_json::Value| {
@@ -377,6 +414,9 @@ pub fn run() {
             set_volume,
             github_connect,
             github_disconnect,
+            vercel_connect,
+            vercel_disconnect,
+            vercel_open,
             calendar_config,
             calendar_choose,
             calendar_access,

@@ -91,6 +91,13 @@
           <span class="name">GitHub<small id="li-github">…</small></span>
           <span class="dot" id="li-github-dot"></span>
         </button>
+        <button class="mod" data-module="vercel">
+          <span class="ico" style="--c: #8e8e93"
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 19H4z" /></svg
+          ></span>
+          <span class="name">Vercel<small id="li-vercel">…</small></span>
+          <span class="dot" id="li-vercel-dot"></span>
+        </button>
         <button class="mod" data-module="almanac">
           <span class="ico" style="--c: #34c759"
             ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" /></svg
@@ -98,6 +105,7 @@
           <span class="name">Almanac<small id="li-almanac">…</small></span>
           <span class="dot" id="li-almanac-dot"></span>
         </button>
+        <p class="list-note">Кроме Claude Code включено не больше 4 модулей</p>
       </aside>
       <div class="detail">
         <main id="claude">
@@ -235,6 +243,48 @@
               Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и
               время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в
               связке ключей системы и не попадает ни в файлы, ни в остров.
+            </p>
+          </section>
+        </main>
+        <main id="vercel" hidden>
+          <h2>Vercel</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="vercel"
+          /></label>
+          <p class="status"><span class="dot" id="vc-dot"></span><span id="vc-status">…</span></p>
+
+          <section id="vc-connect">
+            <label for="vc-token">Токен доступа</label>
+            <div class="row">
+              <input
+                id="vc-token"
+                type="password"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="Токен Vercel"
+              />
+              <button id="vc-go" class="primary">Подключить</button>
+            </div>
+            <p class="note" id="vc-error" role="alert"></p>
+          </section>
+
+          <section id="vc-connected" hidden>
+            <button id="vc-off">Отключить</button>
+          </section>
+
+          <section class="help">
+            <h3>Как получить токен</h3>
+            <ol>
+              <li>Откройте vercel.com → Account Settings → Tokens → Create Token.</li>
+              <li>Scope: личный аккаунт или команда, срок - на ваш выбор.</li>
+            </ol>
+            <h3>Что читается и куда уходит</h3>
+            <p>
+              Имя пользователя, список команд и последние деплои ваших проектов: название проекта, состояние сборки,
+              продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на
+              api.vercel.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не
+              попадает ни в файлы, ни в остров.
             </p>
           </section>
         </main>

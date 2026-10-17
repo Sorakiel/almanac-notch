@@ -141,3 +141,36 @@ describe('switched-off modules (the app, stage 7)', () => {
     expect(effectiveFocus(s)).not.toBe('music');
   });
 });
+
+describe('Vercel (the app, stage 8)', () => {
+  const feed = (state: 'run' | 'fail' | 'ok' | 'none') => ({
+    auth: 'ok' as const,
+    state,
+    rows: [{ id: 'd1', name: 'site', state: 'ok' as const, ago: '2 ч' }],
+    short: 'деплой готов',
+    hint: ['', ''] as [string, string],
+  });
+  it('no feed: no module, the prototype is untouched', () => {
+    const s = make();
+    s.focusId = 'vercel';
+    expect(modules(s).map((m) => m.id)).not.toContain('vercel');
+    expect(miniCrew(s)).toHaveLength(4);
+    expect(effectiveFocus(s)).not.toBe('vercel');
+  });
+  it('with a feed: the sixth module, its own events, can be switched off', () => {
+    const s = make();
+    s.vercel = feed('fail');
+    expect(modules(s).map((m) => m.id)).toEqual(['claude', 'github', 'cal', 'music', 'almanac', 'vercel']);
+    expect(modules(s)[5]?.state).toBe('fail');
+    // the ear's 2 × 2 crew takes the first four switched on
+    expect(miniCrew(s).map((m) => m.state)).not.toContain('fail');
+    s.off = ['music'];
+    expect(miniCrew(s).map((m) => m.state)).toContain('fail');
+    s.off = [];
+    s.event = { ...ev('success'), src: 'vercel' };
+    expect(autoFocus(s)).toBe('vercel');
+    s.off = ['vercel'];
+    expect(autoFocus(s)).toBe('github');
+    expect(modules(s).map((m) => m.id)).not.toContain('vercel');
+  });
+});

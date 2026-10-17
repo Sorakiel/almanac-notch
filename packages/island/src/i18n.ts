@@ -159,6 +159,19 @@ export const EN: Readonly<Record<string, string>> = {
   'упал: {0}': 'failed: {0}',
   упал: 'failed',
   'CI упал': 'CI failed',
+  // Vercel (apps/desktop/src/feeds.ts, island/cards.ts)
+  'Настройки → Vercel': 'Settings → Vercel',
+  'Vercel не подключён': 'Vercel not connected',
+  'Vercel не принял токен': 'Vercel rejected the token',
+  'Нет связи с Vercel': 'No connection to Vercel',
+  'деплоев пока нет': 'no deployments yet',
+  'нет деплоев': 'no deploys',
+  '{0} дн': '{0} d',
+  'деплой идёт': 'deploying',
+  'деплой готов': 'deploy ready',
+  'деплой отменён': 'deploy canceled',
+  'Деплой готов': 'Deploy ready',
+  Деплои: 'Deploys',
 };
 
 function fill(text: string, args: readonly (string | number)[]): string {

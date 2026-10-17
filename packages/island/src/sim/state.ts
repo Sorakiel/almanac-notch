@@ -26,8 +26,8 @@ export interface MascotEvent {
   label?: string;
   answer?: 'approve' | 'deny' | 'opt';
   answerAt?: number;
-  /** set by real Claude Code sessions: success and error then belong to the claude card */
-  src?: 'agent';
+  /** set by real Claude Code sessions and Vercel: success and error then belong to that card */
+  src?: 'agent' | 'vercel';
 }
 
 /**
@@ -118,6 +118,23 @@ export interface GithubFeed {
   hint: [string, string];
 }
 
+/**
+ * Live Vercel data (stage 8, not in the prototype). Null = no Vercel module at all (harness,
+ * parity): the module exists only in the app. The newest deployment of my projects.
+ */
+export interface VercelFeed {
+  /** "off" no token, "bad" the token was refused, "ok" data is shown */
+  auth: 'off' | 'bad' | 'ok';
+  /** newest deployment; "none" = no deployments yet */
+  state: 'run' | 'fail' | 'ok' | 'none';
+  /** the card's rows, newest first (at most three): project, state dot, "2 ч" */
+  rows: { id: string; name: string; state: 'run' | 'fail' | 'ok' | 'off'; ago: string }[];
+  /** the rail's, chips' and ears' short text */
+  short: string;
+  /** the card's two lines while there is nothing to show (no token, refused, no deployments) */
+  hint: [string, string];
+}
+
 export interface Particle {
   type: 'bit' | 'note' | 'z';
   color: string | undefined;
@@ -191,7 +208,7 @@ export const DEFAULT_THEME: Theme = {
 };
 
 export type Tab = 'home' | 'chat' | 'add' | 'settings';
-export type ModuleId = 'claude' | 'github' | 'cal' | 'music' | 'almanac';
+export type ModuleId = 'claude' | 'github' | 'cal' | 'music' | 'almanac' | 'vercel';
 
 /**
  * Everything the prototype kept in closure-level `let`s. Time only moves in update(dt),
@@ -234,6 +251,7 @@ export interface IslandState {
   cal: CalFeed | null;
   media: MediaFeed | null;
   github: GithubFeed | null;
+  vercel: VercelFeed | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
@@ -346,6 +364,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     cal: null,
     media: null,
     github: null,
+    vercel: null,
     requests: [],
     settingsLink: false,
     off: [],

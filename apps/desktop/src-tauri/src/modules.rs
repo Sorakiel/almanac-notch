@@ -1,6 +1,8 @@
 //! Modules the user switched off in settings, and the chat tab (stage 7). A switched-off module
 //! reads nothing it would need the network or a system API for, and the island hides it.
-//! At least one module always stays on. Stored in `<app data>/modules.json`.
+//! At least one module always stays on. Like coucou, Claude Code is the main module and takes no
+//! slot; at most `MAX_ON` of the others are on, so the island's 2 × 2 grid always fits them.
+//! Stored in `<app data>/modules.json`.
 
 use std::fs;
 use std::sync::RwLock;
@@ -8,7 +10,19 @@ use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 
 /// The island's module ids (packages/island ModuleId).
-pub const ALL: [&str; 5] = ["claude", "cal", "music", "github", "almanac"];
+pub const ALL: [&str; 6] = ["claude", "cal", "music", "github", "almanac", "vercel"];
+
+/// The main module: never counted against `MAX_ON`.
+const MAIN: &str = "claude";
+/// Modules on besides the main one (coucou's MAX_DECLARED).
+pub const MAX_ON: usize = 4;
+
+/// Modules on besides the main one.
+fn others_on(off: &[String]) -> usize {
+    ALL.iter()
+        .filter(|id| **id != MAIN && !off.iter().any(|o| o == *id))
+        .count()
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
@@ -20,8 +34,9 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        // a new module starts off: the prototype's five stay as they were
         Config {
-            off: Vec::new(),
+            off: vec!["vercel".into()],
             chat: true,
         }
     }
@@ -33,18 +48,24 @@ fn path() -> std::path::PathBuf {
     almanac_hook::paths::app_dir().join("modules.json")
 }
 
-/// Unknown ids are dropped; an "everything off" file falls back to everything on.
+/// Unknown ids are dropped; an "everything off" file falls back to everything on; too many on
+/// (a file from before a module was added) switches off the newest ones.
 fn clean(c: Config) -> Config {
-    let off: Vec<String> = c
+    let mut off: Vec<String> = c
         .off
         .into_iter()
         .filter(|id| ALL.contains(&id.as_str()))
         .collect();
     if off.len() >= ALL.len() {
-        return Config {
-            off: Vec::new(),
-            chat: c.chat,
-        };
+        off.clear();
+    }
+    for id in ALL.iter().rev() {
+        if others_on(&off) <= MAX_ON {
+            break;
+        }
+        if *id != MAIN && !off.iter().any(|o| o == id) {
+            off.push((*id).to_owned());
+        }
     }
     Config { off, chat: c.chat }
 }
@@ -81,6 +102,13 @@ pub fn set(off: Vec<String>, chat: bool) -> Result<Config, String> {
         )
         .into());
     }
+    if others_on(&off) > MAX_ON {
+        return Err(crate::lang::t(
+            "Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один",
+            "Besides Claude Code, at most 4 modules can be on - switch one off first",
+        )
+        .into());
+    }
     let c = Config { off, chat };
     fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(|e| e.to_string())?;
     fs::write(
@@ -105,7 +133,7 @@ mod tests {
                 chat: false
             }),
             Config {
-                off: Vec::new(),
+                off: vec!["vercel".into()],
                 chat: false
             }
         );
@@ -114,5 +142,22 @@ mod tests {
             chat: true,
         });
         assert_eq!(c.off, vec!["github".to_string()]);
+    }
+
+    #[test]
+    fn at_most_four_besides_claude() {
+        // a file from before Vercel: everything on -> the newest module goes off
+        let c = clean(Config {
+            off: Vec::new(),
+            chat: true,
+        });
+        assert_eq!(c.off, vec!["vercel".to_string()]);
+        assert_eq!(Config::default().off, vec!["vercel".to_string()]);
+        // Claude off does not free a fifth slot
+        let c = clean(Config {
+            off: vec!["claude".into()],
+            chat: true,
+        });
+        assert_eq!(c.off, vec!["claude".to_string(), "vercel".to_string()]);
     }
 }

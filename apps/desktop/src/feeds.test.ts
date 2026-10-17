@@ -4,6 +4,8 @@ import {
   CalDriver,
   GithubDriver,
   MediaDriver,
+  VercelDriver,
+  agoText,
   artSeed,
   calFeed,
   commitDays,
@@ -12,7 +14,13 @@ import {
   type Calendar,
   type GhRepo,
   type GhState,
+  type VcDeploy,
+  type VcState,
 } from './feeds';
+import { vercelFeed } from './feeds';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { EN } from '@almanac-notch/island';
 
 const T0 = new Date(2026, 9, 14, 14, 30).getTime(); // local 14:30
 const min = 60_000;
@@ -293,5 +301,79 @@ describe('feeds in English', () => {
     expect(calFeed(null, now, 'en').title).toBe('Calendar unavailable');
     expect(githubFeed(null, now, 'en').hint).toEqual(['GitHub not connected', 'Settings → GitHub']);
     expect(githubFeed(null, now).hint).toEqual(['GitHub не подключён', 'Настройки → GitHub']);
+  });
+});
+
+describe('vercel feed', () => {
+  const dep = (o: Partial<VcDeploy> = {}): VcDeploy => ({
+    id: 'dpl_1',
+    project: 'almanac-site',
+    state: 'ready',
+    created: T0 - 10 * min,
+    done: T0 - 8 * min,
+    target: 'production',
+    branch: 'main',
+    ...o,
+  });
+  const vc = (deploys: VcDeploy[], o: Partial<VcState> = {}): VcState => ({ auth: 'ok', user: 'sora', deploys, ...o });
+  const mascot = () => createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+
+  it('no token, a refused one, no answer: say why and where to connect', () => {
+    expect(vercelFeed(null, T0).hint).toEqual(['Vercel не подключён', 'Настройки → Vercel']);
+    expect(vercelFeed(vc([], { auth: 'bad', user: null }), T0).auth).toBe('bad');
+    expect(vercelFeed(vc([], { auth: 'net', user: null }), T0).hint[0]).toBe('Нет связи с Vercel');
+    expect(vercelFeed(vc([]), T0)).toMatchObject({ short: 'нет деплоев', hint: ['деплоев пока нет', ''], rows: [] });
+  });
+  it('the three newest deployments: dot, project, compact age', () => {
+    const f = vercelFeed(
+      vc([
+        dep({ id: 'a', state: 'building', created: T0 - 2 * min, done: null }),
+        dep({ id: 'b', done: T0 - 2 * 3600_000 }),
+        dep({ id: 'c', project: 'carcosa-guide', state: 'error', done: T0 - 6 * 86_400_000 }),
+        dep({ id: 'd' }),
+      ]),
+      T0,
+    );
+    expect(f.state).toBe('run');
+    expect(f.short).toBe('деплой идёт');
+    expect(f.rows.map((r) => [r.name, r.state, r.ago])).toEqual([
+      ['almanac-site', 'run', '2 мин'],
+      ['almanac-site', 'ok', '2 ч'],
+      ['carcosa-guide', 'fail', '6 дн'],
+    ]);
+    expect(vercelFeed(vc([dep()]), T0, 'en').rows[0]?.ago).toBe('8 min');
+    expect(agoText(T0, T0, 'en')).toBe('now');
+    expect(agoText(T0 - 3 * 86_400_000, T0, 'en')).toBe('3 d');
+  });
+  it('driver: no event on the first read; building to ready or error is one, on the Vercel card', () => {
+    const m = mascot();
+    const d = new VercelDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(vc([dep({ state: 'error' })]));
+    expect(m.state.event).toBeNull();
+    d.onState(vc([dep({ id: 'dpl_2', state: 'building', created: T0, done: null })]));
+    expect(m.state.event).toBeNull();
+    d.onState(vc([dep({ id: 'dpl_2', state: 'ready', created: T0, done: T0 })]));
+    expect(m.state.event?.type).toBe('success');
+    expect(m.state.event?.src).toBe('vercel');
+    expect(m.state.event?.label).toBe('Деплой готов · almanac-site');
+    m.state.event = null;
+    // built entirely between two reads: still an event, since it was made after the first read
+    d.onState(vc([dep({ id: 'dpl_3', state: 'error', created: T0 + min })]));
+    expect((m.state.event as { type: string } | null)?.type).toBe('error');
+  });
+  it('driver: an old deployment seen for the first time, or canceled, is not an event', () => {
+    const m = mascot();
+    const d = new VercelDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(vc([]));
+    d.onState(vc([dep({ id: 'old', created: T0 - 60 * min })]));
+    d.onState(vc([dep({ id: 'x', state: 'canceled', created: T0 + min })]));
+    expect(m.state.event).toBeNull();
+  });
+  it('every Russian string of feeds.ts has an English line', () => {
+    const code = readFileSync(join(__dirname, 'feeds.ts'), 'utf8').replace(/^\s*(\/\/|\*|\/\*).*$/gm, '');
+    const missing = [...code.matchAll(/'([^'\n]*[А-Яа-яЁё][^'\n]*)'/g)]
+      .map((x) => x[1] as string)
+      .filter((x) => !(x in EN) && !/^(вс|пн|вт|ср|чт|пт|сб)$/.test(x));
+    expect(missing).toEqual([]);
   });
 });

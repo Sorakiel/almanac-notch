@@ -7,7 +7,7 @@ import '@fontsource/onest/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Calendar, GhState } from './feeds';
+import type { Calendar, GhState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -24,7 +24,8 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 
 // the last data of each section: a language switch draws them again
 let lastG: GhState | null = null,
-  lastCal: Calendar | null = null;
+  lastCal: Calendar | null = null,
+  lastV: VcState | null = null;
 
 function render(g: GhState | null): void {
   lastG = g;
@@ -67,6 +68,47 @@ input.addEventListener('keydown', (e) => {
 });
 off.addEventListener('click', () => void invoke('github_disconnect'));
 
+// ---------- Vercel (stage 8) ----------
+const vcInput = $<HTMLInputElement>('vc-token'),
+  vcGo = $<HTMLButtonElement>('vc-go'),
+  vcErr = $('vc-error');
+function renderVercel(v: VcState | null): void {
+  lastV = v;
+  const on = !!v && v.auth !== 'off' && v.auth !== 'bad' && !!v.user;
+  $('vc-connect').hidden = on;
+  $('vc-connected').hidden = !on;
+  $('vc-dot').className = 'dot' + (on ? ' ok' : v && v.auth === 'bad' ? ' bad' : '');
+  $('vc-status').textContent =
+    on && v
+      ? '@' +
+        (v.user ?? '') +
+        ' · ' +
+        count(v.deploys.length, ['проект', 'проекта', 'проектов'], ['project', 'projects']) +
+        (v.auth === 'net' ? t(' · нет связи') : '')
+      : v && v.auth === 'bad'
+        ? t('Vercel не принял сохранённый токен')
+        : t('Не подключён');
+}
+async function vcConnect(): Promise<void> {
+  const token = vcInput.value.trim();
+  if (!token) return;
+  vcGo.disabled = true;
+  vcErr.textContent = '';
+  try {
+    await invoke<string>('vercel_connect', { token });
+    vcInput.value = '';
+  } catch (e) {
+    vcErr.textContent = String(e);
+  } finally {
+    vcGo.disabled = false;
+  }
+}
+vcGo.addEventListener('click', () => void vcConnect());
+vcInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void vcConnect();
+});
+$('vc-off').addEventListener('click', () => void invoke('vercel_disconnect'));
+
 // ---------- tabs and the module list (Raycast-like) ----------
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tab')],
   mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
@@ -94,6 +136,7 @@ const STATUS: Record<string, [string, string]> = {
   calendar: ['cal-status', 'cal-dot'],
   music: ['music-status', 'music-dot'],
   github: ['status-text', 'dot'],
+  vercel: ['vc-status', 'vc-dot'],
 };
 for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   const copy = (): void => {
@@ -121,6 +164,7 @@ const MOD_OF: Record<string, string> = {
   music: 'music',
   github: 'github',
   almanac: 'almanac',
+  vercel: 'vercel',
 };
 let modCfg: Modules = { off: [], chat: true };
 let toastTimer = 0;
@@ -139,6 +183,12 @@ function renderModules(c: Modules): void {
 async function saveModules(next: Modules): Promise<void> {
   if (Object.values(MOD_OF).every((id) => next.off.includes(id))) {
     say(t('Хотя бы один модуль должен остаться включённым'));
+    renderModules(modCfg);
+    return;
+  }
+  // like coucou: Claude Code is the main module, at most 4 others (modules.rs MAX_ON)
+  if (Object.values(MOD_OF).filter((id) => id !== 'claude' && !next.off.includes(id)).length > 4) {
+    say(t('Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один'));
     renderModules(modCfg);
     return;
   }
@@ -307,6 +357,7 @@ $('quit').addEventListener('click', () => act('quit'));
 window.addEventListener('focus', () => void refreshIsland());
 
 render(null);
+renderVercel(null);
 renderCal(null);
 renderIsland({ state: 'auto', hooks: false });
 renderMusic(null);
@@ -327,6 +378,7 @@ function renderLang(c: LangCfg): void {
       : 'Mac: любой плеер из «Исполняется» в Пункте управления, включая браузеры.',
   );
   render(lastG);
+  renderVercel(lastV);
   renderCal(lastCal);
   renderMusic(lastMusic);
   renderIsland(lastIsland);
@@ -340,8 +392,15 @@ renderLang({ pick: 'auto', lang: 'ru' });
 if (inTauri) {
   await listen<Calendar>('island://calendar', (e) => renderCal(e.payload));
   await listen<GhState>('island://github', (e) => render(e.payload));
-  const f = await invoke<{ github: GhState | null; calendar: Calendar | null; media: MediaNow | null }>('feeds_state');
+  await listen<VcState>('island://vercel', (e) => renderVercel(e.payload));
+  const f = await invoke<{
+    github: GhState | null;
+    vercel: VcState | null;
+    calendar: Calendar | null;
+    media: MediaNow | null;
+  }>('feeds_state');
   render(f.github);
+  renderVercel(f.vercel);
   renderMusic(f.media);
   await listen<MediaNow>('island://media', (e) => renderMusic(e.payload));
   renderCal(f.calendar);

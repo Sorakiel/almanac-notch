@@ -10,6 +10,7 @@ import {
   type IslandState,
   type Lang,
   type MediaFeed,
+  type VercelFeed,
 } from '@almanac-notch/island';
 import { clip } from './agent';
 
@@ -515,6 +516,144 @@ export class GithubDriver {
       this.pending = null;
       this.m.trigger(p.type);
       if (this.s.event) this.s.event.label = p.label;
+    }
+  }
+}
+
+// ---------- vercel ----------
+/** `island://vercel` (src-tauri/src/vercel.rs). */
+export interface VcDeploy {
+  id: string;
+  project: string;
+  state: 'building' | 'ready' | 'error' | 'canceled';
+  /** epoch ms */
+  created: number;
+  /** finished, epoch ms; null while building */
+  done: number | null;
+  target: 'production' | 'preview';
+  branch: string | null;
+}
+
+export interface VcState {
+  auth: 'off' | 'ok' | 'bad' | 'net';
+  user: string | null;
+  /** one per project, newest first */
+  deploys: VcDeploy[];
+}
+
+/** "сейчас", "5 мин", "2 ч", "6 дн" - the card's compact age, as coucou's "2h" */
+export function agoText(t: number, now: number, lang: Lang = 'ru'): string {
+  const L = { lang },
+    min = Math.floor(Math.max(0, now - t) / 60_000);
+  if (min < 1) return tr(L, 'сейчас');
+  if (min < 60) return tr(L, '{0} мин', min);
+  const h = Math.floor(min / 60);
+  return h < 24 ? tr(L, '{0} ч', h) : tr(L, '{0} дн', Math.floor(h / 24));
+}
+
+const VC_HINT = 'Настройки → Vercel';
+const VC_STATE = { building: 'run', ready: 'ok', error: 'fail', canceled: 'off' } as const;
+
+/** Not in the prototype (docs/CHANGES.md): the Vercel card - the three newest deployments, as in coucou. */
+export function vercelFeed(v: VcState | null, now: number, lang: Lang = 'ru'): VercelFeed {
+  const L = { lang };
+  const empty = (hint: [string, string], short: string): VercelFeed => ({
+    auth: v && v.auth === 'bad' ? 'bad' : 'off',
+    state: 'none',
+    rows: [],
+    short: tr(L, short),
+    hint: [tr(L, hint[0]), tr(L, hint[1])],
+  });
+  if (!v || v.auth === 'off') return empty(['Vercel не подключён', VC_HINT], 'нет токена');
+  if (v.auth === 'bad') return empty(['Vercel не принял токен', VC_HINT], 'токен не принят');
+  if (!v.user) return empty(['Нет связи с Vercel', 'попробую снова через минуту'], 'нет связи');
+  const d = v.deploys[0];
+  const st = d ? VC_STATE[d.state] : 'off';
+  return {
+    auth: 'ok',
+    state: st === 'off' ? 'none' : st,
+    rows: v.deploys.slice(0, 3).map((x) => ({
+      id: x.id,
+      name: clip(x.project, 22),
+      state: VC_STATE[x.state],
+      ago: agoText(x.state === 'building' ? x.created : (x.done ?? x.created), now, lang),
+    })),
+    short: d
+      ? tr(
+          L,
+          { building: 'деплой идёт', ready: 'деплой готов', error: 'деплой упал', canceled: 'деплой отменён' }[d.state],
+        )
+      : tr(L, 'нет деплоев'),
+    hint: [tr(L, d ? '' : 'деплоев пока нет'), ''],
+  };
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): a deployment turning ready or failed is the island's
+ * success or error, on the Vercel card. The first read after start only seeds what was already so.
+ */
+export class VercelDriver {
+  private v: VcState | null = null;
+  private lastMin = -1;
+  private lang: Lang = 'ru';
+  /** deployment id -> last state; null until the first read */
+  private seen: Map<string, VcDeploy['state']> | null = null;
+  /** when the first read came: a project deployed for the first time after it still counts */
+  private since = 0;
+  private pending: { type: EventType; label: string } | null = null;
+  constructor(
+    private s: IslandState,
+    private m: { trigger: (t: EventType) => void },
+    private now: () => number,
+  ) {
+    s.vercel = vercelFeed(null, now());
+  }
+
+  onState(v: VcState): void {
+    let hit: { type: EventType; label: string } | null = null;
+    if (v.user) {
+      const first = this.seen === null,
+        seen = this.seen ?? new Map<string, VcDeploy['state']>();
+      if (first) this.since = this.now();
+      for (const d of v.deploys) {
+        const was = seen.get(d.id);
+        seen.set(d.id, d.state);
+        if (first || was === d.state || (d.state !== 'ready' && d.state !== 'error')) continue;
+        // a deployment we never saw building: only if it was made after we started watching
+        if (was === undefined && d.created < this.since) continue;
+        const type: EventType = d.state === 'ready' ? 'success' : 'error';
+        if (!hit || type === 'error')
+          hit = {
+            type,
+            label: tr(this.s, type === 'success' ? 'Деплой готов' : 'Деплой упал') + ' · ' + clip(d.project, 12),
+          };
+      }
+      this.seen = seen;
+    } else if (v.auth === 'off' || v.auth === 'bad') this.seen = null;
+    this.v = v;
+    this.lastMin = -1;
+    if (hit) this.pending = hit;
+    this.tick();
+  }
+
+  /** Per frame: the relative times, a waiting deploy event. */
+  tick(): void {
+    const now = this.now(),
+      min = Math.floor(now / 60_000);
+    if (min !== this.lastMin || this.s.lang !== this.lang) {
+      this.lastMin = min;
+      this.lang = this.s.lang;
+      this.s.vercel = vercelFeed(this.v, now, this.lang);
+    }
+    const p = this.pending,
+      ev = this.s.event;
+    if (p && !(ev && PROMPTS.includes(ev.type))) {
+      this.pending = null;
+      this.m.trigger(p.type);
+      if (this.s.event) {
+        this.s.event.label = p.label;
+        this.s.event.src = 'vercel';
+      }
     }
   }
 }

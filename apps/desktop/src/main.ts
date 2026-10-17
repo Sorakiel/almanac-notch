@@ -27,7 +27,16 @@ import {
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
-import { CalDriver, GithubDriver, MediaDriver, type Calendar, type GhState, type MediaMsg } from './feeds';
+import {
+  CalDriver,
+  GithubDriver,
+  MediaDriver,
+  VercelDriver,
+  type Calendar,
+  type GhState,
+  type MediaMsg,
+  type VcState,
+} from './feeds';
 
 interface Geometry {
   hasNotch: boolean;
@@ -189,12 +198,14 @@ let agent: AgentDriver | null = null;
 let cal: CalDriver | null = null;
 let media: MediaDriver | null = null;
 let github: GithubDriver | null = null;
+let vercel: VercelDriver | null = null;
 
 interface Feeds {
   calendar: Calendar | null;
   media: MediaMsg | null;
   volume: number | null;
   github: GhState | null;
+  vercel: VcState | null;
 }
 
 async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
@@ -206,7 +217,7 @@ async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
   }
 }
 
-const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac'];
+const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac', 'vercel'];
 
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
@@ -261,6 +272,11 @@ if (inTauri) {
     wake();
     github?.onState(e.payload);
   });
+  vercel = new VercelDriver(s, m, Date.now);
+  await listen<VcState>('island://vercel', (e) => {
+    wake();
+    vercel?.onState(e.payload);
+  });
   // modules switched off in settings and the chat tab (stage 7)
   const applyModules = (c: { off: string[]; chat: boolean }): void => {
     s.off = c.off.filter((id): id is ModuleId => MODULE_IDS.includes(id as ModuleId));
@@ -283,6 +299,7 @@ if (inTauri) {
   applyLang(await invoke('lang_get'));
   const f = await invoke<Feeds>('feeds_state');
   if (f.github) github.onState(f.github);
+  if (f.vercel) vercel.onState(f.vercel);
   if (f.calendar) cal.onCalendar(f.calendar);
   if (f.media) media.onMessage(f.media);
   media.onVolume(f.volume);
@@ -346,8 +363,10 @@ function tick(now: number, id: number): void {
   cal?.tick();
   media?.tick();
   github?.tick();
+  vercel?.tick();
   for (const r of s.requests.splice(0))
     if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
+    else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();
