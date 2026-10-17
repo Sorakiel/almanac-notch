@@ -5,7 +5,8 @@
 ## Сейчас
 - Этап: 7 (Windows) - код написан, ветка `stage-7-windows`. Проверен только `cargo check`/`clippy --target x86_64-pc-windows-msvc` и сборка `.app` на Mac. **Живой запуск на Windows не делался**: у владельца есть Windows-машина, ждём его проверки (что смотреть - в отчёте этапа и в «Не проверено» ниже).
 - Репозиторий публичный: https://github.com/Sorakiel/almanac-notch, запушены все ветки (2026-10-17, по просьбе владельца). `master` - только каркас этапа 0, вся работа в `stage-7-windows`.
-- Открыто: строка CHANGES 2026-10-17 про тексты карточки календаря на Windows ждёт ответа.
+- Открыто: строка CHANGES 2026-10-17 про тексты карточки календаря на Windows ждёт ответа. Проверку на Windows владелец сделает позже (`npm run installer`, инструкция в README) - этап 7 формально не принят, владелец разрешил идти к этапу 8 параллельно (2026-10-18).
+- `npm run installer` (корень) собирает релиз для своей ОС и кладёт в `release/`: Windows - `Almanac Notch Setup.exe`, Mac - `Almanac Notch.app` (проверено на Mac). Релизная сборка на Mac раньше не собиралась: `strip = true` портил proc-macro библиотеки (dlopen: «mis-aligned LINKEDIT string pool») - в Cargo.toml `[profile.release.build-override] strip = false`.
 - Решение владельца 2026-10-15 (всё из трея доступно без трея) закрыто 2026-10-17: в острове строка «Все настройки ›», окно настроек как в Raycast (вкладки «Общие» и «Модули»).
 - Ветки: `stage-0-scaffold` (от `master`), `stage-1-window`, `stage-2a-mascot`, `stage-2b-island`, `stage-2c-cards`, `stage-2d-parity`, `stage-3-window`, `stage-4-claude`, `stage-5-cal-music`, `stage-6-github`, `stage-7-windows` - каждая от предыдущей. Не запушены, PR не созданы, в `master` ничего не влито.
 
