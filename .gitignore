@@ -6,3 +6,4 @@ target/
 *.log
 .env*
 .claude/settings.local.json
+release/

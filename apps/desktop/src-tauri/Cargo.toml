@@ -57,3 +57,8 @@ base64 = "0.22"
 lto = true
 codegen-units = 1
 strip = true
+
+# Proc macros and build scripts run inside the compiler: a stripped proc-macro dylib does not
+# load on current macOS ("mis-aligned LINKEDIT string pool"). Strip only the app itself.
+[profile.release.build-override]
+strip = false

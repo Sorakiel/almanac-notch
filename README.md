@@ -13,15 +13,32 @@
 
 ## Запуск и сборка
 
-Нужны Node 22+, Rust (rustup) и зависимости Tauri 2 для своей системы: на Mac - Xcode Command Line Tools, на Windows - Visual Studio Build Tools (C++) и WebView2 (в Windows 11 уже есть).
+### Windows: проверить с нуля
 
-```
-npm install
-npm run desktop:dev                        # приложение в режиме разработки
-cd apps/desktop && npx tauri build         # Mac: .app, Windows: установщик NSIS
-```
+1. Поставить один раз:
+   - [Git](https://git-scm.com/download/win), [Node.js 22+](https://nodejs.org) (LTS);
+   - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) - в установщике отметить «Разработка классических приложений на C++»;
+   - [Rust](https://rustup.rs) - `rustup-init.exe`, всё по умолчанию.
+   WebView2 в Windows 10/11 уже есть.
+2. В новом окне PowerShell:
 
-Установщик Windows - `apps/desktop/src-tauri/target/release/bundle/nsis/Almanac Notch_*_x64-setup.exe`. Ставится без прав администратора. Подписи пока нет: SmartScreen попросит «Подробнее → Выполнить в любом случае».
+   ```
+   git clone -b stage-7-windows https://github.com/Sorakiel/almanac-notch.git
+   cd almanac-notch
+   npm install
+   npm run installer
+   ```
+
+   Первая сборка идёт 10-20 минут. В конце: `[installer] ready: ...\release\Almanac Notch Setup.exe`.
+3. Запустить `release\Almanac Notch Setup.exe`. Прав администратора не нужно. Подписи пока нет: SmartScreen спросит - «Подробнее» → «Выполнить в любом случае».
+
+Без установщика, в режиме разработки (с логом в консоли): `npm run desktop:dev`.
+
+### Mac
+
+Нужны Node 22+, Rust и Xcode Command Line Tools (`xcode-select --install`). `npm install`, потом `npm run desktop:dev` или `npm run installer` - готовое приложение появится в `release/Almanac Notch.app`.
+
+`release/` и `apps/desktop/src-tauri/target/` - результаты сборки, их нет в git: они появляются после сборки.
 
 ## Прототип
 
