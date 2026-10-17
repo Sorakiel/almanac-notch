@@ -13,12 +13,17 @@ export type ModuleItem =
   | { id: 'cal'; kind: 'cal'; name: string; mins: number; short: string; state?: undefined }
   | { id: 'music'; kind: 'music'; name: string; playing: boolean; short: string; state?: undefined }
   | { id: 'almanac'; kind: 'habits'; name: string; done: number; total: number; short: string; state?: undefined }
-  | { id: 'vercel'; kind: 'deploy'; name: string; state: CiState; short: string };
+  | { id: 'vercel'; kind: 'deploy'; name: string; state: CiState; short: string }
+  | { id: 'notion'; kind: 'pages'; name: string; short: string; state?: undefined };
 
 /** what drawGlyph needs; prIcon-free glyphs can be drawn from a bare { kind, state } */
 /** 'off' = live GitHub with nothing to show (no token, no CI): a grey ring */
 type CiState = 'run' | 'fail' | 'ok' | 'off';
-export type GlyphItem = ModuleItem | { kind: 'ci'; state: CiState } | { kind: 'deploy'; state: CiState };
+export type GlyphItem =
+  | ModuleItem
+  | { kind: 'ci'; state: CiState }
+  | { kind: 'deploy'; state: CiState }
+  | { kind: 'pages'; state?: undefined };
 
 function workShort(s: IslandState): string {
   const st = stepAt(s, stepIndex(s));
@@ -114,7 +119,9 @@ export function modules(s: IslandState): ModuleItem[] {
       state: vc.auth === 'ok' && vc.state !== 'none' ? vc.state : 'off',
       short: vc.short,
     });
-  return s.off.length || vc ? all.filter((m) => hasModule(s, m.id)) : all;
+  // not in the prototype (docs/CHANGES.md): Notion, only where the app feeds it
+  if (s.notion) all.push({ id: 'notion', kind: 'pages', name: 'Notion', short: s.notion.short });
+  return s.off.length || vc || s.notion ? all.filter((m) => hasModule(s, m.id)) : all;
 }
 
 /** proto: isHot */
@@ -239,6 +246,8 @@ export function drawGlyph(s: IslandState, c: Ctx, it: GlyphItem, x: number, y: n
     }
   } else if (it.kind === 'deploy') {
     deployDot(c, x, y, r * 0.75, it.state, t);
+  } else if (it.kind === 'pages') {
+    pageMark(c, x, y, r, 'rgba(255,255,255,0.85)');
   } else if (it.kind === 'cal') {
     ring(c, x, y, r, lw, it.mins / 60, it.mins <= 5 ? '#F5A524' : '#FFFFFF', -Math.PI / 2);
     if (sz > 7.5)
@@ -278,6 +287,33 @@ export function deployDot(c: Ctx, x: number, y: number, r: number, st: CiState, 
   c.beginPath();
   c.arc(x, y, r, 0, Math.PI * 2);
   c.fill();
+  c.restore();
+}
+
+/** Not in the prototype (docs/CHANGES.md): Notion's mark - a page with a folded corner and two lines. */
+export function pageMark(c: Ctx, x: number, y: number, r: number, col: string): void {
+  const w = r * 1.5,
+    h = r * 1.9,
+    f = r * 0.55,
+    x0 = x - w / 2,
+    y0 = y - h / 2;
+  c.save();
+  c.strokeStyle = col;
+  c.lineWidth = Math.max(1, r * 0.22);
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(x0, y0);
+  c.lineTo(x0 + w - f, y0);
+  c.lineTo(x0 + w, y0 + f);
+  c.lineTo(x0 + w, y0 + h);
+  c.lineTo(x0, y0 + h);
+  c.closePath();
+  c.moveTo(x0 + w * 0.25, y0 + h * 0.5);
+  c.lineTo(x0 + w * 0.75, y0 + h * 0.5);
+  c.moveTo(x0 + w * 0.25, y0 + h * 0.72);
+  c.lineTo(x0 + w * 0.75, y0 + h * 0.72);
+  c.stroke();
   c.restore();
 }
 

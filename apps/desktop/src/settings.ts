@@ -7,7 +7,7 @@ import '@fontsource/onest/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Calendar, GhState, VcState } from './feeds';
+import type { Calendar, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -25,7 +25,8 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 // the last data of each section: a language switch draws them again
 let lastG: GhState | null = null,
   lastCal: Calendar | null = null,
-  lastV: VcState | null = null;
+  lastV: VcState | null = null,
+  lastN: NoState | null = null;
 
 function render(g: GhState | null): void {
   lastG = g;
@@ -109,6 +110,59 @@ vcInput.addEventListener('keydown', (e) => {
 });
 $('vc-off').addEventListener('click', () => void invoke('vercel_disconnect'));
 
+// ---------- Notion (stage 8) ----------
+const noInput = $<HTMLInputElement>('no-token'),
+  noGo = $<HTMLButtonElement>('no-go'),
+  noErr = $('no-error');
+function renderNotion(n: NoState | null): void {
+  lastN = n;
+  const on = !!n && n.auth !== 'off' && n.auth !== 'bad' && !!n.workspace;
+  $('no-connect').hidden = on;
+  $('no-connected').hidden = !on;
+  $('no-dot').className = 'dot' + (on ? ' ok' : n && n.auth === 'bad' ? ' bad' : '');
+  $('no-status').textContent =
+    on && n
+      ? (n.workspace ?? '') +
+        (n.pages.length ? '' : t(' · нет доступа к страницам')) +
+        (n.auth === 'net' ? t(' · нет связи') : '')
+      : n && n.auth === 'bad'
+        ? t('Notion не принял сохранённый токен')
+        : t('Не подключён');
+  renderNotionMe(n);
+}
+const noMe = $<HTMLSelectElement>('no-me');
+/** "Это вы": only when the workspace has more than one person; nobody to pick = a hint */
+function renderNotionMe(n: NoState | null): void {
+  const people = n && n.workspace ? n.people : [];
+  $('no-me-row').hidden = people.length < 2;
+  $('no-me-none').hidden = !n || !n.workspace || people.length > 0;
+  if (people.length < 2) return;
+  noMe.replaceChildren(
+    new Option(t('Не выбрано'), '', false, !n?.me),
+    ...people.map((p) => new Option(p.name, p.id, false, p.id === n?.me)),
+  );
+}
+noMe.addEventListener('change', () => void invoke('notion_me', { id: noMe.value || null }));
+async function noConnect(): Promise<void> {
+  const token = noInput.value.trim();
+  if (!token) return;
+  noGo.disabled = true;
+  noErr.textContent = '';
+  try {
+    await invoke<string>('notion_connect', { token });
+    noInput.value = '';
+  } catch (e) {
+    noErr.textContent = String(e);
+  } finally {
+    noGo.disabled = false;
+  }
+}
+noGo.addEventListener('click', () => void noConnect());
+noInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void noConnect();
+});
+$('no-off').addEventListener('click', () => void invoke('notion_disconnect'));
+
 // ---------- tabs and the module list (Raycast-like) ----------
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tab')],
   mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
@@ -137,6 +191,7 @@ const STATUS: Record<string, [string, string]> = {
   music: ['music-status', 'music-dot'],
   github: ['status-text', 'dot'],
   vercel: ['vc-status', 'vc-dot'],
+  notion: ['no-status', 'no-dot'],
 };
 for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   const copy = (): void => {
@@ -165,6 +220,7 @@ const MOD_OF: Record<string, string> = {
   github: 'github',
   almanac: 'almanac',
   vercel: 'vercel',
+  notion: 'notion',
 };
 let modCfg: Modules = { off: [], chat: true };
 let toastTimer = 0;
@@ -358,6 +414,7 @@ window.addEventListener('focus', () => void refreshIsland());
 
 render(null);
 renderVercel(null);
+renderNotion(null);
 renderCal(null);
 renderIsland({ state: 'auto', hooks: false });
 renderMusic(null);
@@ -379,6 +436,7 @@ function renderLang(c: LangCfg): void {
   );
   render(lastG);
   renderVercel(lastV);
+  renderNotion(lastN);
   renderCal(lastCal);
   renderMusic(lastMusic);
   renderIsland(lastIsland);
@@ -393,14 +451,17 @@ if (inTauri) {
   await listen<Calendar>('island://calendar', (e) => renderCal(e.payload));
   await listen<GhState>('island://github', (e) => render(e.payload));
   await listen<VcState>('island://vercel', (e) => renderVercel(e.payload));
+  await listen<NoState>('island://notion', (e) => renderNotion(e.payload));
   const f = await invoke<{
     github: GhState | null;
     vercel: VcState | null;
+    notion: NoState | null;
     calendar: Calendar | null;
     media: MediaNow | null;
   }>('feeds_state');
   render(f.github);
   renderVercel(f.vercel);
+  renderNotion(f.notion);
   renderMusic(f.media);
   await listen<MediaNow>('island://media', (e) => renderMusic(e.payload));
   renderCal(f.calendar);

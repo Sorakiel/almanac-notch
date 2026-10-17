@@ -10,7 +10,9 @@ use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 
 /// The island's module ids (packages/island ModuleId).
-pub const ALL: [&str; 6] = ["claude", "cal", "music", "github", "almanac", "vercel"];
+pub const ALL: [&str; 7] = [
+    "claude", "cal", "music", "github", "almanac", "vercel", "notion",
+];
 
 /// The main module: never counted against `MAX_ON`.
 const MAIN: &str = "claude";
@@ -36,7 +38,7 @@ impl Default for Config {
     fn default() -> Self {
         // a new module starts off: the prototype's five stay as they were
         Config {
-            off: vec!["vercel".into()],
+            off: vec!["vercel".into(), "notion".into()],
             chat: true,
         }
     }
@@ -133,7 +135,7 @@ mod tests {
                 chat: false
             }),
             Config {
-                off: vec!["vercel".into()],
+                off: vec!["notion".into(), "vercel".into()],
                 chat: false
             }
         );
@@ -141,23 +143,40 @@ mod tests {
             off: vec!["github".into(), "nope".into()],
             chat: true,
         });
-        assert_eq!(c.off, vec!["github".to_string()]);
+        // five others on: the newest goes off
+        assert_eq!(c.off, vec!["github".to_string(), "notion".to_string()]);
     }
 
     #[test]
     fn at_most_four_besides_claude() {
-        // a file from before Vercel: everything on -> the newest module goes off
+        // a file from before Vercel: everything on -> the newest modules go off
         let c = clean(Config {
             off: Vec::new(),
             chat: true,
         });
-        assert_eq!(c.off, vec!["vercel".to_string()]);
-        assert_eq!(Config::default().off, vec!["vercel".to_string()]);
+        assert_eq!(c.off, vec!["notion".to_string(), "vercel".to_string()]);
+        assert_eq!(
+            Config::default().off,
+            vec!["vercel".to_string(), "notion".to_string()]
+        );
+        // a file from the Vercel stage, Vercel switched on: Notion comes in off
+        let c = clean(Config {
+            off: vec!["almanac".into()],
+            chat: true,
+        });
+        assert_eq!(c.off, vec!["almanac".to_string(), "notion".to_string()]);
         // Claude off does not free a fifth slot
         let c = clean(Config {
             off: vec!["claude".into()],
             chat: true,
         });
-        assert_eq!(c.off, vec!["claude".to_string(), "vercel".to_string()]);
+        assert_eq!(
+            c.off,
+            vec![
+                "claude".to_string(),
+                "notion".to_string(),
+                "vercel".to_string()
+            ]
+        );
     }
 }

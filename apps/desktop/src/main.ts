@@ -32,10 +32,12 @@ import {
   GithubDriver,
   MediaDriver,
   VercelDriver,
+  NotionDriver,
   type Calendar,
   type GhState,
   type MediaMsg,
   type VcState,
+  type NoState,
 } from './feeds';
 
 interface Geometry {
@@ -199,6 +201,7 @@ let cal: CalDriver | null = null;
 let media: MediaDriver | null = null;
 let github: GithubDriver | null = null;
 let vercel: VercelDriver | null = null;
+let notion: NotionDriver | null = null;
 
 interface Feeds {
   calendar: Calendar | null;
@@ -206,6 +209,7 @@ interface Feeds {
   volume: number | null;
   github: GhState | null;
   vercel: VcState | null;
+  notion: NoState | null;
 }
 
 async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
@@ -217,7 +221,7 @@ async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
   }
 }
 
-const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac', 'vercel'];
+const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac', 'vercel', 'notion'];
 
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
@@ -277,6 +281,11 @@ if (inTauri) {
     wake();
     vercel?.onState(e.payload);
   });
+  notion = new NotionDriver(s, m, Date.now);
+  await listen<NoState>('island://notion', (e) => {
+    wake();
+    notion?.onState(e.payload);
+  });
   // modules switched off in settings and the chat tab (stage 7)
   const applyModules = (c: { off: string[]; chat: boolean }): void => {
     s.off = c.off.filter((id): id is ModuleId => MODULE_IDS.includes(id as ModuleId));
@@ -300,6 +309,7 @@ if (inTauri) {
   const f = await invoke<Feeds>('feeds_state');
   if (f.github) github.onState(f.github);
   if (f.vercel) vercel.onState(f.vercel);
+  if (f.notion) notion.onState(f.notion);
   if (f.calendar) cal.onCalendar(f.calendar);
   if (f.media) media.onMessage(f.media);
   media.onVolume(f.volume);
@@ -364,9 +374,11 @@ function tick(now: number, id: number): void {
   media?.tick();
   github?.tick();
   vercel?.tick();
+  notion?.tick();
   for (const r of s.requests.splice(0))
     if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
     else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
+    else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();

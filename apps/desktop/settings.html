@@ -98,6 +98,13 @@
           <span class="name">Vercel<small id="li-vercel">…</small></span>
           <span class="dot" id="li-vercel-dot"></span>
         </button>
+        <button class="mod" data-module="notion">
+          <span class="ico" style="--c: #a89f8a"
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h9l3 3v13H6zM9 12h6M9 16h6" /></svg
+          ></span>
+          <span class="name">Notion<small id="li-notion">…</small></span>
+          <span class="dot" id="li-notion-dot"></span>
+        </button>
         <button class="mod" data-module="almanac">
           <span class="ico" style="--c: #34c759"
             ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" /></svg
@@ -285,6 +292,64 @@
               продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на
               api.vercel.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не
               попадает ни в файлы, ни в остров.
+            </p>
+          </section>
+        </main>
+        <main id="notion" hidden>
+          <h2>Notion</h2>
+          <label class="switch-row"
+            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="notion"
+          /></label>
+          <p class="status"><span class="dot" id="no-dot"></span><span id="no-status">…</span></p>
+
+          <section id="no-connect">
+            <label for="no-token">Токен интеграции</label>
+            <div class="row">
+              <input
+                id="no-token"
+                type="password"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="Internal Integration Secret"
+              />
+              <button id="no-go" class="primary">Подключить</button>
+            </div>
+            <p class="note" id="no-error" role="alert"></p>
+          </section>
+
+          <section id="no-connected" hidden>
+            <div id="no-me-row" hidden>
+              <label for="no-me">Это вы</label>
+              <div class="row"><select id="no-me"></select></div>
+              <p class="plain">Остров подаёт знак, когда страницу правит кто-то другой.</p>
+            </div>
+            <p class="plain" id="no-me-none" hidden>
+              Чтобы остров сообщал о чужих правках, включите у интеграции Read user information.
+            </p>
+            <button id="no-off">Отключить</button>
+          </section>
+
+          <section class="help">
+            <h3>Как получить токен</h3>
+            <ol>
+              <li>Откройте notion.so/profile/integrations → New integration, тип Internal.</li>
+              <li>
+                В Capabilities оставьте только Read content и Read user information without email, скопируйте Internal
+                Integration Secret.
+              </li>
+              <li>
+                В Notion на нужной странице: ••• → Connections → ваша интеграция. Остров увидит эту страницу и её
+                подстраницы.
+              </li>
+            </ol>
+            <h3>Что читается и куда уходит</h3>
+            <p>
+              Название рабочего пространства, имена его участников и страницы, к которым вы дали доступ интеграции:
+              название, значок, кто и когда правил последним, ссылка. Содержимое страниц и почта участников не читаются.
+              Запросы идут только на api.notion.com раз в минуту и только при включённом модуле. Токен хранится в связке
+              ключей системы и не попадает ни в файлы, ни в остров. Строка карточки открывает страницу на notion.so в
+              браузере.
             </p>
           </section>
         </main>

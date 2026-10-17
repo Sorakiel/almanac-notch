@@ -4,16 +4,20 @@ import {
   CalDriver,
   GithubDriver,
   MediaDriver,
+  NotionDriver,
   VercelDriver,
   agoText,
   artSeed,
   calFeed,
   commitDays,
   githubFeed,
+  notionFeed,
   whenText,
   type Calendar,
   type GhRepo,
   type GhState,
+  type NoPage,
+  type NoState,
   type VcDeploy,
   type VcState,
 } from './feeds';
@@ -375,5 +379,78 @@ describe('vercel feed', () => {
       .map((x) => x[1] as string)
       .filter((x) => !(x in EN) && !/^(вс|пн|вт|ср|чт|пт|сб)$/.test(x));
     expect(missing).toEqual([]);
+  });
+});
+
+describe('notion feed', () => {
+  const page = (o: Partial<NoPage> = {}): NoPage => ({
+    id: 'p1',
+    title: 'План релиза',
+    emoji: '📝',
+    edited: T0 - 5 * min,
+    kind: 'page',
+    by: 'u-other',
+    ...o,
+  });
+  const no = (pages: NoPage[], o: Partial<NoState> = {}): NoState => ({
+    auth: 'ok',
+    workspace: 'Sora',
+    pages,
+    people: [],
+    me: 'u-me',
+    ...o,
+  });
+  const mascot = () => createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+
+  it('no token, a refused one, no answer, nothing shared: say why', () => {
+    expect(notionFeed(null, T0).hint).toEqual(['Notion не подключён', 'Настройки → Notion']);
+    expect(notionFeed(null, T0, 'en').hint).toEqual(['Notion not connected', 'Settings → Notion']);
+    expect(notionFeed(no([], { auth: 'bad', workspace: null }), T0).auth).toBe('bad');
+    expect(notionFeed(no([], { auth: 'net', workspace: null }), T0).hint[0]).toBe('Нет связи с Notion');
+    expect(notionFeed(no([]), T0)).toMatchObject({
+      short: 'нет страниц',
+      hint: ['страниц пока нет', 'дайте интеграции доступ к странице'],
+      rows: [],
+    });
+  });
+  it('the three pages edited last: icon, title, compact age; untitled is named', () => {
+    const f = notionFeed(
+      no([
+        page(),
+        page({ id: 'p2', title: null, emoji: null, edited: T0 - 2 * 3600_000 }),
+        page({ id: 'p3', title: 'Заметки со встречи с дизайнером', edited: T0 - 3 * 86_400_000 }),
+        page({ id: 'p4' }),
+      ]),
+      T0,
+    );
+    expect(f.short).toBe('План релиза');
+    expect(f.rows.map((r) => [r.emoji, r.title, r.ago])).toEqual([
+      ['📝', 'План релиза', '5 мин'],
+      [null, 'Без названия', '2 ч'],
+      ['📝', 'Заметки со встречи…', '3 дн'],
+    ]);
+    expect(notionFeed(no([page({ title: null })]), T0, 'en').rows[0]?.title).toBe('Untitled');
+  });
+  it('driver: an edit by someone else is a success on the Notion card; mine, the first read and an unknown me are not', () => {
+    const m = mascot();
+    const d = new NotionDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(no([page()]));
+    expect(m.state.event).toBeNull();
+    // my own edit
+    d.onState(no([page({ edited: T0, by: 'u-me' })]));
+    expect(m.state.event).toBeNull();
+    // the same time again: nothing new
+    d.onState(no([page({ edited: T0, by: 'u-other' })]));
+    expect(m.state.event).toBeNull();
+    d.onState(no([page({ edited: T0 + min })]));
+    expect(m.state.event?.type).toBe('success');
+    expect(m.state.event?.src).toBe('notion');
+    expect(m.state.event?.label).toBe('Правка · План релиза');
+    m.state.event = null;
+    // nobody picked as "me": no events
+    d.onState(no([page({ edited: T0 + 2 * min })], { me: null }));
+    // an old page newly shared: not an event
+    d.onState(no([page({ id: 'old', edited: T0 - 60 * min })]));
+    expect(m.state.event).toBeNull();
   });
 });

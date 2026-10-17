@@ -12,7 +12,7 @@ import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { MODULE_COL, minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
-import { deployDot, drawGlyph, modules, prIcon, type ModuleItem } from './modules';
+import { deployDot, drawGlyph, modules, pageMark, prIcon, type ModuleItem } from './modules';
 
 /** proto: QUESTION */
 export const QUESTION: readonly [string, readonly string[]] = [
@@ -82,9 +82,12 @@ function commitsWord(s: IslandState, n: number): string {
       : ' коммитов';
 }
 
-/** Not in the prototype (docs/CHANGES.md): coucou's card head - a dot in the module colour, the name, "Деплои", an arrow to vercel.com. */
-function deployHead(s: IslandState, c: Ctx, name: string, tx: number, y0: number, x1: number): void {
-  c.fillStyle = MODULE_COL.vercel.body;
+/**
+ * Not in the prototype (docs/CHANGES.md): coucou's card head - a dot in the module colour, the
+ * name, a muted word ("Деплои", "Недавние"), an optional arrow (Vercel: the newest deployment).
+ */
+function brandHead(s: IslandState, c: Ctx, id: ModuleId, name: string, tx: number, y0: number, x1: number): void {
+  c.fillStyle = MODULE_COL[id].body;
   c.beginPath();
   c.arc(tx + 4, y0 + 18, 4, 0, Math.PI * 2);
   c.fill();
@@ -93,8 +96,12 @@ function deployHead(s: IslandState, c: Ctx, name: string, tx: number, y0: number
   c.font = '600 13px Onest, system-ui, sans-serif';
   const nw = c.measureText(name).width;
   c.restore();
-  textAt(c, tr(s, 'Деплои'), tx + 20 + nw, y0 + 18.5, { size: 12, weight: 400, color: T_MUTED });
-  const top = s.vercel && s.vercel.auth === 'ok' ? s.vercel.rows[0] : undefined;
+  textAt(c, tr(s, id === 'notion' ? 'Недавние' : 'Деплои'), tx + 20 + nw, y0 + 18.5, {
+    size: 12,
+    weight: 400,
+    color: T_MUTED,
+  });
+  const top = id === 'vercel' && s.vercel && s.vercel.auth === 'ok' ? s.vercel.rows[0] : undefined;
   if (!top) return;
   const bx = x1 - 20,
     by = y0 + 17,
@@ -133,7 +140,7 @@ export function drawFocusCard(
   cardMascot(s, c, x0, y0, y1, f, f === 'claude' ? fx : null, propFor(s, f));
   const tx = x0 + 84,
     tmax = x1 - tx - 10;
-  if (it.kind === 'deploy') deployHead(s, c, it.name, tx, y0, x1);
+  if (it.kind === 'deploy' || it.kind === 'pages') brandHead(s, c, it.id, it.name, tx, y0, x1);
   else {
     drawGlyph(s, c, it, tx + 6, y0 + 18, 5.5);
     textAt(c, it.name, tx + 17, y0 + 18.5, { size: 13, weight: 600, max: tmax - 17 });
@@ -241,6 +248,36 @@ export function drawFocusCard(
           max: tmax - 60,
         });
         textAt(c, r.ago, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED, max: tmax - 18 - nw });
+      });
+  } else if (it.kind === 'pages' && s.notion) {
+    // not in the prototype (docs/CHANGES.md): the pages edited last, as coucou's card; a row opens the page
+    const no = s.notion;
+    if (no.auth !== 'ok' || !no.rows.length) {
+      L(0, no.hint[0], '#FFFFFF');
+      if (no.hint[1]) L(1, no.hint[1], T_MUTED);
+    } else
+      no.rows.forEach((r, i) => {
+        const y = y0 + 40 + i * 18,
+          hov = hovering(s, tx - 6, y - 9, tmax + 6, 18);
+        if (hov || i === 0) {
+          c.fillStyle = hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)';
+          rrect(c, tx - 6, y - 9, tmax + 6, 18, 6);
+          c.fill();
+        }
+        if (r.emoji) textAt(c, r.emoji, tx + 3, y + 0.5, { size: 10, weight: 400, align: 'center' });
+        else pageMark(c, tx + 3, y + 0.5, 3.6, 'rgba(255,255,255,0.55)');
+        c.save();
+        c.font = '600 11.5px Onest, system-ui, sans-serif';
+        const nw = Math.min(c.measureText(r.title).width, tmax - 60);
+        c.restore();
+        textAt(c, r.title, tx + 12, y + 0.5, {
+          size: 11.5,
+          weight: 600,
+          color: i === 0 || hov ? '#FFFFFF' : 'rgba(255,255,255,0.75)',
+          max: tmax - 60,
+        });
+        textAt(c, r.ago, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED, max: tmax - 18 - nw });
+        addHit(s, c, { x: tx - 6, y: y - 9, w: tmax + 6, h: 18, act: 'notion:' + r.id });
       });
   } else if (it.kind === 'cal' && s.cal) {
     const cal = s.cal;

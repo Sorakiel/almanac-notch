@@ -8,6 +8,7 @@
 mod calendar;
 mod claude;
 mod github;
+mod notion;
 mod vercel;
 // on Mac only its tests use it: the choice of sources is Windows-only
 #[cfg_attr(target_os = "macos", allow(dead_code))]
@@ -94,6 +95,7 @@ struct Feeds {
     volume: Option<f32>,
     github: Option<github::State>,
     vercel: Option<vercel::State>,
+    notion: Option<notion::State>,
 }
 
 #[derive(Serialize)]
@@ -103,6 +105,7 @@ struct FeedsSnapshot {
     volume: Option<f32>,
     github: Option<github::State>,
     vercel: Option<vercel::State>,
+    notion: Option<notion::State>,
 }
 
 #[tauri::command]
@@ -114,6 +117,7 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
         volume: f.volume,
         github: f.github.clone(),
         vercel: f.vercel.clone(),
+        notion: f.notion.clone(),
     }
 }
 
@@ -155,6 +159,40 @@ fn vercel_open(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
 #[tauri::command]
 async fn vercel_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(vercel::disconnect).await;
+}
+
+/// Connect a Notion integration token: checked against Notion, then kept in the keychain.
+/// Returns the workspace name.
+#[tauri::command]
+async fn notion_connect(token: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || notion::connect(&token))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// A card row: open the page; the URL is looked up here, not sent by the page.
+#[tauri::command]
+fn notion_open(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
+    let url = feeds.lock().unwrap().notion.as_ref().and_then(|n| {
+        n.pages
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(|p| p.url.clone())
+    });
+    if let Some(u) = url {
+        notion::open(&u);
+    }
+}
+
+/// Settings: who I am in the workspace (edits by anyone else are island events).
+#[tauri::command]
+fn notion_me(id: Option<String>) -> Result<(), String> {
+    notion::set_me(id)
+}
+
+#[tauri::command]
+async fn notion_disconnect() {
+    let _ = tauri::async_runtime::spawn_blocking(notion::disconnect).await;
 }
 
 /// Calendar source as the settings window shows it.
@@ -216,6 +254,7 @@ fn modules_set(app: AppHandle, off: Vec<String>, chat: bool) -> Result<modules::
     let _ = app.emit("island://modules", &c);
     github::poke();
     vercel::poke();
+    notion::poke();
     calendar::poke();
     Ok(c)
 }
@@ -269,6 +308,11 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     vercel::start(move |v| {
         f2.lock().unwrap().vercel = Some(v.clone());
         let _ = app2.emit("island://vercel", v);
+    });
+    let (app2, f2) = (app.clone(), feeds.clone());
+    notion::start(move |n| {
+        f2.lock().unwrap().notion = Some(n.clone());
+        let _ = app2.emit("island://notion", n);
     });
     let app2 = app.clone();
     media::start(Arc::new(move |name: &str, v: serde_json::Value| {
@@ -417,6 +461,10 @@ pub fn run() {
             vercel_connect,
             vercel_disconnect,
             vercel_open,
+            notion_connect,
+            notion_disconnect,
+            notion_open,
+            notion_me,
             calendar_config,
             calendar_choose,
             calendar_access,

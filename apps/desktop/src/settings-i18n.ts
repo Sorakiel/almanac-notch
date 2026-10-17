@@ -82,6 +82,23 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Имя пользователя, список команд и последние деплои ваших проектов: название проекта, состояние сборки, продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на api.vercel.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
     'Your username, team list and the latest deployments of your projects: project name, build state, production or preview, branch and time. Code, environment variables and logs are not read. Requests go only to api.vercel.com, once a minute, and only while the module is on. The token is kept in the system keychain and never gets into files or the island.',
   'Vercel не принял сохранённый токен': 'Vercel rejected the saved token',
+  // Notion
+  'Токен интеграции': 'Integration token',
+  'Откройте notion.so/profile/integrations → New integration, тип Internal.':
+    'Open notion.so/profile/integrations → New integration, type Internal.',
+  'В Capabilities оставьте только Read content и Read user information without email, скопируйте Internal Integration Secret.':
+    'Under Capabilities keep only Read content and Read user information without email, then copy the Internal Integration Secret.',
+  'В Notion на нужной странице: ••• → Connections → ваша интеграция. Остров увидит эту страницу и её подстраницы.':
+    'In Notion, on the page you want: ••• → Connections → your integration. The island will see that page and its subpages.',
+  'Название рабочего пространства, имена его участников и страницы, к которым вы дали доступ интеграции: название, значок, кто и когда правил последним, ссылка. Содержимое страниц и почта участников не читаются. Запросы идут только на api.notion.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров. Строка карточки открывает страницу на notion.so в браузере.':
+    "The workspace name, its members' names and the pages you shared with the integration: title, icon, who edited last and when, link. Page contents and members' emails are not read. Requests go only to api.notion.com, once a minute, and only while the module is on. The token is kept in the system keychain and never gets into files or the island. A card row opens the page on notion.so in your browser.",
+  'Notion не принял сохранённый токен': 'Notion rejected the saved token',
+  ' · нет доступа к страницам': ' · no pages shared',
+  'Это вы': 'This is you',
+  'Остров подаёт знак, когда страницу правит кто-то другой.': 'The island gives a sign when someone else edits a page.',
+  'Чтобы остров сообщал о чужих правках, включите у интеграции Read user information.':
+    'To hear about edits by others, turn on Read user information for the integration.',
+  'Не выбрано': 'Not picked',
   проект: 'project',
   проекта: 'projects',
   проектов: 'projects',

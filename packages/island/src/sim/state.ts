@@ -26,8 +26,8 @@ export interface MascotEvent {
   label?: string;
   answer?: 'approve' | 'deny' | 'opt';
   answerAt?: number;
-  /** set by real Claude Code sessions and Vercel: success and error then belong to that card */
-  src?: 'agent' | 'vercel';
+  /** set by real Claude Code sessions, Vercel and Notion: success and error then belong to that card */
+  src?: 'agent' | 'vercel' | 'notion';
 }
 
 /**
@@ -135,6 +135,22 @@ export interface VercelFeed {
   hint: [string, string];
 }
 
+/**
+ * Live Notion data (stage 8, not in the prototype). Null = no Notion module at all (harness,
+ * parity): the module exists only in the app. The pages edited last among those shared with
+ * the user's integration.
+ */
+export interface NotionFeed {
+  /** "off" no token, "bad" the token was refused, "ok" data is shown */
+  auth: 'off' | 'bad' | 'ok';
+  /** the card's rows, newest first (at most three): icon, title, "5 мин" */
+  rows: { id: string; title: string; emoji: string | null; ago: string }[];
+  /** the rail's, chips' and ears' short text */
+  short: string;
+  /** the card's two lines while there is nothing to show (no token, refused, no pages) */
+  hint: [string, string];
+}
+
 export interface Particle {
   type: 'bit' | 'note' | 'z';
   color: string | undefined;
@@ -208,7 +224,7 @@ export const DEFAULT_THEME: Theme = {
 };
 
 export type Tab = 'home' | 'chat' | 'add' | 'settings';
-export type ModuleId = 'claude' | 'github' | 'cal' | 'music' | 'almanac' | 'vercel';
+export type ModuleId = 'claude' | 'github' | 'cal' | 'music' | 'almanac' | 'vercel' | 'notion';
 
 /**
  * Everything the prototype kept in closure-level `let`s. Time only moves in update(dt),
@@ -252,6 +268,7 @@ export interface IslandState {
   media: MediaFeed | null;
   github: GithubFeed | null;
   vercel: VercelFeed | null;
+  notion: NotionFeed | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
@@ -365,6 +382,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     media: null,
     github: null,
     vercel: null,
+    notion: null,
     requests: [],
     settingsLink: false,
     off: [],

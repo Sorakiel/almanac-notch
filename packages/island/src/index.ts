@@ -20,6 +20,7 @@ export {
   type MediaFeed,
   type GithubFeed,
   type VercelFeed,
+  type NotionFeed,
   type MascotEvent,
 } from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';

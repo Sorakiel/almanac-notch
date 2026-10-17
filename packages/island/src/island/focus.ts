@@ -27,6 +27,8 @@ export const MODULE_COL: Readonly<Record<ModuleId, MascotColor>> = {
   almanac: { body: '#F4A9C6', shade: '#C9708F', eye: '#16171A' },
   // not in the prototype (docs/CHANGES.md): grey-lilac, the owner's pick
   vercel: { body: '#C9C3E8', shade: '#918AC0', eye: '#16171A' },
+  // not in the prototype (docs/CHANGES.md): paper grey, like a Notion page
+  notion: { body: '#E4DFD3', shade: '#ACA594', eye: '#16171A' },
 };
 
 export type ClaudeState = 'work' | 'think' | 'search' | 'ask' | 'question' | 'limit' | 'idle';
@@ -70,6 +72,7 @@ export function autoFocus(s: IslandState): ModuleId {
   // a real Claude Code session finishing or failing belongs to its own card
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent' && on('claude')) return 'claude';
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'vercel' && on('vercel')) return 'vercel';
+  if (ev === 'success' && s.event && s.event.src === 'notion' && on('notion')) return 'notion';
   if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
   if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
   if (callMins(s) <= 30 && on('cal')) return 'cal';
@@ -79,11 +82,11 @@ export function autoFocus(s: IslandState): ModuleId {
 }
 
 /** the rest card when nothing is going on; the app keeps at least one module on */
-const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github', 'vercel'];
+const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github', 'vercel', 'notion'];
 
-/** The module is shown: not switched off, and Vercel only where the app feeds it (not in the prototype). */
+/** The module is shown: not switched off, and Vercel and Notion only where the app feeds them (not in the prototype). */
 export function hasModule(s: IslandState, id: ModuleId): boolean {
-  return !s.off.includes(id) && (id !== 'vercel' || s.vercel !== null);
+  return !s.off.includes(id) && (id !== 'vercel' || s.vercel !== null) && (id !== 'notion' || s.notion !== null);
 }
 
 /**

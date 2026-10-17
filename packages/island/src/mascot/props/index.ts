@@ -10,14 +10,14 @@ import { terminal } from './terminal';
 import { diff } from './diff';
 import { calendar } from './calendar';
 import { rocket } from './rocket';
+import { pencil } from './pencil';
 
 export type { Prop } from './types';
 
 /**
  * proto: PROPS - a new prop is one entry here.
- * Reserved: pencil (look [0.4, 0.5], 'пишет в Notion') for the Notion module.
  */
-export const PROPS = { headphones, book, terminal, diff, calendar, rocket } satisfies Record<string, Prop>;
+export const PROPS = { headphones, book, terminal, diff, calendar, rocket, pencil } satisfies Record<string, Prop>;
 export type PropKind = keyof typeof PROPS;
 
 /** proto: MODULE_PROPS */
@@ -29,6 +29,8 @@ export const MODULE_PROPS: Readonly<Record<ModuleId, PropKind>> = {
   cal: 'calendar',
   // not in the prototype (docs/CHANGES.md): a rocket - the deploy goes up
   vercel: 'rocket',
+  // the prototype's reserved pencil (proto PROPS comment)
+  notion: 'pencil',
 };
 
 /** proto: propFor - only on the home tab without events; a busy agent shows its work instead */

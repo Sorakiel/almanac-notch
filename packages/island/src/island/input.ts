@@ -61,6 +61,8 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   } else if (act === 'open:settings') s.requests.push('settings:');
   // not in the prototype: the Vercel card's arrow opens the deployment on vercel.com (the app)
   else if (act.startsWith('vercel:')) s.requests.push(act);
+  // not in the prototype: a Notion card row opens the page (the app)
+  else if (act.startsWith('notion:')) s.requests.push(act);
   else if (act.startsWith('pref:')) {
     const pr = s.prefs[+act.slice(5)];
     if (pr) pr[1] = !pr[1];

@@ -142,6 +142,36 @@ describe('switched-off modules (the app, stage 7)', () => {
   });
 });
 
+describe('Notion (the app, stage 8)', () => {
+  const feed = {
+    auth: 'ok' as const,
+    rows: [{ id: 'p1', title: 'План', emoji: null, ago: '5 мин' }],
+    short: 'План',
+    hint: ['', ''] as [string, string],
+  };
+  it('no feed: no module, the prototype is untouched', () => {
+    const s = make();
+    s.focusId = 'notion';
+    expect(modules(s).map((m) => m.id)).not.toContain('notion');
+    expect(miniCrew(s)).toHaveLength(4);
+    expect(effectiveFocus(s)).not.toBe('notion');
+  });
+  it('with a feed: a module of its own, its edit events, can be switched off', () => {
+    const s = make();
+    s.notion = feed;
+    expect(modules(s).map((m) => m.id)).toEqual(['claude', 'github', 'cal', 'music', 'almanac', 'notion']);
+    expect(miniCrew(s)).toHaveLength(4);
+    s.off = ['music', 'github', 'cal'];
+    expect(miniCrew(s).map((m) => m.id)).toEqual(['claude', 'notion']);
+    s.off = [];
+    s.event = { ...ev('success'), src: 'notion' };
+    expect(autoFocus(s)).toBe('notion');
+    s.off = ['notion'];
+    expect(autoFocus(s)).toBe('github');
+    expect(modules(s).map((m) => m.id)).not.toContain('notion');
+  });
+});
+
 describe('Vercel (the app, stage 8)', () => {
   const feed = (state: 'run' | 'fail' | 'ok' | 'none') => ({
     auth: 'ok' as const,

@@ -10,6 +10,7 @@ import {
   type IslandState,
   type Lang,
   type MediaFeed,
+  type NotionFeed,
   type VercelFeed,
 } from '@almanac-notch/island';
 import { clip } from './agent';
@@ -653,6 +654,122 @@ export class VercelDriver {
       if (this.s.event) {
         this.s.event.label = p.label;
         this.s.event.src = 'vercel';
+      }
+    }
+  }
+}
+
+// ---------- notion ----------
+/** `island://notion` (src-tauri/src/notion.rs). */
+export interface NoPage {
+  id: string;
+  /** null = untitled */
+  title: string | null;
+  emoji: string | null;
+  /** last edited, epoch ms */
+  edited: number;
+  kind: 'page' | 'database';
+  /** who edited last (a Notion user id) */
+  by: string | null;
+}
+
+export interface NoState {
+  auth: 'off' | 'ok' | 'bad' | 'net';
+  workspace: string | null;
+  /** newest first */
+  pages: NoPage[];
+  people: { id: string; name: string }[];
+  /** my user id; null = unknown, no edit events */
+  me: string | null;
+}
+
+const NO_HINT = 'Настройки → Notion';
+
+/** Not in the prototype (docs/CHANGES.md): the Notion card - the three pages edited last, as in coucou. */
+export function notionFeed(n: NoState | null, now: number, lang: Lang = 'ru'): NotionFeed {
+  const L = { lang };
+  const empty = (hint: [string, string], short: string): NotionFeed => ({
+    auth: n && n.auth === 'bad' ? 'bad' : 'off',
+    rows: [],
+    short: tr(L, short),
+    hint: [tr(L, hint[0]), tr(L, hint[1])],
+  });
+  if (!n || n.auth === 'off') return empty(['Notion не подключён', NO_HINT], 'нет токена');
+  if (n.auth === 'bad') return empty(['Notion не принял токен', NO_HINT], 'токен не принят');
+  if (!n.workspace) return empty(['Нет связи с Notion', 'попробую снова через минуту'], 'нет связи');
+  const title = (p: NoPage): string => p.title ?? tr(L, 'Без названия');
+  const p = n.pages[0];
+  return {
+    auth: 'ok',
+    rows: n.pages.slice(0, 3).map((x) => ({
+      id: x.id,
+      title: clip(title(x), 20),
+      emoji: x.emoji,
+      ago: agoText(x.edited, now, lang),
+    })),
+    short: p ? clip(title(p), 16) : tr(L, 'нет страниц'),
+    hint: p ? ['', ''] : [tr(L, 'страниц пока нет'), tr(L, 'дайте интеграции доступ к странице')],
+  };
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): keeps s.notion current; a page someone else edited
+ * (not me, owner's pick 2026-10-18) is the island's success on the Notion card. My own edits,
+ * the first read after start and an unknown "me" give no event.
+ */
+export class NotionDriver {
+  private n: NoState | null = null;
+  private lastMin = -1;
+  private lang: Lang = 'ru';
+  /** page id -> last edit time; null until the first read */
+  private seen: Map<string, number> | null = null;
+  private since = 0;
+  private pending: string | null = null;
+  constructor(
+    private s: IslandState,
+    private m: { trigger: (t: EventType) => void },
+    private now: () => number,
+  ) {
+    s.notion = notionFeed(null, now());
+  }
+
+  onState(n: NoState): void {
+    if (n.workspace) {
+      const first = this.seen === null,
+        seen = this.seen ?? new Map<string, number>();
+      if (first) this.since = this.now();
+      for (const p of n.pages) {
+        const was = seen.get(p.id);
+        seen.set(p.id, p.edited);
+        if (first || !n.me || !p.by || p.by === n.me) continue;
+        // a page newly in the list counts only when edited after we started watching
+        if (was === undefined ? p.edited < this.since : p.edited <= was) continue;
+        this.pending ??= tr(this.s, 'Правка') + ' · ' + clip(p.title ?? tr(this.s, 'Без названия'), 12);
+      }
+      this.seen = seen;
+    } else if (n.auth === 'off' || n.auth === 'bad') this.seen = null;
+    this.n = n;
+    this.lastMin = -1;
+    this.tick();
+  }
+
+  /** Per frame: the relative times, the language, a waiting edit event. */
+  tick(): void {
+    const now = this.now(),
+      min = Math.floor(now / 60_000);
+    if (min !== this.lastMin || this.s.lang !== this.lang) {
+      this.lastMin = min;
+      this.lang = this.s.lang;
+      this.s.notion = notionFeed(this.n, now, this.lang);
+    }
+    const p = this.pending,
+      ev = this.s.event;
+    if (p && !(ev && PROMPTS.includes(ev.type))) {
+      this.pending = null;
+      this.m.trigger('success');
+      if (this.s.event) {
+        this.s.event.label = p;
+        this.s.event.src = 'notion';
       }
     }
   }

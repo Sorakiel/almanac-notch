@@ -3,13 +3,13 @@
 Обновляется в конце каждой сессии. Новая сессия начинает с этого файла.
 
 ## Сейчас
-- Этап: 8b - Vercel (ветка `stage-8-vercel` от `stage-8-i18n`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Vercel (карточка, лимит модулей). 8a (EN и RU) тоже ждёт проверки, замечаний пока не было.
+- Этап: 8c - Notion (ветка `stage-8-notion` от `stage-8-vercel`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Notion. 8a (EN и RU) и 8b (Vercel) тоже ждут проверки, замечаний пока не было.
 - Порядок этапа 8 (выбор владельца 2026-10-18, PLAN): EN/RU → Vercel → Notion → Grafana → Almanac → полноценный удобный релиз. Obsidian, n8n, почта, чат, телефон пока не берём.
 - Этап 7 (Windows) формально не принят: владелец проверит на Windows позже (`npm run installer`, README). Если пришлёт замечания - сначала исправить в `stage-7-windows`, затем влить в ветки этапа 8.
-- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18).
+- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18), Notion (2026-10-18).
 - Репозиторий публичный: https://github.com/Sorakiel/almanac-notch. `master` - только каркас этапа 0. Пушить можно (разрешение владельца).
 - `npm run installer` (корень) собирает релиз для своей ОС и кладёт в `release/`: Windows - `Almanac Notch Setup.exe`, Mac - `Almanac Notch.app`. В Cargo.toml `[profile.release.build-override] strip = false` (иначе ломаются proc-macro на Mac).
-- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
+- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel`, `stage-8-notion` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
 
 ## Сделано
 - Монорепо на npm workspaces: `packages/island`, `apps/harness`, `apps/desktop`.
@@ -161,9 +161,18 @@
 - Проверки: тесты 100 (фронт + пакет), Rust 25, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76, `parity:inputs` - см. отчёт. Кадры варианта (окно в браузере, `window.__state.vercel = …`) владелец видел.
 - Не проверено (нужен владелец, собранный `.app` и свой токен Vercel): реальный деплой в карточке, событие при готовом и упавшем деплое, ↗ открывает страницу, команды (`/v2/teams` у токена с узким scope), тост лимита в окне.
 
+### Этап 8c - Notion (ветка `stage-8-notion`)
+- Rust `src-tauri/src/notion.rs` по образцу `vercel.rs`: токен внутренней интеграции в keyring (`dev.almanac.notch` / `notion-token`), `ureq` + `native-tls`, `Notion-Version: 2022-06-28`, поток раз в минуту, только при `modules::is_on("notion")` и с токеном. `/v1/users/me` (название пространства), `POST /v1/search` по `last_edited_time` (как в coucou), `/v1/users` (люди; без права Read user information - пусто, не ошибка). Страница: название (свойство типа title / заголовок базы, `None` = «Без названия» на фронте), эмодзи, время, `last_edited_by`, ссылка только `https://(www.)notion.so/`. «Я» - `<app data>/notion.json` (`notion_me`) или единственный человек. Команды `notion_connect`, `notion_disconnect`, `notion_open(id)`, `notion_me`; `feeds_state.notion`, событие `island://notion`. 4 теста + сетевой `--ignored bogus` (выдуманный токен → «не принят») проходит.
+- `modules::ALL` += notion, по умолчанию выключен (`off: [vercel, notion]`); старый файл с Vercel включённым - Notion приходит выключенным (тест).
+- Пакет: `ModuleId` += `'notion'`, `NotionFeed` (`rows`: id, title, emoji, ago), `s.notion` (null в харнессе), `hasModule`, `event.src = 'notion'` → `autoFocus` (только success), `FALLBACK`, `MODULE_COL.notion` бумажно-серый `#E4DFD3`, карандаш `mascot/props/pencil.ts` (пишет строку на листке), `kind: 'pages'` в `modules.ts` + значок `pageMark` (лист с углом), `miniCrew` (seed 5, всегда idle). Шапка карточки общая с Vercel - `brandHead` в `cards.ts` («Деплои» / «Недавние», стрелка только у Vercel). Строки Notion - каждая кликабельна (`notion:<id>` → `s.requests` → `notion_open`), строка под курсором светлее. Тонировки нет.
+- Фронт: `notionFeed` (заголовки до 20 символов, иначе textAt сжимает), `NotionDriver(s, m, now)`: первое чтение без событий; новая правка (время выросло, или новая страница, правленая после первого чтения) не мной → success «Правка · страница» с `src = 'notion'`; без «я» событий нет; вопрос и разрешение держат событие.
+- Окно настроек: страница Notion (переключатель, статус «пространство», «нет доступа к страницам», токен, как получить, «Что читается и куда уходит»), выбор «Это вы» (только если людей больше одного), подсказка про Read user information, если людей не видно. Кадры: `.parity/notion-variant.png`, `.parity/notion-settings.png` (не в git).
+- Проверки: тесты 105 (фронт + пакет), Rust 28, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76, `parity:inputs` 75/75 зелёные.
+- Не проверено (нужен владелец, собранный `.app` и своя интеграция Notion): реальные страницы в карточке, открытие страницы по строке, событие при чужой правке, выбор «Это вы» с настоящими участниками, эмодзи на Windows (WebView2).
+
 ## Дальше
 - Этап 7: проверка владельцем на Windows и исправления по ней.
-- Этап 8: после ответа владельца по EN/RU и Vercel - Notion (ветка `stage-8-notion` от `stage-8-vercel`, предмет-карандаш заготовлен в `props/index.ts`), затем Grafana, Almanac, релиз. Новый модуль включается с учётом лимита 4 (`modules.rs`).
+- Этап 8: после ответа владельца по EN/RU, Vercel и Notion - Grafana (ветка `stage-8-grafana` от `stage-8-notion`), затем Almanac, релиз. Новый модуль включается с учётом лимита 4 (`modules.rs`); у Grafana своего предмета пока нет - спросить владельца.
 - Поведение в полноэкранных приложениях: сейчас `fullScreenAuxiliary` - остров виден поверх. В ARCHITECTURE по умолчанию «прячется» - решить вместе с вопросом из DECISIONS.
 
 ## Грабли и решения
@@ -202,3 +211,5 @@
 - **Тексты и язык (с этапа 8).** Любой новый текст острова - через `tr(s, 'русский')` и строка в `EN` (`packages/island/src/i18n.ts`); текст окна настроек - в `settings.html`/`t()` и строка в `SETTINGS_EN`; текст Rust - `lang::t(ru, en)`. Тесты `i18n.test.ts` и `settings-i18n.test.ts` падают на русской строке без перевода. Живые данные (названия) через `tr` не пропускать нарочно не нужно: незнакомая строка возвращается как есть.
 - **Новый модуль (с этапа 8b).** Шаги: `modules::ALL` + `MAX_ON` (по умолчанию новый - выключен), `ModuleId`, свой `*Feed` в `state.ts` (null в харнессе - модуля нет, `hasModule`), `modules()`, `miniCrew`, `autoFocus` (`event.src`), `FALLBACK`, `MODULE_COL`, `MODULE_PROPS`, карточка в `cards.ts`, значок в `drawGlyph`, `MODULE_IDS` в `main.ts`, `MOD_OF` и страница в окне настроек, тексты в `EN`/`SETTINGS_EN`/`lang::t`. Вид проверять в окне `npm run dev:web -w apps/desktop` (порт 1420) через `window.__state`, не в харнессе.
 - Вопросы владельцу - по-русски и простыми словами (вопрос по-английски он не понял).
+- **Кадры окна в браузере.** Холст острова 560×200 растягивается на всё окно браузера - текст сжат. Снимать Playwright с `viewport: {width: 560, height: 200}`, `deviceScaleFactor: 2`; перед кадром `s.event = null; s.postLaunchUntil = 0` (иначе висит приветствие). Окно настроек - `localhost:1420/settings.html#notion`.
+- В окне настроек `.note` - красный (ошибки), для пояснений - `.plain`.

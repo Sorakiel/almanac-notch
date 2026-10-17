@@ -172,6 +172,17 @@ export const EN: Readonly<Record<string, string>> = {
   'деплой отменён': 'deploy canceled',
   'Деплой готов': 'Deploy ready',
   Деплои: 'Deploys',
+  // Notion (apps/desktop/src/feeds.ts, island/cards.ts)
+  'Настройки → Notion': 'Settings → Notion',
+  'Notion не подключён': 'Notion not connected',
+  'Notion не принял токен': 'Notion rejected the token',
+  'Нет связи с Notion': 'No connection to Notion',
+  'страниц пока нет': 'no pages yet',
+  'дайте интеграции доступ к странице': 'share a page with the integration',
+  'нет страниц': 'no pages',
+  Недавние: 'Recent',
+  'пишет в Notion': 'writing in Notion',
+  Правка: 'Edited',
 };
 
 function fill(text: string, args: readonly (string | number)[]): string {

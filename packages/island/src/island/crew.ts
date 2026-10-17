@@ -45,8 +45,9 @@ export function miniCrew(s: IslandState): MiniItem[] {
       seed: 4,
       state: s.vercel.auth === 'ok' && s.vercel.state === 'fail' ? 'fail' : s.vercel.state === 'run' ? 'work' : 'idle',
     });
-  // the ear holds a 2 × 2 crew: with Vercel on, the first four of those switched on
-  return s.off.length || s.vercel ? all.filter((m) => hasModule(s, m.id)).slice(0, 4) : all;
+  if (s.notion) all.push({ id: 'notion', body: MODULE_COL.notion.body, seed: 5, state: 'idle' });
+  // the ear holds a 2 × 2 crew: with Vercel or Notion on, the first four of those switched on
+  return s.off.length || s.vercel || s.notion ? all.filter((m) => hasModule(s, m.id)).slice(0, 4) : all;
 }
 
 /** proto: drawMini - a tiny flat mascot with its state as a dot */
