@@ -22,6 +22,9 @@ tauri-plugin-global-shortcut = "2"
 almanac-hook = { path = "../hook" }
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 ureq = { version = "3", default-features = false, features = ["json", "native-tls", "gzip"] }
+rrule = "0.14"
+chrono = "0.4"
+chrono-tz = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -39,6 +42,8 @@ windows = { version = "0.61", features = [
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Variant",
+    "Win32_System_Ole",
+    "Win32_Globalization",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
     "Foundation",

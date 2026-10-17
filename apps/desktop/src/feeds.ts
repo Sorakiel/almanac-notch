@@ -14,6 +14,8 @@ export interface CalEvent {
 
 export interface Calendar {
   access: 'ok' | 'denied' | 'unknown' | 'off';
+  /** Mac: 'system'; Windows: the source picked in settings ('none' = not picked) */
+  source?: 'system' | 'outlook' | 'ical' | 'none';
   events: CalEvent[];
 }
 
@@ -22,6 +24,8 @@ const STARTED_MS = 10 * 60 * 1000;
 /** Meeting titles share the card line with nothing; longer ones squeeze unreadably. */
 const TITLE_MAX = 30;
 const AFTER_MAX = 34;
+/** Windows: the source is picked in the settings window. */
+const CAL_HINT = 'Настройки → Календарь';
 
 const hhmm = (t: number): string => {
   const d = new Date(t);
@@ -42,10 +46,14 @@ export function whenText(t: number, now: number): string {
 
 /** proto: calMins + the card's three lines, from the system calendar. */
 export function calFeed(cal: Calendar | null, now: number): CalFeed {
-  if (!cal || cal.access === 'off')
-    return { mins: null, at: '', title: 'Календарь недоступен', after: 'на этой системе' };
-  if (cal.access !== 'ok')
-    return { mins: null, at: '', title: 'Нет доступа к календарю', after: 'меню острова → Доступ к календарю' };
+  const empty = (title: string, after: string): CalFeed => ({ mins: null, at: '', title, after });
+  const picked = cal && (cal.source === 'outlook' || cal.source === 'ical');
+  if (cal && cal.access === 'off' && cal.source === 'none') return empty('Календарь не подключён', CAL_HINT);
+  if (!cal || cal.access === 'off') return empty('Календарь недоступен', 'на этой системе');
+  if (picked && cal.access === 'unknown') return empty('Календарь не отвечает', 'попробую ещё раз позже');
+  if (cal.access !== 'ok' && cal.source === 'outlook') return empty('Outlook не найден', CAL_HINT);
+  if (cal.access !== 'ok' && cal.source === 'ical') return empty('Ссылка не открывается', CAL_HINT);
+  if (cal.access !== 'ok') return empty('Нет доступа к календарю', 'меню острова → Доступ к календарю');
   const ahead = cal.events.filter((e) => e.end > now && e.start > now - STARTED_MS);
   const next = ahead[0];
   if (!next) return { mins: null, at: '', title: 'Встреч нет', after: 'ни сегодня, ни завтра' };

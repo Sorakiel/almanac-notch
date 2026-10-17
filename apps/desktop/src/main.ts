@@ -321,7 +321,8 @@ function tick(now: number, id: number): void {
   cal?.tick();
   media?.tick();
   github?.tick();
-  for (const r of s.requests.splice(0)) if (r === 'settings:github') void invoke('open_settings');
+  for (const r of s.requests.splice(0))
+    if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) });
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();

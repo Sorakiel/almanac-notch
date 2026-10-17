@@ -111,7 +111,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 return;
             }
             if id == "settings" {
-                crate::settings::open(app);
+                crate::settings::open(app, None);
                 return;
             }
             if id == "calendar:access" {

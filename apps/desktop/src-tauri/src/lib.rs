@@ -8,6 +8,11 @@
 mod calendar;
 mod claude;
 mod github;
+// on Mac only its tests use it: the choice of sources is Windows-only
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+mod ical;
+#[cfg(windows)]
+mod outlook;
 mod media;
 mod platform;
 mod settings;
@@ -119,10 +124,33 @@ async fn github_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
 }
 
+/// Calendar source as the settings window shows it.
+#[tauri::command]
+async fn calendar_config() -> calendar::Config {
+    tauri::async_runtime::spawn_blocking(calendar::config)
+        .await
+        .expect("calendar config")
+}
+
+/// Pick the calendar source ("outlook" | "ical" | "off"); `url` is a new iCal link.
+/// Ok(n) = events in the next 48 hours, None = nothing to count.
+#[tauri::command]
+async fn calendar_choose(source: String, url: Option<String>) -> Result<Option<usize>, String> {
+    tauri::async_runtime::spawn_blocking(move || calendar::choose(&source, url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Mac: ask for calendar access again or open System Settings (tray, settings window).
+#[tauri::command]
+fn calendar_access() {
+    calendar::open_access();
+}
+
 /// Settings window (a regular window; the island panel never takes the keyboard).
 #[tauri::command]
-fn open_settings(app: AppHandle) {
-    settings::open(&app);
+fn open_settings(app: AppHandle, section: Option<String>) {
+    settings::open(&app, section.as_deref());
 }
 
 /// Player command from the island ("toggle", "next", "seek 42", ...); unknown ones are dropped.
@@ -289,6 +317,9 @@ pub fn run() {
             set_volume,
             github_connect,
             github_disconnect,
+            calendar_config,
+            calendar_choose,
+            calendar_access,
             open_settings
         ])
         .setup(move |app| {

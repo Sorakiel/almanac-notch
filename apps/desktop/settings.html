@@ -11,6 +11,7 @@
       <h1>Настройки</h1>
       <nav>
         <button class="item on" data-section="github">GitHub</button>
+        <button class="item" data-section="calendar">Календарь</button>
       </nav>
     </aside>
     <main id="github">
@@ -49,6 +50,70 @@
           Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и
           время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке
           ключей системы и не попадает ни в файлы, ни в остров.
+        </p>
+      </section>
+    </main>
+    <main id="calendar" hidden>
+      <h2>Календарь</h2>
+      <p class="status"><span class="dot" id="cal-dot"></span><span id="cal-status">…</span></p>
+
+      <section id="cal-pick" hidden>
+        <div class="choice" role="radiogroup" aria-label="Источник календаря">
+          <label class="opt">
+            <input type="radio" name="cal" value="outlook" />
+            <span><b>Outlook</b><small id="cal-outlook-note">классический Outlook на этом компьютере</small></span>
+          </label>
+          <label class="opt">
+            <input type="radio" name="cal" value="ical" />
+            <span><b>Ссылка iCal</b><small>Google, Outlook.com, iCloud, Яндекс и другие</small></span>
+          </label>
+          <label class="opt">
+            <input type="radio" name="cal" value="off" />
+            <span><b>Ничего</b><small>карточка календаря пустая</small></span>
+          </label>
+        </div>
+
+        <section id="cal-ical" hidden>
+          <label for="cal-url">Секретная ссылка на календарь</label>
+          <div class="row">
+            <input
+              id="cal-url"
+              type="password"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+            />
+            <button id="cal-go" class="primary">Подключить</button>
+          </div>
+          <div class="help">
+            <h3>Где взять ссылку</h3>
+            <ol>
+              <li>
+                Google: calendar.google.com → ⚙ Настройки → слева ваш календарь → «Секретный адрес в формате iCal» →
+                копировать.
+              </li>
+              <li>Outlook.com: Параметры → Календарь → Общие календари → Опубликовать календарь → ссылка ICS.</li>
+              <li>iCloud: Календарь → значок доступа у календаря → «Публичный календарь» → копировать ссылку.</li>
+            </ol>
+          </div>
+        </section>
+        <p class="note" id="cal-error" role="alert"></p>
+      </section>
+
+      <section id="cal-mac" hidden>
+        <p class="plain">
+          На Mac остров читает системный Календарь: в нём уже есть ваши аккаунты Google, iCloud и Exchange (Системные
+          настройки → Интернет-аккаунты).
+        </p>
+        <button id="cal-access">Доступ к календарю…</button>
+      </section>
+
+      <section class="help">
+        <h3>Что читается и куда уходит</h3>
+        <p>
+          Только название и время встреч на 48 часов вперёд. Outlook читается на этом компьютере, без сети. Ссылка iCal
+          открывается раз в 5 минут, других запросов нет; сама ссылка - секрет и хранится в системном хранилище паролей.
         </p>
       </section>
     </main>

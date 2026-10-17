@@ -24,6 +24,17 @@ describe('calendar feed', () => {
     expect(calFeed({ access: 'denied', events: [] }, T0).title).toBe('Нет доступа к календарю');
     expect(calFeed({ access: 'ok', events: [] }, T0).title).toBe('Встреч нет');
   });
+  it('names the Windows source that failed', () => {
+    const t = (c: Calendar): string => calFeed(c, T0).title + ' / ' + calFeed(c, T0).after;
+    expect(t({ access: 'off', source: 'none', events: [] })).toBe('Календарь не подключён / Настройки → Календарь');
+    expect(t({ access: 'denied', source: 'outlook', events: [] })).toBe('Outlook не найден / Настройки → Календарь');
+    expect(t({ access: 'denied', source: 'ical', events: [] })).toBe('Ссылка не открывается / Настройки → Календарь');
+    expect(t({ access: 'unknown', source: 'ical', events: [] })).toBe('Календарь не отвечает / попробую ещё раз позже');
+    expect(t({ access: 'denied', source: 'system', events: [] })).toBe(
+      'Нет доступа к календарю / меню острова → Доступ к календарю',
+    );
+    expect(t({ access: 'off', events: [] })).toBe('Календарь недоступен / на этой системе');
+  });
   it('picks the next call, rounds minutes up, names the one after', () => {
     const c: Calendar = { access: 'ok', events: [ev('Past', -90), ev('Sync', 14), ev('Lecture', 160)] };
     expect(calFeed(c, T0)).toEqual({ mins: 14, at: '14:44', title: 'Sync', after: 'дальше: Lecture в 17:10' });
