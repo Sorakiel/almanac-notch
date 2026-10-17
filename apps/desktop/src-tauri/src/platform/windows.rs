@@ -1,6 +1,8 @@
 //! Windows: tool window at the top edge of the primary monitor, topmost, never activates.
 //! Coordinates are physical pixels (the process is Per-Monitor DPI v2 aware).
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tauri::WebviewWindow;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
@@ -12,7 +14,8 @@ use windows::Win32::UI::HiDpi::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetWindowLongPtrW, GetWindowRect, IsWindowVisible, SetWindowLongPtrW,
     SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -31,14 +34,29 @@ pub fn init_process() {
     }
 }
 
+/// Click-through as last asked; re-applied whenever the styles are rebuilt.
+static IGNORE: AtomicBool = AtomicBool::new(true);
+
+/// Not in Alt-Tab or the taskbar, never activated, topmost.
+const KEEP: isize = (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0) as isize;
+/// Click-through, the same bits tao sets for `set_ignore_cursor_events`.
+const PASS: isize = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0) as isize;
+
+fn wanted_ex(ex: isize) -> isize {
+    let ex = (ex | KEEP) & !(WS_EX_APPWINDOW.0 as isize);
+    if IGNORE.load(Ordering::Relaxed) {
+        ex | PASS
+    } else {
+        ex & !PASS
+    }
+}
+
 pub fn setup_window(window: &WebviewWindow) {
     let h = hwnd(window);
     // SAFETY: `h` is a live window owned by Tauri.
     unsafe {
         let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
-        let ex = (ex | (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0) as isize)
-            & !(WS_EX_APPWINDOW.0 as isize);
-        SetWindowLongPtrW(h, GWL_EXSTYLE, ex);
+        SetWindowLongPtrW(h, GWL_EXSTYLE, wanted_ex(ex));
         let _ = SetWindowPos(
             h,
             Some(HWND_TOPMOST),
@@ -118,11 +136,16 @@ pub fn needs_replace(window: &WebviewWindow, last: &Placement) -> bool {
     let (r, geometry, scale) = desired(h);
     let mut got = RECT::default();
     // SAFETY: plain Win32 queries on a live window.
-    let visible = unsafe {
+    let (visible, ex) = unsafe {
         let _ = GetWindowRect(h, &mut got);
-        IsWindowVisible(h).as_bool()
+        (
+            IsWindowVisible(h).as_bool(),
+            GetWindowLongPtrW(h, GWL_EXSTYLE),
+        )
     };
+    // tao rebuilds GWL_EXSTYLE from its own flags on some changes and drops ours.
     !visible
+        || ex != wanted_ex(ex)
         || geometry != last.geometry
         || (scale - last.scale).abs() > f64::EPSILON
         || got.left != r.left
@@ -140,6 +163,26 @@ pub fn remember_front_app() {}
 
 pub fn yield_activation() {}
 
+/// Not `window.set_ignore_cursor_events`: tao rewrites the whole GWL_EXSTYLE from its flags
+/// there, which drops WS_EX_TOOLWINDOW (Alt-Tab) and WS_EX_NOACTIVATE (focus on click).
 pub fn set_ignore(window: &WebviewWindow, ignore: bool) {
-    let _ = window.set_ignore_cursor_events(ignore);
+    IGNORE.store(ignore, Ordering::Relaxed);
+    let h = hwnd(window);
+    // SAFETY: `h` is a live window owned by Tauri.
+    unsafe {
+        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+        let want = wanted_ex(ex);
+        if want != ex {
+            SetWindowLongPtrW(h, GWL_EXSTYLE, want);
+            let _ = SetWindowPos(
+                h,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+        }
+    }
 }

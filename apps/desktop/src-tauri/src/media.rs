@@ -4,7 +4,9 @@
 //! (`media/mediaremote.m`, built by build.rs and embedded here) runs inside `/usr/bin/perl`.
 //! One long-lived process: JSON lines out (`island://media`), commands in through stdin.
 //! Volume is the default output device's main volume (CoreAudio), polled once a second
-//! (`island://volume`). Other platforms: nothing starts and the frontend shows an empty module.
+//! (`island://volume`).
+//! Windows: the system media session (SMTC) and the default render endpoint's volume
+//! (`media_win.rs`), same messages. Other platforms: nothing starts, the module stays empty.
 
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
@@ -18,6 +20,8 @@ const COMMANDS: [&str; 6] = ["toggle", "next", "prev", "seek", "shuffle", "repea
 pub struct Media {
     #[cfg(target_os = "macos")]
     stdin: Mutex<Option<std::process::ChildStdin>>,
+    #[cfg(windows)]
+    tx: std::sync::Mutex<std::sync::mpsc::Sender<String>>,
 }
 
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
@@ -33,7 +37,9 @@ impl Media {
                 let _ = writeln!(w, "{line}");
             }
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(windows)]
+        let _ = self.tx.lock().unwrap().send(line);
+        #[cfg(not(any(target_os = "macos", windows)))]
         let _ = line;
     }
 }
@@ -55,13 +61,19 @@ fn parse(cmd: &str) -> Option<String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn start(_emit: Emit) -> Arc<Media> {
     Arc::new(Media {})
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn set_volume(_v: f32) {}
+
+#[cfg(windows)]
+#[path = "media_win.rs"]
+mod win;
+#[cfg(windows)]
+pub use win::{set_volume, start};
 
 #[cfg(target_os = "macos")]
 pub use mac::{set_volume, start};

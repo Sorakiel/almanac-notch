@@ -299,6 +299,8 @@ pub fn run() {
             let window = app
                 .get_webview_window("island")
                 .expect("island window missing");
+            // Windows: tao's version would rewrite the extended styles (platform/windows.rs).
+            #[cfg(not(windows))]
             window.set_ignore_cursor_events(true)?;
             platform::setup_window(&window);
             platform::set_ignore(&window, true);
