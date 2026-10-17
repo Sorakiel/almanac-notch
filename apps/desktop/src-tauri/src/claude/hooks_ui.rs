@@ -13,9 +13,17 @@ use tauri_plugin_dialog::{
     DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
 };
 
-const WRITE: &str = "Записать";
-const SHOW: &str = "Показать дифф";
-const CANCEL: &str = "Отмена";
+use crate::lang::{en, t};
+
+fn write_btn() -> &'static str {
+    t("Записать", "Write")
+}
+fn show_btn() -> &'static str {
+    t("Показать дифф", "Show diff")
+}
+fn cancel_btn() -> &'static str {
+    t("Отмена", "Cancel")
+}
 
 /// The hook client binary to copy: next to the app's executable (bundle), or the
 /// release build of apps/desktop/hook in a dev checkout.
@@ -94,17 +102,35 @@ fn ask(job: Job) {
         .count();
     let what = if job.source.is_some() {
         let events: Vec<&str> = install::EVENTS.iter().map(|(e, _)| *e).collect();
+        if en() {
+            format!(
+                "Almanac Notch hooks will be added for:\n{}.",
+                events.join(", ")
+            )
+        } else {
+            format!(
+                "Добавятся хуки Almanac Notch для событий:\n{}.",
+                events.join(", ")
+            )
+        }
+    } else {
+        t(
+            "Удалятся хуки Almanac Notch.",
+            "Almanac Notch hooks will be removed.",
+        )
+        .to_string()
+    };
+    let text = if en() {
         format!(
-            "Добавятся хуки Almanac Notch для событий:\n{}.",
-            events.join(", ")
+            "{what}\n\nFile: {}\nLines: +{added} −{removed}. Other hooks and settings stay as they are. A backup is made before writing.",
+            job.plan.path.display()
         )
     } else {
-        "Удалятся хуки Almanac Notch.".to_string()
+        format!(
+            "{what}\n\nФайл: {}\nСтрок: +{added} −{removed}. Другие хуки и настройки не меняются. Перед записью будет сделан бэкап.",
+            job.plan.path.display()
+        )
     };
-    let text = format!(
-        "{what}\n\nФайл: {}\nСтрок: +{added} −{removed}. Другие хуки и настройки не меняются. Перед записью будет сделан бэкап.",
-        job.plan.path.display()
-    );
     let dialog = job
         .app
         .dialog()
@@ -112,18 +138,18 @@ fn ask(job: Job) {
         .title(job.title)
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::YesNoCancelCustom(
-            WRITE.into(),
-            SHOW.into(),
-            CANCEL.into(),
+            write_btn().into(),
+            show_btn().into(),
+            cancel_btn().into(),
         ));
     dialog.show_with_result(move |r| {
-        if pressed(&r, SHOW, &MessageDialogResult::No) {
+        if pressed(&r, show_btn(), &MessageDialogResult::No) {
             if let Err(e) = open_diff(&job.plan.diff) {
                 return info(&job.app, job.title, &e, MessageDialogKind::Error);
             }
             return ask(job);
         }
-        if !pressed(&r, WRITE, &MessageDialogResult::Yes) {
+        if !pressed(&r, write_btn(), &MessageDialogResult::Yes) {
             return;
         }
         write(job);
@@ -139,12 +165,15 @@ fn write(job: Job) {
     match install::apply(&job.plan) {
         Ok(b) => {
             let backup = b
-                .map(|p| format!("\nБэкап: {}", p.display()))
+                .map(|p| format!("\n{} {}", t("Бэкап:", "Backup:"), p.display()))
                 .unwrap_or_default();
             let what = if job.source.is_some() {
-                "Хуки установлены. Новые сессии Claude Code уже их используют."
+                t(
+                    "Хуки установлены. Новые сессии Claude Code уже их используют.",
+                    "Hooks installed. New Claude Code sessions already use them.",
+                )
             } else {
-                "Хуки удалены."
+                t("Хуки удалены.", "Hooks removed.")
             };
             info(
                 &job.app,
@@ -161,9 +190,9 @@ pub fn run(app: &AppHandle, add: bool) {
     let settings = paths::claude_settings();
     let target = paths::installed_hook();
     let title = if add {
-        "Хуки Claude Code: установка"
+        t("Хуки Claude Code: установка", "Claude Code hooks: install")
     } else {
-        "Хуки Claude Code: удаление"
+        t("Хуки Claude Code: удаление", "Claude Code hooks: remove")
     };
     let source = if add {
         match client_source() {
@@ -172,7 +201,10 @@ pub fn run(app: &AppHandle, add: bool) {
                 info(
                     app,
                     title,
-                    "Не найден клиент хука almanac-hook. Собери его: npm run hook:build",
+                    t(
+                        "Не найден клиент хука almanac-hook. Собери его: npm run hook:build",
+                        "The almanac-hook client is missing. Build it: npm run hook:build",
+                    ),
                     MessageDialogKind::Error,
                 );
                 return;
@@ -198,9 +230,15 @@ pub fn run(app: &AppHandle, add: bool) {
             }
         }
         let msg = if add {
-            "Хуки уже установлены, клиент хука обновлён."
+            t(
+                "Хуки уже установлены, клиент хука обновлён.",
+                "Hooks are already installed; the hook client is updated.",
+            )
         } else {
-            "Наших хуков в settings.json нет."
+            t(
+                "Наших хуков в settings.json нет.",
+                "No Almanac Notch hooks in settings.json.",
+            )
         };
         return info(app, title, msg, MessageDialogKind::Info);
     }

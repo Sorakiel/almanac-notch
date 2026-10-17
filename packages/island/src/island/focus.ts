@@ -1,4 +1,5 @@
 // The part of the island's state machine the mascot's behaviour reads. Drawing comes in stage 2b.
+import { tr } from '../i18n';
 import type { IslandState, ModuleId } from '../sim/state';
 import type { MascotColor } from '../sim/settings';
 import { calMins } from '../stub';
@@ -48,11 +49,11 @@ export function callMins(s: IslandState): number {
 }
 
 /** "14 мин", "2 ч", "2 ч 5 мин": the live calendar can be hours away (the stub never is) */
-export function minsText(m: number): string {
-  if (m < 60) return m + ' мин';
+export function minsText(s: IslandState, m: number): string {
+  if (m < 60) return tr(s, '{0} мин', m);
   const h = Math.floor(m / 60),
     r = m % 60;
-  return h + ' ч' + (r ? ' ' + r + ' мин' : '');
+  return r ? tr(s, '{0} ч {1} мин', h, r) : tr(s, '{0} ч', h);
 }
 
 /** proto: habitsDone */

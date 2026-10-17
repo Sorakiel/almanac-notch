@@ -2,6 +2,7 @@ import { after, type EventType, type IslandState } from './state';
 import { hop, wake } from './actions';
 import { burst } from './particles';
 import { STEPS, STEP_LEN, clockLeft, limitLeft, type Step } from '../stub';
+import { tr } from '../i18n';
 
 export interface EventDef {
   label: string;
@@ -35,8 +36,10 @@ export function stepIndex(s: IslandState): number {
 }
 /** proto: stepAt - stubs cycle; real steps end (null before the first one) */
 export function stepAt(s: IslandState, i: number): Step | null {
-  if (s.agent) return s.agent.steps[i] ?? null;
-  return STEPS[((i % STEPS.length) + STEPS.length) % STEPS.length] as Step;
+  const st = s.agent ? (s.agent.steps[i] ?? null) : (STEPS[((i % STEPS.length) + STEPS.length) % STEPS.length] as Step);
+  // the verb is a Russian key (stub and live steps alike); the target is a file or a command
+  // and passes through, except the app's own fallback words ("агенту")
+  return st && s.lang === 'en' ? ([st[0], tr(s, st[1]), tr(s, st[2]), ...st.slice(3)] as unknown as Step) : st;
 }
 /** progress 0..1 of the newest step's slide-in period */
 export function stepFrac(s: IslandState): number {
@@ -104,7 +107,7 @@ export function trigger(s: IslandState, type: EventType | 'sleep'): void {
   if (type === 'greeting') {
     // a boot-up scene in beats: the island traces itself, the mascot rises with its eyes shut,
     // lands, powers its eyes on, looks around, recognises you, hops twice and says hello
-    event.greet = greetText(s.date());
+    event.greet = tr(s, greetText(s.date()));
     sp.hide.x = 1.15;
     sp.hide.v = 0;
     sp.lid.x = 0;
@@ -187,25 +190,25 @@ export function statusOf(s: IslandState): Status | null {
   const { event, t } = s;
   if (event) {
     const E = EVENTS[event.type];
-    let text = E.text;
+    let text = tr(s, E.text);
     if (event.type === 'working') {
       const st = stepAt(s, stepIndex(s));
       if (st) text = st[1] ? st[1] + ' ' + st[2] : st[2];
     }
-    if (event.type === 'ratelimit') text = 'Лимит ' + limitText(s);
+    if (event.type === 'ratelimit') text = tr(s, 'Лимит {0}', limitText(s));
     if (event.type === 'greeting') {
       const el = t - event.start,
         g = event.greet || '';
       text = el < 3.45 ? '' : g.slice(0, Math.floor((el - 3.45) * 26));
     }
-    if (event.label) text = event.label;
+    if (event.label) text = tr(s, event.label);
     return { text, color: E.color, badge: event.type !== 'greeting' && event.type !== 'ratelimit', drop: !!E.drop };
   }
-  if (s.overloadUntil > t) return { text: 'Перегруз', color: '#FF5FA2' };
-  if (s.grab && s.grab.active) return { text: 'Поставь на место', color: '#F5A524' };
-  if (s.hideUntil > t) return { text: 'Спрятался', color: '#8E8E93' };
-  if (s.grumpyUntil > t) return { text: 'Дуется', color: '#FF453A' };
-  if (s.petting) return { text: 'Нравится', color: '#34C759' };
-  if (s.sleeping) return { text: 'Тихо', color: '#8E8E93', badge: true };
+  if (s.overloadUntil > t) return { text: tr(s, 'Перегруз'), color: '#FF5FA2' };
+  if (s.grab && s.grab.active) return { text: tr(s, 'Поставь на место'), color: '#F5A524' };
+  if (s.hideUntil > t) return { text: tr(s, 'Спрятался'), color: '#8E8E93' };
+  if (s.grumpyUntil > t) return { text: tr(s, 'Дуется'), color: '#FF453A' };
+  if (s.petting) return { text: tr(s, 'Нравится'), color: '#34C759' };
+  if (s.sleeping) return { text: tr(s, 'Тихо'), color: '#8E8E93', badge: true };
   return null;
 }

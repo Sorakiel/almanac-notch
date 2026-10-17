@@ -1,4 +1,5 @@
 // The non-home tabs of the open island: chat, add a module, settings (docs/SPEC.md 2.6).
+import { tr } from '../i18n';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { addHit, hovering } from './hits';
@@ -14,12 +15,16 @@ export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: num
   c.fillStyle = 'rgba(255,255,255,0.08)';
   rrect(c, cx0, y0 + 6, Math.min(220, X1 - cx0), 26, 13);
   c.fill();
-  textAt(c, 'Привет! Чем помочь?', cx0 + 12, y0 + 19.5, { size: 12, weight: 400, max: X1 - cx0 - 24 });
-  textAt(c, 'qwen3.5:4b · локально', X1 - 6, y1 - 42, { size: 11, weight: 400, color: T_MUTED, align: 'right' });
+  textAt(c, tr(s, 'Привет! Чем помочь?'), cx0 + 12, y0 + 19.5, { size: 12, weight: 400, max: X1 - cx0 - 24 });
+  textAt(c, tr(s, 'qwen3.5:4b · локально'), X1 - 6, y1 - 42, { size: 11, weight: 400, color: T_MUTED, align: 'right' });
   c.fillStyle = 'rgba(255,255,255,0.08)';
   rrect(c, cx0, y1 - 32, X1 - cx0, 32, 16);
   c.fill();
-  textAt(c, 'Спроси что-нибудь…', cx0 + 14, y1 - 15.5, { size: 12, weight: 400, color: 'rgba(255,255,255,0.4)' });
+  textAt(c, tr(s, 'Спроси что-нибудь…'), cx0 + 14, y1 - 15.5, {
+    size: 12,
+    weight: 400,
+    color: 'rgba(255,255,255,0.4)',
+  });
   c.fillStyle = '#FFFFFF';
   c.beginPath();
   c.arc(X1 - 16, y1 - 16, 11, 0, Math.PI * 2);
@@ -38,7 +43,7 @@ export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: num
 
 /** proto: drawAdd */
 export function drawAdd(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
-  const list = ['Почта', 'Notion', 'Obsidian', 'n8n', 'Vercel', 'Grafana'];
+  const list = [tr(s, 'Почта'), 'Notion', 'Obsidian', 'n8n', 'Vercel', 'Grafana'];
   const gap = 8,
     w = (X1 - X0 - gap * 2) / 3,
     h = (y1 - y0 - gap) / 2;
@@ -76,7 +81,7 @@ export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0:
     c.fillStyle = hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
     rrect(c, X0, y, X1 - X0, h, 10);
     c.fill();
-    textAt(c, r[0], X0 + 12, y + h / 2 + 0.5, { size: 12, max: X1 - X0 - 40 });
+    textAt(c, tr(s, r[0]), X0 + 12, y + h / 2 + 0.5, { size: 12, max: X1 - X0 - 40 });
     if (i === linkRow) {
       textAt(c, '›', X1 - 18, y + h / 2 + 0.5, { size: 14, color: 'rgba(255,255,255,0.5)', align: 'center' });
       addHit(s, c, { x: X0, y, w: X1 - X0, h, act: 'open:settings' });

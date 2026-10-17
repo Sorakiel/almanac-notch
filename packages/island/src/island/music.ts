@@ -1,4 +1,5 @@
 // Music in focus: the wide player and the narrow rail of the other modules (docs/SPEC.md 2.5).
+import { tr } from '../i18n';
 import { clamp, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
@@ -60,7 +61,12 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
     ay = cy0 + 10,
     as = 40,
     md = s.media,
-    tr = md ? ([md.title, md.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]),
+    stub = TRACKS[s.trackIdx] as readonly [string, string],
+    trk = md
+      ? md.idle
+        ? ([tr(s, md.title), tr(s, md.sub)] as const)
+        : ([md.title, md.sub] as const)
+      : ([tr(s, stub[0]), tr(s, stub[1])] as const),
     art = TRACK_ART[md ? md.artSeed % TRACK_ART.length : s.trackIdx] as readonly [string, string],
     len = md ? md.len : (TRACK_LEN[s.trackIdx] as number);
   c.save();
@@ -112,8 +118,8 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   c.beginPath();
   c.arc(tx + 3, ay + 11, 3, 0, Math.PI * 2);
   c.fill();
-  textAt(c, tr[0], tx + 12, ay + 11.5, { size: 13, weight: 600, max: right - tx - 12 });
-  textAt(c, md ? md.sub : tr[1] + ' · ' + (tr[0].split(' ')[0] as string), tx, ay + 29, {
+  textAt(c, trk[0], tx + 12, ay + 11.5, { size: 13, weight: 600, max: right - tx - 12 });
+  textAt(c, md ? trk[1] : trk[1] + ' · ' + (trk[0].split(' ')[0] as string), tx, ay + 29, {
     size: 11.5,
     weight: 400,
     color: T_MUTED,

@@ -29,7 +29,14 @@ describe('modules (SPEC 2.5)', () => {
       'Lo-fi Radio',
       'привычки 3 из 5',
     ]);
-    expect(m.map(idleShort)).toEqual(['свободен', 'CI зелёный', '12 мин', 'играет', '3/5']);
+    expect(m.map((it) => idleShort(s, it))).toEqual(['свободен', 'CI зелёный', '12 мин', 'играет', '3/5']);
+  });
+  it('speaks English with s.lang = en', () => {
+    const s = make();
+    s.lang = 'en';
+    const m = modules(s);
+    expect(m.map((i) => i.short)).toEqual(['idle', 'CI green', 'call in 12 min', 'Lo-fi Radio', 'habits 3 of 5']);
+    expect(m.map((it) => idleShort(s, it))).toEqual(['idle', 'CI green', '12 min', 'playing', '3/5']);
   });
 
   it('working: agent shows the current step, CI runs, both are hot', () => {

@@ -34,7 +34,7 @@ describe('live calendar (s.cal)', () => {
     expect(autoFocus(s)).toBe('almanac');
     const cal = modules(s)[2];
     expect(cal?.short).toBe('встреч нет');
-    expect(cal && idleShort(cal)).toBe('нет');
+    expect(cal && idleShort(s, cal)).toBe('нет');
   });
   it('a call in 25 min takes focus, amber at 5 min and after the start', () => {
     const s = make();
@@ -47,10 +47,13 @@ describe('live calendar (s.cal)', () => {
     expect(modules(s)[2]?.short).toBe('созвон сейчас');
   });
   it('hours away read as hours', () => {
-    expect(minsText(14)).toBe('14 мин');
-    expect(minsText(120)).toBe('2 ч');
-    expect(minsText(125)).toBe('2 ч 5 мин');
     const s = make();
+    expect(minsText(s, 14)).toBe('14 мин');
+    expect(minsText(s, 120)).toBe('2 ч');
+    expect(minsText(s, 125)).toBe('2 ч 5 мин');
+    s.lang = 'en';
+    expect(minsText(s, 125)).toBe('2 h 5 min');
+    s.lang = 'ru';
     s.cal = { mins: 125, at: '17:00', title: 'X', after: '' };
     expect(autoFocus(s)).toBe('almanac');
     expect(modules(s)[2]?.short).toBe('созвон через 2 ч 5 мин');

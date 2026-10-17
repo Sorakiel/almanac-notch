@@ -1,4 +1,5 @@
 // Half-open: the mascot in the left ear, status or the crew in the right one (docs/SPEC.md 2.3).
+import { tr } from '../i18n';
 import { clamp } from '../util/math';
 import { textAt, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
@@ -32,13 +33,13 @@ export function approvalBlock(s: IslandState, c: Ctx, x0: number, x1: number, to
   c.globalAlpha *= k;
   const cx = (x0 + x1) / 2;
   const q = s.event && s.event.type === 'question';
-  textAt(c, q ? 'Claude Code спрашивает' : 'Claude Code хочет выполнить', cx, top + 12, {
+  textAt(c, tr(s, q ? 'Claude Code спрашивает' : 'Claude Code хочет выполнить'), cx, top + 12, {
     align: 'center',
     max: x1 - x0 - 24,
   });
   if (h > 44) {
     if (q)
-      textAt(c, 'наведи на остров, чтобы ответить', cx, top + 36, {
+      textAt(c, tr(s, 'наведи на остров, чтобы ответить'), cx, top + 36, {
         size: 11,
         weight: 400,
         align: 'center',
@@ -46,8 +47,8 @@ export function approvalBlock(s: IslandState, c: Ctx, x0: number, x1: number, to
       });
     else {
       const bw = 74;
-      button(s, c, cx - bw - 4, top + 27, bw, 20, 'Отклонить', 'deny', false);
-      button(s, c, cx + 4, top + 27, bw, 20, 'Разрешить', 'approve', true);
+      button(s, c, cx - bw - 4, top + 27, bw, 20, tr(s, 'Отклонить'), 'deny', false);
+      button(s, c, cx + 4, top + 27, bw, 20, tr(s, 'Разрешить'), 'approve', true);
     }
   }
   c.restore();

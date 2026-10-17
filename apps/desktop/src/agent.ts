@@ -1,7 +1,14 @@
 // Claude Code sessions -> island events. Hook payloads come from the Rust hook server
 // (`island://agent`), plan usage from the transcript watcher (`island://usage`).
 // Pure logic over the mascot, so it runs in vitest without Tauri.
-import type { AgentFeed, EventType, IslandState, Mascot, MascotEvent } from '@almanac-notch/island';
+import {
+  tr,
+  type AgentFeed,
+  type EventType,
+  type IslandState,
+  type Mascot,
+  type MascotEvent,
+} from '@almanac-notch/island';
 
 type Step = AgentFeed['steps'][number];
 
@@ -488,7 +495,7 @@ export class AgentDriver {
       const ev = s.event;
       if (ev && (ev.type === 'working' || ev.type === 'searching')) {
         const st = f.steps[f.steps.length - 1];
-        f.think = st ? 'после: ' + (st[1] ? st[1].toLowerCase() + ' ' + st[2] : st[2]) : '';
+        f.think = st ? tr(s, 'после: {0}', st[1] ? tr(s, st[1]).toLowerCase() + ' ' + tr(s, st[2]) : st[2]) : '';
         this.show('thinking');
       }
     }

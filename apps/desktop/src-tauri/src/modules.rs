@@ -69,15 +69,25 @@ pub fn is_on(id: &str) -> bool {
 /// From the settings window. Refuses to switch every module off.
 pub fn set(off: Vec<String>, chat: bool) -> Result<Config, String> {
     if let Some(bad) = off.iter().find(|id| !ALL.contains(&id.as_str())) {
-        return Err(format!("Неизвестный модуль: {bad}"));
+        return Err(format!(
+            "{} {bad}",
+            crate::lang::t("Неизвестный модуль:", "Unknown module:")
+        ));
     }
     if ALL.iter().all(|id| off.iter().any(|o| o == id)) {
-        return Err("Хотя бы один модуль должен остаться включённым".into());
+        return Err(crate::lang::t(
+            "Хотя бы один модуль должен остаться включённым",
+            "At least one module must stay on",
+        )
+        .into());
     }
     let c = Config { off, chat };
     fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(|e| e.to_string())?;
-    fs::write(path(), serde_json::to_string(&c).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    fs::write(
+        path(),
+        serde_json::to_string(&c).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     *CFG.write().unwrap() = Some(c.clone());
     Ok(c)
 }

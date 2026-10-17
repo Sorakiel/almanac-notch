@@ -8,6 +8,7 @@ import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Calendar, GhState } from './feeds';
+import { count, setLang, t, translatePage } from './settings-i18n';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const input = $<HTMLInputElement>('token'),
@@ -21,28 +22,28 @@ const input = $<HTMLInputElement>('token'),
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 
-function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10,
-    m100 = n % 100;
-  return n + ' ' + (m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many);
-}
+// the last data of each section: a language switch draws them again
+let lastG: GhState | null = null,
+  lastCal: Calendar | null = null;
 
 function render(g: GhState | null): void {
+  lastG = g;
   const on = !!g && g.auth !== 'off' && g.auth !== 'bad' && !!g.login;
   connect.hidden = on;
   connected.hidden = !on;
   dot.className = 'dot' + (on ? ' ok' : g && g.auth === 'bad' ? ' bad' : '');
   if (on && g) {
     text.textContent =
-      '@' +
-      g.login +
-      ' · ' +
-      plural(g.repo_count, 'репозиторий', 'репозитория', 'репозиториев') +
-      ' · CI в ' +
-      g.repos.filter((r) => r.state !== 'none').length +
-      (g.auth === 'net' ? ' · нет связи' : '');
-  } else if (g && g.auth === 'bad') text.textContent = 'GitHub не принял сохранённый токен';
-  else text.textContent = 'Не подключён';
+      t(
+        '{0} · CI в {1}',
+        '@' +
+          g.login +
+          ' · ' +
+          count(g.repo_count, ['репозиторий', 'репозитория', 'репозиториев'], ['repository', 'repositories']),
+        g.repos.filter((r) => r.state !== 'none').length,
+      ) + (g.auth === 'net' ? t(' · нет связи') : '');
+  } else if (g && g.auth === 'bad') text.textContent = t('GitHub не принял сохранённый токен');
+  else text.textContent = t('Не подключён');
 }
 
 async function doConnect(): Promise<void> {
@@ -137,7 +138,7 @@ function renderModules(c: Modules): void {
 }
 async function saveModules(next: Modules): Promise<void> {
   if (Object.values(MOD_OF).every((id) => next.off.includes(id))) {
-    say('Хотя бы один модуль должен остаться включённым');
+    say(t('Хотя бы один модуль должен остаться включённым'));
     renderModules(modCfg);
     return;
   }
@@ -165,16 +166,18 @@ interface MediaNow {
   app?: string;
   playing?: boolean;
 }
+let lastMusic: MediaNow | null = null;
 function renderMusic(m: MediaNow | null): void {
+  lastMusic = m;
   const on = !!m && !m.off && !m.none && !!m.title;
   $('music-dot').className = 'dot' + (on && m.playing ? ' ok' : m && m.off ? ' bad' : '');
   $('music-status').textContent = !m
-    ? 'Ничего не играет'
+    ? t('Ничего не играет')
     : m.off
-      ? 'Музыка недоступна на этой системе'
+      ? t('Музыка недоступна на этой системе')
       : on
-        ? (m.playing ? '' : 'Пауза · ') + [m.title, m.artist, m.app].filter(Boolean).join(' · ')
-        : 'Ничего не играет';
+        ? (m.playing ? '' : t('Пауза · ')) + [m.title, m.artist, m.app].filter(Boolean).join(' · ')
+        : t('Ничего не играет');
 }
 
 // ---------- calendar ----------
@@ -198,21 +201,22 @@ let calCfg: CalConfig | null = null;
 const SOURCE_NAME: Record<string, string> = { outlook: 'Outlook', ical: 'ссылка iCal', system: 'системный Календарь' };
 
 function renderCal(c: Calendar | null): void {
+  lastCal = c;
   const ok = !!c && c.access === 'ok';
   calDot.className = 'dot' + (ok ? ' ok' : c && c.access === 'denied' ? ' bad' : '');
-  if (!c || (c.access === 'off' && c.source === 'none')) calStatus.textContent = 'Не подключён';
+  if (!c || (c.access === 'off' && c.source === 'none')) calStatus.textContent = t('Не подключён');
   else if (ok)
-    calStatus.textContent =
-      (SOURCE_NAME[c.source ?? ''] ?? 'календарь') +
-      ' · ' +
-      plural(c.events.length, 'встреча', 'встречи', 'встреч') +
-      ' за 48 ч';
+    calStatus.textContent = t(
+      '{0} · {1} за 48 ч',
+      t(SOURCE_NAME[c.source ?? ''] ?? 'календарь'),
+      count(c.events.length, ['встреча', 'встречи', 'встреч'], ['meeting', 'meetings']),
+    );
   else if (c.access === 'unknown')
-    calStatus.textContent = c.source === 'system' ? 'Доступ ещё не выдан' : 'Календарь пока не ответил';
-  else if (c.source === 'outlook') calStatus.textContent = 'Outlook не найден';
-  else if (c.source === 'ical') calStatus.textContent = 'Ссылка не открывается';
-  else if (c.access === 'denied') calStatus.textContent = 'Нет доступа к календарю';
-  else calStatus.textContent = 'Недоступен на этой системе';
+    calStatus.textContent = t(c.source === 'system' ? 'Доступ ещё не выдан' : 'Календарь пока не ответил');
+  else if (c.source === 'outlook') calStatus.textContent = t('Outlook не найден');
+  else if (c.source === 'ical') calStatus.textContent = t('Ссылка не открывается');
+  else if (c.access === 'denied') calStatus.textContent = t('Нет доступа к календарю');
+  else calStatus.textContent = t('Недоступен на этой системе');
 }
 
 function renderPick(): void {
@@ -223,17 +227,18 @@ function renderPick(): void {
   const outlook = radios.find((r) => r.value === 'outlook');
   if (outlook) outlook.disabled = !calCfg.outlook;
   const picked = radios.find((r) => r.checked)?.value ?? calCfg.source;
-  $('cal-src-note').textContent =
+  $('cal-src-note').textContent = t(
     picked === 'outlook'
       ? 'Календарь по умолчанию из классического Outlook на этом компьютере, без сети.'
       : picked === 'ical'
         ? 'Google, Outlook.com, iCloud, Яндекс и другие: секретная ссылка на календарь в формате iCal.'
         : calCfg.outlook
           ? 'Карточка календаря пустая.'
-          : 'Карточка календаря пустая. Классический Outlook не найден: новый Outlook подключается ссылкой iCal.';
+          : 'Карточка календаря пустая. Классический Outlook не найден: новый Outlook подключается ссылкой iCal.',
+  );
   for (const r of radios) r.checked = r.value === picked;
   calIcal.hidden = picked !== 'ical';
-  calGo.textContent = calCfg.ical && picked === 'ical' ? 'Заменить' : 'Подключить';
+  calGo.textContent = t(calCfg.ical && picked === 'ical' ? 'Заменить' : 'Подключить');
 }
 
 async function choose(source: string, url?: string): Promise<void> {
@@ -245,7 +250,10 @@ async function choose(source: string, url?: string): Promise<void> {
     calUrl.value = '';
     if (n !== null) {
       calErr.classList.add('ok-note');
-      calErr.textContent = 'Подключено: ' + plural(n, 'встреча', 'встречи', 'встреч') + ' за 48 ч';
+      calErr.textContent = t(
+        'Подключено: {0} за 48 ч',
+        count(n, ['встреча', 'встречи', 'встреч'], ['meeting', 'meetings']),
+      );
     }
   } catch (e) {
     calErr.textContent = String(e);
@@ -278,9 +286,11 @@ interface IslandStatus {
   hooks: boolean;
 }
 const states = [...document.querySelectorAll<HTMLInputElement>('input[name=nstate]')];
+let lastIsland: IslandStatus = { state: 'auto', hooks: false };
 function renderIsland(st: IslandStatus): void {
+  lastIsland = st;
   $('hooks-dot').className = 'dot' + (st.hooks ? ' ok' : '');
-  $('hooks-status').textContent = st.hooks ? 'Хуки установлены' : 'Хуки не установлены';
+  $('hooks-status').textContent = t(st.hooks ? 'Хуки установлены' : 'Хуки не установлены');
   for (const r of states) r.checked = r.value === st.state;
 }
 async function refreshIsland(): Promise<void> {
@@ -301,9 +311,32 @@ renderCal(null);
 renderIsland({ state: 'auto', hooks: false });
 renderMusic(null);
 renderModules(modCfg);
-$('music-src').textContent = navigator.userAgent.includes('Windows')
-  ? 'Windows: системный медиа-сеанс - любой плеер, который показывает себя в регуляторе громкости (Spotify, браузеры, Я.Музыка).'
-  : 'Mac: любой плеер из «Исполняется» в Пункте управления, включая браузеры.';
+// ---------- language (stage 8) ----------
+interface LangCfg {
+  pick: string;
+  lang: string;
+}
+const langs = [...document.querySelectorAll<HTMLInputElement>('input[name=lang]')];
+function renderLang(c: LangCfg): void {
+  setLang(c.lang === 'en' ? 'en' : 'ru');
+  for (const r of langs) r.checked = r.value === c.pick;
+  translatePage(document.body);
+  $('music-src').textContent = t(
+    navigator.userAgent.includes('Windows')
+      ? 'Windows: системный медиа-сеанс - любой плеер, который показывает себя в регуляторе громкости (Spotify, браузеры, Я.Музыка).'
+      : 'Mac: любой плеер из «Исполняется» в Пункте управления, включая браузеры.',
+  );
+  render(lastG);
+  renderCal(lastCal);
+  renderMusic(lastMusic);
+  renderIsland(lastIsland);
+  renderPick();
+}
+for (const r of langs)
+  r.addEventListener('change', () => {
+    if (inTauri) void invoke<LangCfg>('lang_set', { pick: r.value }).then(renderLang);
+  });
+renderLang({ pick: 'auto', lang: 'ru' });
 if (inTauri) {
   await listen<Calendar>('island://calendar', (e) => renderCal(e.payload));
   await listen<GhState>('island://github', (e) => render(e.payload));
@@ -316,6 +349,8 @@ if (inTauri) {
   renderPick();
   await refreshIsland();
   renderModules(await invoke<Modules>('modules_get'));
+  renderLang(await invoke<LangCfg>('lang_get'));
+  await listen<LangCfg>('island://lang', (e) => renderLang(e.payload));
   await listen<Modules>('island://modules', (e) => renderModules(e.payload));
   await listen<string>('island://state', (e) => {
     for (const r of states) r.checked = r.value === e.payload;

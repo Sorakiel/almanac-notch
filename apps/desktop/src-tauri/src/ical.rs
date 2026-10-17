@@ -35,7 +35,11 @@ pub fn normalize(url: &str) -> Result<String, String> {
         None => u.to_string(),
     };
     if !u.starts_with("https://") || u.len() < 12 || u.contains(char::is_whitespace) {
-        return Err("Нужна ссылка https:// или webcal://".into());
+        return Err(crate::lang::t(
+            "Нужна ссылка https:// или webcal://",
+            "The link must start with https:// or webcal://",
+        )
+        .into());
     }
     Ok(u)
 }
@@ -52,9 +56,11 @@ pub fn fetch(url: &str) -> Result<String, Failure> {
         return Err(Failure::Net);
     }
     if code >= 400 {
-        return Err(Failure::Bad(format!(
-            "Сервер ответил {code}: ссылка неверна или отозвана"
-        )));
+        return Err(Failure::Bad(if crate::lang::en() {
+            format!("The server answered {code}: the link is wrong or revoked")
+        } else {
+            format!("Сервер ответил {code}: ссылка неверна или отозвана")
+        }));
     }
     let text = resp
         .body_mut()
@@ -68,7 +74,11 @@ pub fn fetch(url: &str) -> Result<String, Failure> {
         .starts_with("BEGIN:VCALENDAR")
     {
         return Err(Failure::Bad(
-            "По ссылке не календарь (нет BEGIN:VCALENDAR)".into(),
+            crate::lang::t(
+                "По ссылке не календарь (нет BEGIN:VCALENDAR)",
+                "The link is not a calendar (no BEGIN:VCALENDAR)",
+            )
+            .into(),
         ));
     }
     Ok(text)

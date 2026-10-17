@@ -272,6 +272,15 @@ if (inTauri) {
     applyModules(e.payload);
   });
   applyModules(await invoke('modules_get'));
+  // interface language (stage 8): the island translates itself through tr(s, ...)
+  const applyLang = (c: { lang: string }): void => {
+    s.lang = c.lang === 'en' ? 'en' : 'ru';
+  };
+  await listen<{ lang: string }>('island://lang', (e) => {
+    wake();
+    applyLang(e.payload);
+  });
+  applyLang(await invoke('lang_get'));
   const f = await invoke<Feeds>('feeds_state');
   if (f.github) github.onState(f.github);
   if (f.calendar) cal.onCalendar(f.calendar);

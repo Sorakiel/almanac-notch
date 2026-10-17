@@ -22,6 +22,7 @@ export {
   type MascotEvent,
 } from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
+export { tr, plural, EN, type Lang } from './i18n';
 export { update } from './sim/behavior';
 export { notchState, type NotchState } from './island/focus';
 export { renderIsland } from './island/render';

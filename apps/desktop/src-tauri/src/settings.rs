@@ -22,19 +22,23 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
             let _ = w.set_focus();
             return;
         }
-        match WebviewWindowBuilder::new(&app2, "settings", WebviewUrl::App(
-            match &section {
-                Some(sec) => format!("settings.html#{sec}"),
-                None => "settings.html".into(),
-            }
-            .into(),
-        ))
-            .title("Almanac Notch")
-            .inner_size(720.0, 520.0)
-            .resizable(false)
-            .maximizable(false)
-            .center()
-            .build()
+        match WebviewWindowBuilder::new(
+            &app2,
+            "settings",
+            WebviewUrl::App(
+                match &section {
+                    Some(sec) => format!("settings.html#{sec}"),
+                    None => "settings.html".into(),
+                }
+                .into(),
+            ),
+        )
+        .title("Almanac Notch")
+        .inner_size(720.0, 520.0)
+        .resizable(false)
+        .maximizable(false)
+        .center()
+        .build()
         {
             Ok(w) => {
                 let _ = w.set_focus();

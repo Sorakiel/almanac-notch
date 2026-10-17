@@ -307,7 +307,7 @@ export function drawOpenBody(
     c.fill();
     drawGlyph(s, c, it, x + 17, y + gh / 2, it.kind === 'agent' ? 8 : 7.5);
     textAt(c, it.name, x + 32, y + gh / 2 - 7, { size: 12, max: gw - 38 });
-    textAt(c, idleShort(it), x + 32, y + gh / 2 + 8, {
+    textAt(c, idleShort(s, it), x + 32, y + gh / 2 + 8, {
       size: 11,
       weight: 400,
       color: isHot(it) ? 'rgba(255,255,255,0.85)' : T_MUTED,

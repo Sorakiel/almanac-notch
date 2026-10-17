@@ -80,7 +80,11 @@ pub fn config() -> Config {
 /// Mac reads the system calendar (it already holds Google, iCloud, Exchange accounts).
 #[cfg(target_os = "macos")]
 pub fn choose(_source: &str, _url: Option<String>) -> Result<Option<usize>, String> {
-    Err("На Mac остров читает системный Календарь".into())
+    Err(crate::lang::t(
+        "На Mac остров читает системный Календарь",
+        "On a Mac the island reads the system Calendar",
+    )
+    .into())
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -172,19 +176,32 @@ mod choice {
             "ical" => {
                 let url = match url.filter(|u| !u.trim().is_empty()) {
                     Some(u) => ical::normalize(&u)?,
-                    None => link().ok_or("Вставьте ссылку на календарь")?,
+                    None => link().ok_or(crate::lang::t(
+                        "Вставьте ссылку на календарь",
+                        "Paste a calendar link",
+                    ))?,
                 };
                 let text = ical::fetch(&url).map_err(|f| match f {
                     ical::Failure::Bad(m) => m,
-                    ical::Failure::Net => {
-                        "Не удалось открыть ссылку: нет связи или сервер не ответил".into()
-                    }
+                    ical::Failure::Net => crate::lang::t(
+                        "Не удалось открыть ссылку: нет связи или сервер не ответил",
+                        "Cannot open the link: no connection or the server did not answer",
+                    )
+                    .into(),
                 })?;
                 let n = ical::parse(&text, from, to).len();
                 entry()
-                    .ok_or("Хранилище паролей недоступно")?
+                    .ok_or(crate::lang::t(
+                        "Хранилище паролей недоступно",
+                        "The credential store is unavailable",
+                    ))?
                     .set_password(&url)
-                    .map_err(|e| format!("Не удалось сохранить ссылку: {e}"))?;
+                    .map_err(|e| {
+                        format!(
+                            "{} {e}",
+                            crate::lang::t("Не удалось сохранить ссылку:", "Cannot save the link:")
+                        )
+                    })?;
                 Some(n)
             }
             "outlook" => {
@@ -193,11 +210,13 @@ mod choice {
                     let _com = com_sta();
                     match crate::outlook::read(from, to) {
                         Ok(ev) => Some(ev.len()),
-                        Err(crate::outlook::Failure::Missing) => {
-                            return Err("Классический Outlook не найден. Новый Outlook не даёт \
-                                        программам читать календарь - подключите его через iCal-ссылку"
-                                .into())
-                        }
+                        Err(crate::outlook::Failure::Missing) => return Err(crate::lang::t(
+                            "Классический Outlook не найден. Новый Outlook не даёт программам \
+                                 читать календарь - подключите его через iCal-ссылку",
+                            "Classic Outlook not found. The new Outlook does not let apps read \
+                                 the calendar - connect it with an iCal link",
+                        )
+                        .into()),
                         Err(crate::outlook::Failure::Busy(e)) => {
                             eprintln!("[calendar] outlook: {e}");
                             None
@@ -205,10 +224,14 @@ mod choice {
                     }
                 }
                 #[cfg(not(windows))]
-                return Err("Outlook есть только на Windows".into());
+                return Err(crate::lang::t(
+                    "Outlook есть только на Windows",
+                    "Outlook is Windows only",
+                )
+                .into());
             }
             "off" => None,
-            _ => return Err("Неизвестный источник".into()),
+            _ => return Err(crate::lang::t("Неизвестный источник", "Unknown source").into()),
         };
         if src != "ical" {
             if let Some(e) = entry() {

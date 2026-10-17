@@ -1,4 +1,5 @@
 // Cards of the home tab: the focus card, approvals and questions, the overload alert, the launch warp.
+import { plural, tr } from '../i18n';
 import { clamp, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
@@ -62,15 +63,16 @@ export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: 
 
 /** "последняя сессия N мин назад" from the newest hook */
 function lastSession(s: IslandState, at: number | null): string {
-  if (at === null) return 'сессий ещё не было';
+  if (at === null) return tr(s, 'сессий ещё не было');
   const min = Math.floor((s.date().getTime() - at) / 60000);
-  if (min < 1) return 'последняя сессия только что';
-  if (min < 60) return 'последняя сессия ' + min + ' мин назад';
+  if (min < 1) return tr(s, 'последняя сессия только что');
+  if (min < 60) return tr(s, 'последняя сессия {0} мин назад', min);
   const h = Math.floor(min / 60);
-  return h < 24 ? 'последняя сессия ' + h + ' ч назад' : 'последняя сессия давно';
+  return h < 24 ? tr(s, 'последняя сессия {0} ч назад', h) : tr(s, 'последняя сессия давно');
 }
 
-function commitsWord(n: number): string {
+function commitsWord(s: IslandState, n: number): string {
+  if (s.lang === 'en') return plural(n, ' commit', ' commits');
   const m10 = n % 10,
     m100 = n % 100;
   return m10 === 1 && m100 !== 11
@@ -109,18 +111,18 @@ export function drawFocusCard(
   if (it.kind === 'agent') {
     if (it.state === 'work') drawSteps(s, c, tx, y0, tmax);
     else if (it.state === 'search') {
-      L(0, 'ищет по проекту', '#5FD6F0');
-      L(1, s.agent ? s.agent.search : 'grep "rrect(" · 14 совпадений', T_MUTED);
+      L(0, tr(s, 'ищет по проекту'), '#5FD6F0');
+      L(1, s.agent ? s.agent.search : tr(s, 'grep "rrect(" · 14 совпадений'), T_MUTED);
     } else if (it.state === 'limit') {
-      L(0, 'лимит плана исчерпан', '#C7C7CC');
-      L(1, 'сброс через ' + limitText(s), T_MUTED);
-      L(2, 'план ' + (s.agent ? s.agent.plan : 'Pro') + ' · окно 5 часов', T_MUTED);
+      L(0, tr(s, 'лимит плана исчерпан'), '#C7C7CC');
+      L(1, tr(s, 'сброс через {0}', limitText(s)), T_MUTED);
+      L(2, tr(s, 'план {0} · окно 5 часов', s.agent ? s.agent.plan : 'Pro'), T_MUTED);
     } else if (it.state === 'think') {
-      L(0, s.agent ? 'думает' : 'планирует изменения', '#BFA6FF');
-      L(1, s.agent ? s.agent.think : 'смотрит структуру проекта', T_MUTED);
+      L(0, tr(s, s.agent ? 'думает' : 'планирует изменения'), '#BFA6FF');
+      L(1, s.agent ? s.agent.think : tr(s, 'смотрит структуру проекта'), T_MUTED);
     } else {
-      L(0, 'свободен');
-      L(1, s.agent ? lastSession(s, s.agent.lastActive) : 'последняя сессия 12 мин назад', T_MUTED);
+      L(0, tr(s, 'свободен'));
+      L(1, s.agent ? lastSession(s, s.agent.lastActive) : tr(s, 'последняя сессия {0} мин назад', 12), T_MUTED);
     }
   } else if (it.kind === 'ci' && s.github && s.github.auth !== 'ok') {
     // live GitHub with nothing to show: say why and where to connect
@@ -135,17 +137,20 @@ export function drawFocusCard(
       c,
       gh
         ? gh.ciText
-        : it.state === 'fail'
-          ? 'деплой упал на build'
-          : it.state === 'run'
-            ? 'CI идёт · 2 из 5'
-            : 'CI зелёный · 5 из 5',
+        : tr(
+            s,
+            it.state === 'fail'
+              ? 'деплой упал на build'
+              : it.state === 'run'
+                ? 'CI идёт · 2 из 5'
+                : 'CI зелёный · 5 из 5',
+          ),
       tx + 18,
       y0 + 40.5,
       { size: 11.5, weight: 400, color: ciCol, max: tmax - 18 },
     );
     prIcon(c, tx + 6, y0 + 59);
-    textAt(c, gh ? gh.prText : '2 PR ждут ревью', tx + 18, y0 + 59.5, {
+    textAt(c, gh ? gh.prText : tr(s, '2 PR ждут ревью'), tx + 18, y0 + 59.5, {
       size: 11.5,
       weight: 400,
       color: 'rgba(255,255,255,0.8)',
@@ -166,7 +171,7 @@ export function drawFocusCard(
     });
     const nC = CM.reduce((a, b) => a + b, 0);
     // live: the word does not fit next to the bars without being squeezed
-    textAt(c, gh ? nC + ' за 7 дн' : nC + commitsWord(nC) + ' за 7 дн', tx + CM.length * (bw + bg) + 6, base - 6, {
+    textAt(c, tr(s, '{0} за 7 дн', gh ? nC : nC + commitsWord(s, nC)), tx + CM.length * (bw + bg) + 6, base - 6, {
       size: 11,
       weight: 400,
       color: T_MUTED,
@@ -180,20 +185,21 @@ export function drawFocusCard(
     } else {
       L(
         0,
-        (cal.mins <= 0 ? 'сейчас' : 'через ' + minsText(cal.mins)) + ' · ' + cal.at,
+        (cal.mins <= 0 ? tr(s, 'сейчас') : tr(s, 'через {0}', minsText(s, cal.mins))) + ' · ' + cal.at,
         cal.mins <= 5 ? '#F5B94A' : '#FFFFFF',
       );
       L(1, cal.title);
       if (cal.after) L(2, cal.after, T_MUTED);
     }
   } else if (it.kind === 'cal') {
-    L(0, 'через ' + it.mins + ' мин · 15:00', it.mins <= 5 ? '#F5B94A' : '#FFFFFF');
-    L(1, 'Созвон с командой');
-    L(2, 'дальше: лекция в 17:10', T_MUTED);
+    L(0, tr(s, 'через {0} мин · 15:00', it.mins), it.mins <= 5 ? '#F5B94A' : '#FFFFFF');
+    L(1, tr(s, 'Созвон с командой'));
+    L(2, tr(s, 'дальше: лекция в 17:10'), T_MUTED);
   } else if (it.kind === 'music') {
-    const tr = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
-    L(0, tr[0], '#FFFFFF');
-    L(1, tr[1], T_MUTED);
+    const trk = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
+    // live track names pass through; the stub and the "nothing playing" lines are keys
+    L(0, s.media && !s.media.idle ? trk[0] : tr(s, trk[0]), '#FFFFFF');
+    L(1, s.media && !s.media.idle ? trk[1] : tr(s, trk[1]), T_MUTED);
     const by = y1 - 16,
       cx = tx + tmax / 2;
     const ctrl = (x: number, act: string, draw: (x: number) => void): void => {
@@ -258,7 +264,7 @@ export function drawFocusCard(
         c.lineTo(tx + 7.8, y - 2.4);
         c.stroke();
       }
-      textAt(c, h[0], tx + 16, y + 0.5, {
+      textAt(c, tr(s, h[0]), tx + 16, y + 0.5, {
         size: 11.5,
         weight: 400,
         color: h[1] ? T_MUTED : hov ? '#FFFFFF' : 'rgba(255,255,255,0.85)',
@@ -310,7 +316,7 @@ export function drawAsk(
   c.font = '600 12.5px Onest, system-ui, sans-serif';
   const nw = c.measureText('Claude Code').width;
   c.restore();
-  textAt(c, q ? 'спрашивает' : 'нужно разрешение', tx + 18 + nw, cy0 + 17.5, {
+  textAt(c, tr(s, q ? 'спрашивает' : 'нужно разрешение'), tx + 18 + nw, cy0 + 17.5, {
     size: 12,
     weight: 400,
     color: T_MUTED,
@@ -343,15 +349,15 @@ export function drawAsk(
       c.fill();
       c.save();
       c.globalAlpha *= a;
-      textAt(c, '✓ Разрешено', tx + 95, by + 12.5, { size: 12, align: 'center', color: '#04210E' });
+      textAt(c, tr(s, '✓ Разрешено'), tx + 95, by + 12.5, { size: 12, align: 'center', color: '#04210E' });
       c.restore();
     } else {
-      kbdButton(s, c, tx, by, 102, 24, 'Отклонить', 'N', 'deny', false);
-      kbdButton(s, c, tx + 110, by, 104, 24, 'Разрешить', 'Y', 'approve', true);
+      kbdButton(s, c, tx, by, 102, 24, tr(s, 'Отклонить'), 'N', 'deny', false);
+      kbdButton(s, c, tx + 110, by, 104, 24, tr(s, 'Разрешить'), 'Y', 'approve', true);
     }
   } else {
     const Q = (s.agent && s.agent.question) || QUESTION;
-    textAt(c, Q[0], tx, cy0 + 38, { size: 12.5, weight: 600, max: tw });
+    textAt(c, s.agent && s.agent.question ? Q[0] : tr(s, Q[0]), tx, cy0 + 38, { size: 12.5, weight: 600, max: tw });
     let ox = tx,
       full = false;
     Q[1].forEach((opt, i) => {
@@ -416,10 +422,10 @@ export function drawAlert(s: IslandState, c: Ctx, X0: number, X1: number, cy0: n
   cardTint(c, X0, cy0, W, H, '#FF5FA2', 0.45);
   cardMascot(s, c, X0, cy0, cy1, null, null);
   const tx = X0 + 88;
-  textAt(c, 'Слишком много тыков', tx, cy0 + H / 2 - 9, { size: 14, weight: 600, max: X1 - tx - 14 });
+  textAt(c, tr(s, 'Слишком много тыков'), tx, cy0 + H / 2 - 9, { size: 14, weight: 600, max: X1 - tx - 14 });
   textAt(
     c,
-    left > 0 ? 'Перезагружаюсь - вернусь через ' + Math.ceil(left) + ' с' : 'Снова на связи',
+    left > 0 ? tr(s, 'Перезагружаюсь - вернусь через {0} с', Math.ceil(left)) : tr(s, 'Снова на связи'),
     tx,
     cy0 + H / 2 + 11,
     { size: 12, weight: 400, color: 'rgba(255,255,255,0.6)', max: X1 - tx - 14 },

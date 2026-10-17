@@ -145,7 +145,9 @@ fn post(token: &str, body: &Value) -> Result<Value, Failure> {
             ureq::Error::StatusCode(401) => Failure::Unauthorized,
             _ => Failure::Net,
         })?;
-    resp.body_mut().read_json::<Value>().map_err(|_| Failure::Net)
+    resp.body_mut()
+        .read_json::<Value>()
+        .map_err(|_| Failure::Net)
 }
 
 /// The login behind a token; Err = refused or unreachable.
@@ -469,15 +471,25 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
 pub fn connect(token: &str) -> Result<String, String> {
     let token = token.trim();
     if token.is_empty() {
-        return Err("Пустой токен".into());
+        return Err(crate::lang::t("Пустой токен", "Empty token").into());
     }
     let (login, _) = viewer(token).map_err(|e| match e {
-        Failure::Unauthorized => "GitHub не принял токен".to_owned(),
-        Failure::Net => "Нет связи с api.github.com".to_owned(),
+        Failure::Unauthorized => {
+            crate::lang::t("GitHub не принял токен", "GitHub rejected the token").to_owned()
+        }
+        Failure::Net => crate::lang::t(
+            "Нет связи с api.github.com",
+            "No connection to api.github.com",
+        )
+        .to_owned(),
     })?;
-    entry()
-        .and_then(|e| e.set_password(token))
-        .map_err(|_| "Не удалось записать токен в Связку ключей".to_owned())?;
+    entry().and_then(|e| e.set_password(token)).map_err(|_| {
+        crate::lang::t(
+            "Не удалось записать токен в Связку ключей",
+            "Cannot save the token to the system keychain",
+        )
+        .to_owned()
+    })?;
     poke();
     Ok(login)
 }
@@ -548,13 +560,26 @@ mod tests {
         assert_eq!(s.commits.len(), 2);
         assert!(s.commits[0] < s.commits[1]);
         // not the other author's branch; two branches at one commit count once, default name wins
-        let names: Vec<_> = picks.iter().map(|p| (p.repo.as_str(), p.branch.as_str())).collect();
-        assert_eq!(names, [("almanac-app", "feat"), ("site", "main"), ("almanac-app", "main")]);
+        let names: Vec<_> = picks
+            .iter()
+            .map(|p| (p.repo.as_str(), p.branch.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("almanac-app", "feat"),
+                ("site", "main"),
+                ("almanac-app", "main")
+            ]
+        );
         assert!(picks.iter().all(|p| p.branch != "gh-pages"));
 
         let r = apply_rollups(&picks, &rollups());
         // newest check first: the failed build of the feature branch
-        assert_eq!((r[0].name.as_str(), r[0].branch.as_str(), r[0].state), ("almanac-app", "feat", "fail"));
+        assert_eq!(
+            (r[0].name.as_str(), r[0].branch.as_str(), r[0].state),
+            ("almanac-app", "feat", "fail")
+        );
         assert_eq!((r[0].done, r[0].total), (2, 3));
         assert_eq!(r[0].failed.as_deref(), Some("build"));
         // the time of the checks, not of the commit
@@ -569,7 +594,10 @@ mod tests {
     #[test]
     #[ignore]
     fn bogus_token_is_unauthorized() {
-        assert!(matches!(viewer("ghp_notarealtoken"), Err(Failure::Unauthorized)));
+        assert!(matches!(
+            viewer("ghp_notarealtoken"),
+            Err(Failure::Unauthorized)
+        ));
     }
 
     #[test]

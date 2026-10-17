@@ -283,3 +283,15 @@ describe('github feed', () => {
     expect((m.state.event as { type: string } | null)?.type).toBe('success');
   });
 });
+
+describe('feeds in English', () => {
+  it('calendar and GitHub texts follow the language', async () => {
+    const { calFeed, githubFeed, whenText } = await import('./feeds');
+    const now = new Date(2026, 9, 19, 12, 0).getTime();
+    expect(whenText(now + 86_400_000, now, 'en')).toBe('tomorrow 12:00');
+    expect(whenText(now + 3 * 86_400_000, now, 'en')).toBe('Thu 12:00');
+    expect(calFeed(null, now, 'en').title).toBe('Calendar unavailable');
+    expect(githubFeed(null, now, 'en').hint).toEqual(['GitHub not connected', 'Settings → GitHub']);
+    expect(githubFeed(null, now).hint).toEqual(['GitHub не подключён', 'Настройки → GitHub']);
+  });
+});

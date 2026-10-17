@@ -3,9 +3,9 @@
 //! frontend as `island://debug` with the menu id ("ev:<type>" or "nstate:<state>").
 //! Also: install / remove the Claude Code hooks (shows the diff first), calendar access.
 
+use std::sync::Mutex;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
-use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager, Wry};
 
@@ -55,31 +55,46 @@ pub fn action(app: &AppHandle, id: &str) {
     }
 }
 
-/// Prototype event buttons in order: key, event type, label.
-const EVENTS: [(&str, &str, &str); 11] = [
-    ("1", "attention", "Внимание - агент ждёт"),
-    ("2", "working", "Работает"),
-    ("3", "thinking", "Думает"),
-    ("4", "searching", "Ищет"),
-    ("5", "question", "Вопрос - выбор ответа"),
-    ("6", "ratelimit", "Лимит"),
-    ("7", "success", "Успех - CI прошёл"),
-    ("8", "error", "Ошибка - деплой упал"),
-    ("9", "dance", "Праздник"),
-    ("0", "greeting", "Привет"),
-    ("Q", "sleep", "Сон"),
+/// Prototype event buttons in order: key, event type, label (Russian, English).
+const EVENTS: [(&str, &str, (&str, &str)); 11] = [
+    (
+        "1",
+        "attention",
+        ("Внимание - агент ждёт", "Attention - agent waits"),
+    ),
+    ("2", "working", ("Работает", "Working")),
+    ("3", "thinking", ("Думает", "Thinking")),
+    ("4", "searching", ("Ищет", "Searching")),
+    (
+        "5",
+        "question",
+        ("Вопрос - выбор ответа", "Question - pick an answer"),
+    ),
+    ("6", "ratelimit", ("Лимит", "Limit")),
+    ("7", "success", ("Успех - CI прошёл", "Success - CI passed")),
+    (
+        "8",
+        "error",
+        ("Ошибка - деплой упал", "Error - deploy failed"),
+    ),
+    ("9", "dance", ("Праздник", "Celebration")),
+    ("0", "greeting", ("Привет", "Hello")),
+    ("Q", "sleep", ("Сон", "Sleep")),
 ];
 
-const STATES: [(&str, &str); 4] = [
-    ("auto", "Авто"),
-    ("closed", "Закрыто"),
-    ("half", "Полуоткрыто"),
-    ("open", "Открыто"),
+const STATES: [(&str, (&str, &str)); 4] = [
+    ("auto", ("Авто", "Auto")),
+    ("closed", ("Закрыто", "Closed")),
+    ("half", ("Полуоткрыто", "Half-open")),
+    ("open", ("Открыто", "Open")),
 ];
 
-pub fn create(app: &AppHandle) -> tauri::Result<()> {
+use crate::lang::t;
+
+fn menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, Vec<CheckMenuItem<Wry>>)> {
     let menu = Menu::new(app)?;
-    for (key, ev, label) in EVENTS {
+    for (key, ev, (ru, en)) in EVENTS {
+        let label = t(ru, en);
         // The key works while the menu is open, like the prototype's keyboard shortcuts.
         let item =
             MenuItem::with_id(app, format!("ev:{ev}"), label, true, Some(key)).or_else(|_| {
@@ -96,14 +111,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     let mut checks: Vec<CheckMenuItem<Wry>> = Vec::new();
-    let states = Submenu::new(app, "Состояние", true)?;
-    for (id, label) in STATES {
+    let states = Submenu::new(app, t("Состояние", "State"), true)?;
+    let now = state();
+    for (id, (ru, en)) in STATES {
         let c = CheckMenuItem::with_id(
             app,
             format!("nstate:{id}"),
-            label,
+            t(ru, en),
             true,
-            id == "auto",
+            id == now,
             None::<&str>,
         )?;
         states.append(&c)?;
@@ -114,14 +130,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&MenuItem::with_id(
         app,
         "hooks:install",
-        "Установить хуки Claude Code…",
+        t("Установить хуки Claude Code…", "Install Claude Code hooks…"),
         true,
         None::<&str>,
     )?)?;
     menu.append(&MenuItem::with_id(
         app,
         "hooks:uninstall",
-        "Удалить хуки Claude Code…",
+        t("Удалить хуки Claude Code…", "Remove Claude Code hooks…"),
         true,
         None::<&str>,
     )?)?;
@@ -129,9 +145,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         app,
         "calendar:access",
         if cfg!(target_os = "macos") {
-            "Доступ к календарю…"
+            t("Доступ к календарю…", "Calendar access…")
         } else {
-            "Календарь…"
+            t("Календарь…", "Calendar…")
         },
         true,
         None::<&str>,
@@ -139,7 +155,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&MenuItem::with_id(
         app,
         "settings",
-        "Настройки…",
+        t("Настройки…", "Settings…"),
         true,
         Some("CmdOrCtrl+,"),
     )?)?;
@@ -147,11 +163,26 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     menu.append(&MenuItem::with_id(
         app,
         "quit",
-        "Выйти",
+        t("Выйти", "Quit"),
         true,
         None::<&str>,
     )?)?;
+    Ok((menu, checks))
+}
 
+/// Rebuild the menu in the current language (the language was changed in settings).
+pub fn relabel(app: &AppHandle) {
+    let (Some(tray), Ok((menu, checks))) = (app.tray_by_id("debug"), menu(app)) else {
+        return;
+    };
+    let _ = tray.set_menu(Some(menu));
+    if let Some(c) = app.try_state::<Checks>() {
+        *c.0.lock().unwrap() = checks;
+    }
+}
+
+pub fn create(app: &AppHandle) -> tauri::Result<()> {
+    let (menu, checks) = menu(app)?;
     app.manage(Checks(Mutex::new(checks)));
     let mut tray = TrayIconBuilder::with_id("debug")
         .tooltip("Almanac Notch")

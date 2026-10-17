@@ -2,7 +2,15 @@
 // (`island://calendar`, `island://media`, `island://volume`); these drivers pick the next call,
 // keep the player clock running between updates and send the island's player buttons back.
 // Pure logic over the island state, so it runs in vitest without Tauri.
-import type { CalFeed, EventType, GithubFeed, IslandState, MediaFeed } from '@almanac-notch/island';
+import {
+  tr,
+  type CalFeed,
+  type EventType,
+  type GithubFeed,
+  type IslandState,
+  type Lang,
+  type MediaFeed,
+} from '@almanac-notch/island';
 import { clip } from './agent';
 
 export interface CalEvent {
@@ -25,28 +33,40 @@ const STARTED_MS = 10 * 60 * 1000;
 const TITLE_MAX = 30;
 const AFTER_MAX = 34;
 /** Windows: the source is picked in the settings window. */
-const CAL_HINT = 'Настройки → Календарь';
+const CAL_HINT_RU = 'Настройки → Календарь';
 
 const hhmm = (t: number): string => {
   const d = new Date(t);
   return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
 };
 
+const DAYS: Record<Lang, readonly string[]> = {
+  ru: ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+};
+
 /** "15:00", "завтра 10:00", "пт 10:00" */
-export function whenText(t: number, now: number): string {
+export function whenText(t: number, now: number, lang: Lang = 'ru'): string {
   const day = (x: number): number => {
     const d = new Date(x);
     return Math.round(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86_400_000);
   };
   const diff = day(t) - day(now);
   if (diff === 0) return hhmm(t);
-  if (diff === 1) return 'завтра ' + hhmm(t);
-  return ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][new Date(t).getDay()] + ' ' + hhmm(t);
+  if (diff === 1) return tr({ lang }, 'завтра {0}', hhmm(t));
+  return (DAYS[lang][new Date(t).getDay()] as string) + ' ' + hhmm(t);
 }
 
 /** proto: calMins + the card's three lines, from the system calendar. */
-export function calFeed(cal: Calendar | null, now: number): CalFeed {
-  const empty = (title: string, after: string): CalFeed => ({ mins: null, at: '', title, after });
+export function calFeed(cal: Calendar | null, now: number, lang: Lang = 'ru'): CalFeed {
+  const L = { lang },
+    CAL_HINT = tr(L, CAL_HINT_RU);
+  const empty = (title: string, after: string): CalFeed => ({
+    mins: null,
+    at: '',
+    title: tr(L, title),
+    after: tr(L, after),
+  });
   const picked = cal && (cal.source === 'outlook' || cal.source === 'ical');
   if (cal && cal.access === 'off' && cal.source === 'none') return empty('Календарь не подключён', CAL_HINT);
   if (!cal || cal.access === 'off') return empty('Календарь недоступен', 'на этой системе');
@@ -56,14 +76,19 @@ export function calFeed(cal: Calendar | null, now: number): CalFeed {
   if (cal.access !== 'ok') return empty('Нет доступа к календарю', 'меню острова → Доступ к календарю');
   const ahead = cal.events.filter((e) => e.end > now && e.start > now - STARTED_MS);
   const next = ahead[0];
-  if (!next) return { mins: null, at: '', title: 'Встреч нет', after: 'ни сегодня, ни завтра' };
+  if (!next) return empty('Встреч нет', 'ни сегодня, ни завтра');
   const after = ahead.find((e) => e.start >= next.end) ?? ahead[1];
   return {
     mins: Math.max(0, Math.ceil((next.start - now) / 60_000)),
-    at: whenText(next.start, now),
-    title: clip(next.title || 'Без названия', TITLE_MAX),
+    at: whenText(next.start, now, lang),
+    title: clip(next.title || tr(L, 'Без названия'), TITLE_MAX),
     after: after
-      ? clip('дальше: ' + (after.title || 'встреча'), AFTER_MAX - 6) + ' в ' + whenText(after.start, now)
+      ? tr(
+          L,
+          '{0} в {1}',
+          clip(tr(L, 'дальше: {0}', after.title || tr(L, 'встреча')), AFTER_MAX - 6),
+          whenText(after.start, now, lang),
+        )
       : '',
   };
 }
@@ -71,6 +96,7 @@ export function calFeed(cal: Calendar | null, now: number): CalFeed {
 export class CalDriver {
   private cal: Calendar | null = null;
   private lastMin = -1;
+  private lang: Lang = 'ru';
   constructor(
     private s: IslandState,
     private now: () => number,
@@ -86,9 +112,10 @@ export class CalDriver {
   tick(): void {
     const now = this.now(),
       min = Math.floor(now / 60_000);
-    if (min === this.lastMin) return;
+    if (min === this.lastMin && this.s.lang === this.lang) return;
     this.lastMin = min;
-    this.s.cal = calFeed(this.cal, now);
+    this.lang = this.s.lang;
+    this.s.cal = calFeed(this.cal, now, this.lang);
   }
 }
 
@@ -375,22 +402,23 @@ export function commitDays(times: number[], now: number): number[] {
   return out;
 }
 
-function prText(n: number): string {
-  if (n === 0) return 'ревью не ждут';
-  return n === 1 ? '1 PR ждёт ревью' : n + ' PR ждут ревью';
+function prText(n: number, L: { lang: Lang }): string {
+  if (n === 0) return tr(L, 'ревью не ждут');
+  return n === 1 ? tr(L, '1 PR ждёт ревью') : tr(L, '{0} PR ждут ревью', n);
 }
 
 /** proto: the github card's three lines, from the account's real repositories. */
-export function githubFeed(g: GhState | null, now: number): GithubFeed {
+export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): GithubFeed {
+  const L = { lang };
   const empty = (hint: [string, string], short: string): GithubFeed => ({
     auth: g && g.auth === 'bad' ? 'bad' : 'off',
     ci: 'none',
     ciText: '',
-    short,
+    short: tr(L, short),
     prs: 0,
     prText: '',
     commits: [0, 0, 0, 0, 0, 0, 0],
-    hint,
+    hint: [tr(L, hint[0]), tr(L, hint[1])],
   });
   if (!g || g.auth === 'off') return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена');
   if (g.auth === 'bad') return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят');
@@ -402,31 +430,31 @@ export function githubFeed(g: GhState | null, now: number): GithubFeed {
     return {
       auth: 'ok',
       ci: 'none',
-      ciText: 'CI не настроен',
-      short: 'нет CI',
+      ciText: tr(L, 'CI не настроен'),
+      short: tr(L, 'нет CI'),
       prs: g.prs,
-      prText: prText(g.prs),
+      prText: prText(g.prs, L),
       commits,
       hint: ['', ''],
     };
   // the card line is narrow: the status is short, the repository gets what is left
   const st =
       latest.state === 'ok'
-        ? 'зелёный'
+        ? tr(L, 'зелёный')
         : latest.state === 'run'
-          ? 'идёт ' + latest.done + '/' + latest.total
+          ? tr(L, 'идёт {0}/{1}', latest.done, latest.total)
           : latest.failed
-            ? 'упал: ' + clip(latest.failed, 6)
-            : 'упал',
+            ? tr(L, 'упал: {0}', clip(latest.failed, 6))
+            : tr(L, 'упал'),
     repo = clip(latest.name, Math.max(9, GH_LINE - 3 - st.length)),
-    parts: [string, string] = [{ ok: 'CI зелёный', run: 'CI идёт', fail: 'CI упал' }[latest.state], st];
+    parts: [string, string] = [tr(L, { ok: 'CI зелёный', run: 'CI идёт', fail: 'CI упал' }[latest.state]), st];
   return {
     auth: 'ok',
     ci: latest.state,
     ciText: repo + ' · ' + parts[1],
     short: parts[0],
     prs: g.prs,
-    prText: prText(g.prs),
+    prText: prText(g.prs, L),
     commits,
     hint: ['', ''],
   };
@@ -438,6 +466,7 @@ const PROMPTS: readonly string[] = ['attention', 'question'];
 export class GithubDriver {
   private g: GhState | null = null;
   private lastMin = -1;
+  private lang: Lang = 'ru';
   /** last CI state per repository; a change to ok or fail is an event */
   private seen = new Map<string, GhRepo['state']>();
   private pending: { type: EventType; label: string } | null = null;
@@ -462,7 +491,7 @@ export class GithubDriver {
         const type: EventType = r.state === 'ok' ? 'success' : 'error';
         // a failure outranks a success from another repository in the same read
         if (!hit || type === 'error')
-          hit = { type, label: (type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12) };
+          hit = { type, label: tr(this.s, type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12) };
       }
     } else if (g.auth === 'off' || g.auth === 'bad') this.seen.clear();
     this.g = g;
@@ -475,9 +504,10 @@ export class GithubDriver {
   tick(): void {
     const now = this.now(),
       min = Math.floor(now / 60_000);
-    if (min !== this.lastMin) {
+    if (min !== this.lastMin || this.s.lang !== this.lang) {
       this.lastMin = min;
-      this.s.github = githubFeed(this.g, now);
+      this.lang = this.s.lang;
+      this.s.github = githubFeed(this.g, now, this.lang);
     }
     const p = this.pending,
       ev = this.s.event;

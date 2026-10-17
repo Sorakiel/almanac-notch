@@ -179,7 +179,7 @@ pub fn decision(p: &Value, answer: &str) -> String {
         ("PermissionRequest", "deny") => json!({
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",
-                "decision": { "behavior": "deny", "message": "Отклонено в Almanac Notch" }
+                "decision": { "behavior": "deny", "message": crate::lang::t("Отклонено в Almanac Notch", "Denied in Almanac Notch") }
             }
         })
         .to_string(),

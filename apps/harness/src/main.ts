@@ -372,6 +372,7 @@ declare global {
       poke(n: number): void;
       answer(a: Answer): void;
       peek(): Record<string, unknown>;
+      setLang(l: 'ru' | 'en'): void;
     };
   }
 }
@@ -387,6 +388,10 @@ window.__notch = {
   setTab: (tab) => m.setTab(tab),
   poke: (n) => m.poke(n),
   answer: (a) => m.answer(a),
+  // the app's English (stage 8); parity scenes never call it
+  setLang: (l) => {
+    s.lang = l;
+  },
   // state snapshot for tools/inputs.mjs (same fields it reads from the prototype)
   peek: () => ({
     focusId: s.focusId,

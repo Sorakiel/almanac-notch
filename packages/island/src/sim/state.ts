@@ -2,6 +2,7 @@ import type { Rng } from './rng';
 import { createSprings, type Springs } from './springs';
 import type { Settings } from './settings';
 import { initialHabits, initialPrefs, type Step } from '../stub';
+import type { Lang } from '../i18n';
 
 export type EventType =
   | 'attention'
@@ -243,6 +244,8 @@ export interface IslandState {
   chatOff: boolean;
   /** top-bar icons: the prototype's outlines, or filled ones (the app, docs/CHANGES.md) */
   iconSet: 'proto' | 'solid';
+  /** interface language: the prototype's Russian, or English in the app (src/i18n.ts) */
+  lang: Lang;
   wander: { x: number; y: number; next: number };
   sqOverride: { val: number; until: number } | null;
   particles: Particle[];
@@ -348,6 +351,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     off: [],
     chatOff: false,
     iconSet: 'proto',
+    lang: 'ru',
     wander: { x: 0, y: 0, next: 0 },
     sqOverride: null,
     particles: [],

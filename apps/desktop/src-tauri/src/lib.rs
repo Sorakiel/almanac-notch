@@ -11,10 +11,11 @@ mod github;
 // on Mac only its tests use it: the choice of sources is Windows-only
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 mod ical;
-#[cfg(windows)]
-mod outlook;
+mod lang;
 mod media;
 mod modules;
+#[cfg(windows)]
+mod outlook;
 mod platform;
 mod settings;
 mod tray;
@@ -184,6 +185,21 @@ fn modules_set(app: AppHandle, off: Vec<String>, chat: bool) -> Result<modules::
     let _ = app.emit("island://modules", &c);
     github::poke();
     calendar::poke();
+    Ok(c)
+}
+
+/// Interface language: what was picked ("auto", "ru", "en") and what is in effect.
+#[tauri::command]
+fn lang_get() -> lang::Config {
+    lang::get()
+}
+
+/// Save from the settings window; the island and the settings window hear `island://lang`.
+#[tauri::command]
+fn lang_set(app: AppHandle, pick: String) -> Result<lang::Config, String> {
+    let c = lang::set(&pick)?;
+    let _ = app.emit("island://lang", &c);
+    tray::relabel(&app);
     Ok(c)
 }
 
@@ -368,6 +384,8 @@ pub fn run() {
             island_status,
             modules_get,
             modules_set,
+            lang_get,
+            lang_set,
             open_settings
         ])
         .setup(move |app| {

@@ -1,4 +1,5 @@
 // Module items for the open island: the list, glyphs and tints (docs/SPEC.md 2.4-2.5).
+import { tr } from '../i18n';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { limitText, stepAt, stepIndex } from '../sim/events';
@@ -20,7 +21,7 @@ export type GlyphItem = ModuleItem | { kind: 'ci'; state: CiState };
 
 function workShort(s: IslandState): string {
   const st = stepAt(s, stepIndex(s));
-  if (!st) return 'работает';
+  if (!st) return tr(s, 'работает');
   // a live Bash step may be a caption without a verb
   return st[1] ? st[1].toLowerCase() + ' ' + st[2] : st[2];
 }
@@ -32,12 +33,12 @@ export function modules(s: IslandState): ModuleItem[] {
     mins = callMins(s),
     gh = s.github;
   const idleShorts: Record<Exclude<ClaudeState, 'work'>, string> = {
-    think: 'думает',
-    search: 'ищет',
-    ask: 'ждёт ответа',
-    question: 'спрашивает',
-    limit: 'лимит ' + limitText(s),
-    idle: 'свободен',
+    think: tr(s, 'думает'),
+    search: tr(s, 'ищет'),
+    ask: tr(s, 'ждёт ответа'),
+    question: tr(s, 'спрашивает'),
+    limit: tr(s, 'лимит {0}', limitText(s)),
+    idle: tr(s, 'свободен'),
   };
   const done = habitsDone(s);
   const all: ModuleItem[] = [
@@ -63,30 +64,35 @@ export function modules(s: IslandState): ModuleItem[] {
           : ev === 'error'
             ? 'fail'
             : 'ok',
-      short: gh ? gh.short : ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный',
+      short: gh ? gh.short : tr(s, ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный'),
     },
     {
       id: 'cal',
       kind: 'cal',
-      name: 'Календарь',
+      name: tr(s, 'Календарь'),
       mins,
       // the live calendar may have no call ahead, or one that has started or is hours away
-      short: mins === Infinity ? 'встреч нет' : mins <= 0 ? 'созвон сейчас' : 'созвон через ' + minsText(mins),
+      short:
+        mins === Infinity
+          ? tr(s, 'встреч нет')
+          : mins <= 0
+            ? tr(s, 'созвон сейчас')
+            : tr(s, 'созвон через {0}', minsText(s, mins)),
     },
     {
       id: 'music',
       kind: 'music',
-      name: 'Музыка',
+      name: tr(s, 'Музыка'),
       playing: s.musicPlaying,
       short: s.media
         ? s.media.idle
-          ? 'не играет'
+          ? tr(s, 'не играет')
           : s.musicPlaying
             ? s.media.short
-            : 'пауза'
+            : tr(s, 'пауза')
         : s.musicPlaying
-          ? (TRACKS[s.trackIdx] as readonly [string, string])[0]
-          : 'пауза',
+          ? tr(s, (TRACKS[s.trackIdx] as readonly [string, string])[0])
+          : tr(s, 'пауза'),
     },
     {
       id: 'almanac',
@@ -94,7 +100,7 @@ export function modules(s: IslandState): ModuleItem[] {
       name: 'Almanac',
       done,
       total: s.habits.length,
-      short: 'привычки ' + done + ' из ' + s.habits.length,
+      short: tr(s, 'привычки {0} из {1}', done, s.habits.length),
     },
   ];
   return s.off.length ? all.filter((m) => !s.off.includes(m.id)) : all;
@@ -122,15 +128,15 @@ export function primaryItem(s: IslandState): ModuleItem {
 }
 
 /** proto: idleShort */
-export function idleShort(it: ModuleItem): string {
+export function idleShort(s: IslandState, it: ModuleItem): string {
   return it.kind === 'cal'
     ? it.mins === Infinity
-      ? 'нет'
+      ? tr(s, 'нет')
       : it.mins <= 0
-        ? 'сейчас'
-        : minsText(it.mins)
+        ? tr(s, 'сейчас')
+        : minsText(s, it.mins)
     : it.kind === 'music'
-      ? 'играет'
+      ? tr(s, 'играет')
       : it.kind === 'habits'
         ? it.done + '/' + it.total
         : it.short;
