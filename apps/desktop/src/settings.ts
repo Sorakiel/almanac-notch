@@ -712,6 +712,10 @@ $('upd-go').addEventListener('click', () => {
     void invoke('update_install').catch((e: unknown) => ($('upd-error').textContent = String(e)));
   else void invoke<UpdateState>('update_check').then(renderUpdate);
 });
+// stage 8g: the "Uninstall Almanac Notch?" window (Mac - in this app, Windows - the uninstaller)
+$('uninstall').addEventListener('click', () => {
+  if (inTauri) void invoke('open_bye').catch((e: unknown) => say(String(e)));
+});
 async function appSet(key: string, on: boolean): Promise<void> {
   try {
     renderApp(await invoke<AppInfo>('app_set', { key, on }));

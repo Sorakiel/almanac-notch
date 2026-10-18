@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "build": "tauri build",
     "build:web": "vite build",
+    "build:setup-web": "vite build --mode setup",
     "tauri": "tauri",
     "hook:sidecar": "node scripts/hook-sidecar.mjs"
   },

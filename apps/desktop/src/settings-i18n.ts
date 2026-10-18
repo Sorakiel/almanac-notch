@@ -227,6 +227,48 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   '{0} · {1} за 48 ч': '{0} · {1} in 48 h',
   '{0} · CI в {1}': '{0} · CI in {1}',
   ' · нет связи': ' · offline',
+  // installer and uninstall windows (stage 8g)
+  'Удалить Almanac Notch': 'Uninstall Almanac Notch',
+  'Удалить Almanac Notch?': 'Uninstall Almanac Notch?',
+  'Сниму хуки Claude Code и запуск при входе, затем перенесу приложение в Корзину.':
+    "I'll remove the Claude Code hooks and launch at login, then move the app to the Trash.",
+  'Сниму хуки Claude Code и запуск при входе, удалю программу и её ярлыки.':
+    "I'll remove the Claude Code hooks and launch at login, then the app and its shortcuts.",
+  'Удалить настройки и данные': 'Remove settings and data',
+  'Подключения, токены в связке ключей, кэш и доступ к календарю':
+    'Connections, tokens in the keychain, the cache and calendar access',
+  'Подключения, токены в диспетчере учётных данных и кэш': 'Connections, tokens in Credential Manager and the cache',
+  Закрыть: 'Close',
+  Удалить: 'Uninstall',
+  'Удаляю…': 'Uninstalling…',
+  'Снимаю хуки Claude Code и убираю файлы.': 'Removing the Claude Code hooks and the files.',
+  'Almanac Notch удалён': 'Almanac Notch is uninstalled',
+  'Хуки Claude Code сняты. Настройки остались - пригодятся, если вернёте приложение.':
+    'The Claude Code hooks are gone. Your settings stay, in case you come back.',
+  'Хуки Claude Code сняты, настройки и данные удалены.': 'The Claude Code hooks, settings and data are gone.',
+  'Удалить…': 'Uninstall…',
+  'Сниму хуки Claude Code и запуск при входе; настройки и данные - по желанию':
+    'Removes the Claude Code hooks and launch at login; settings and data if you choose',
+  'Установка Almanac Notch': 'Almanac Notch Setup',
+  'Остров у выреза камеры: агенты Claude Code, встречи, музыка и ваши сервисы.':
+    'An island at the camera notch: Claude Code agents, meetings, music and your services.',
+  Папка: 'Folder',
+  Изменить: 'Change',
+  'Ярлык на рабочем столе': 'Desktop shortcut',
+  Установить: 'Install',
+  'Устанавливаю…': 'Installing…',
+  'Займёт несколько секунд.': 'This takes a few seconds.',
+  'Almanac Notch установлен. Остров живёт у верхнего края экрана, по центру.':
+    'Almanac Notch is installed. The island lives at the top centre of the screen.',
+  Открыть: 'Open',
+  'Обновлю версию {0} до {1}. Настройки и подключения сохранятся.':
+    "I'll update version {0} to {1}. Settings and connections stay.",
+  'Версия {0} уже установлена - поставлю её заново. Настройки и подключения сохранятся.':
+    "Version {0} is already installed - I'll install it again. Settings and connections stay.",
+  'Установлена более новая версия {0}. Можно поставить {1} поверх, настройки сохранятся.':
+    'A newer version {0} is installed. You can put {1} over it, settings stay.',
+  Обновить: 'Update',
+  Переустановить: 'Reinstall',
 };
 
 let lang: Lang = 'ru';

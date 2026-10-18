@@ -24,6 +24,7 @@ mod platform;
 mod prefs;
 mod settings;
 mod tray;
+mod uninstall;
 mod update;
 
 use std::sync::mpsc;
@@ -656,7 +657,20 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
     });
 }
 
+/// One copy of the embedded config and pages for both the island and the uninstall window.
+fn context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
+}
+
 pub fn run() {
+    // stage 8g: `--cleanup` (hooks only) and, on Windows, the uninstall window
+    match uninstall::cli() {
+        uninstall::Cli::Exit(code) => std::process::exit(code),
+        #[cfg(windows)]
+        uninstall::Cli::Bye(dir) => return uninstall::run_window(dir, context()),
+        _ => {}
+    }
+
     #[cfg(windows)]
     platform::init_process();
 
@@ -724,16 +738,28 @@ pub fn run() {
             app_set,
             update_check,
             update_install,
-            open_settings
+            open_settings,
+            uninstall::open_bye,
+            uninstall::bye_info,
+            uninstall::bye_run,
+            uninstall::bye_quit
         ])
         .setup(move |app| {
             // Not in the Dock and not in Cmd-Tab.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let window = app
-                .get_webview_window("island")
-                .expect("island window missing");
+            // the island is created here, not from the config: the uninstall window process
+            // (stage 8g) shares this config and must not open it
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "island")
+                .expect("island window missing")
+                .clone();
+            let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?.build()?;
             // Windows: tao's version would rewrite the extended styles (platform/windows.rs).
             #[cfg(not(windows))]
             window.set_ignore_cursor_events(true)?;
@@ -763,7 +789,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("error while building tauri application");
     app.run(move |_, e| {
         if let RunEvent::Exit = e {
