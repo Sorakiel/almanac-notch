@@ -3,7 +3,9 @@
 // keep the player clock running between updates and send the island's player buttons back.
 // Pure logic over the island state, so it runs in vitest without Tauri.
 import {
+  habitTicked,
   tr,
+  type AlmanacFeed,
   type CalFeed,
   type EventType,
   type GithubFeed,
@@ -961,6 +963,251 @@ export class GrafanaDriver {
         this.s.event.label = p.label;
         this.s.event.src = 'grafana';
       }
+    }
+  }
+}
+
+// ---------- almanac ----------
+/** `island://almanac` (src-tauri/src/almanac.rs): today's habits from Almanac's integration API. */
+export interface AlHabit {
+  id: string;
+  name: string;
+  icon: string | null;
+  /** taps today, taps that close the day */
+  count: number;
+  goal: number;
+  done: boolean;
+}
+
+export interface AlState {
+  /** "off" signed out, "bad" the sign-in expired, "net" no answer (the last day is kept) */
+  auth: 'off' | 'ok' | 'bad' | 'net';
+  email: string | null;
+  /** the day the list is for, "2026-10-18"; null = never read */
+  date: string | null;
+  done: number;
+  total: number;
+  /** card order: the open ones first, then the done ones */
+  habits: AlHabit[];
+}
+
+const AL_HINT = 'Настройки → Almanac';
+/** the evening reminder: from this hour, once a day, while habits are left */
+export const EVENING_HOUR = 20;
+const AL_NAME_MAX = 28;
+
+/** "2026-10-18" for a local time */
+export function dayKey(t: number): string {
+  const d = new Date(t);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+/** "Осталось 2 привычки" / "2 habits left" */
+export function leftText(n: number, lang: Lang = 'ru'): string {
+  const m10 = n % 10,
+    m100 = n % 100;
+  const key =
+    lang === 'en'
+      ? n === 1
+        ? 'Осталась {0} привычка'
+        : 'Осталось {0} привычек'
+      : m10 === 1 && m100 !== 11
+        ? 'Осталась {0} привычка'
+        : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)
+          ? 'Осталось {0} привычки'
+          : 'Осталось {0} привычек';
+  return tr({ lang }, key, n);
+}
+
+/** Not in the prototype (docs/CHANGES.md): the habits card from Almanac - today's habits, the open ones first. */
+export function almanacFeed(a: AlState | null, lang: Lang = 'ru'): AlmanacFeed {
+  const L = { lang };
+  const empty = (auth: AlmanacFeed['auth'], hint: [string, string], short: string): AlmanacFeed => ({
+    auth,
+    rows: [],
+    done: 0,
+    total: 0,
+    short: tr(L, short),
+    hint: [tr(L, hint[0]), tr(L, hint[1])],
+  });
+  if (!a || a.auth === 'off') return empty('off', ['Almanac не подключён', AL_HINT], 'не подключён');
+  if (a.auth === 'bad')
+    return empty('bad', ['Вход в Almanac истёк', 'войдите снова · Настройки → Almanac'], 'вход истёк');
+  if (!a.date) return empty('off', ['Нет связи с Almanac', 'попробую снова через минуту'], 'нет связи');
+  if (!a.total || !a.habits.length) {
+    const f = empty('ok', ['На сегодня привычек нет', 'добавьте привычку в Almanac'], 'нет привычек');
+    return { ...f, short: tr(L, 'нет привычек') };
+  }
+  return {
+    auth: 'ok',
+    rows: a.habits.map((h) => ({
+      id: h.id,
+      name: clip(h.name, AL_NAME_MAX),
+      done: h.done,
+      progress: h.goal > 1 && !h.done ? h.count + '/' + h.goal : '',
+    })),
+    done: a.done,
+    total: a.total,
+    short: tr(L, 'привычки {0} из {1}', a.done, a.total),
+    hint: ['', ''],
+  };
+}
+
+/** One tap, as Almanac counts it: a done habit clears, an open one gets one more. */
+export function tapHabit(a: AlState, id: string): AlState | null {
+  const h = a.habits.find((x) => x.id === id);
+  if (!h) return null;
+  const count = h.done ? 0 : h.count + 1,
+    next: AlHabit = { ...h, count, done: count >= h.goal };
+  return {
+    ...a,
+    habits: a.habits.map((x) => (x.id === id ? next : x)),
+    done: a.done + (next.done ? 1 : 0) - (h.done ? 1 : 0),
+  };
+}
+
+/** Lasting per-viewer memory of the day the reminder was shown (a restart must not repeat it). */
+const REMIND_KEY = 'almanac.reminded';
+function remindedDay(): string | null {
+  try {
+    return localStorage.getItem(REMIND_KEY);
+  } catch {
+    return null;
+  }
+}
+function setRemindedDay(day: string): void {
+  try {
+    localStorage.setItem(REMIND_KEY, day);
+  } catch {
+    // private storage off: the reminder may repeat after a restart
+  }
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): keeps s.almanac current and answers the card's taps.
+ * A tap ticks the row at once (the stub's feedback: a hop, the celebration on the day's last
+ * habit) and asks Almanac; Almanac's answer is the truth. Events (owner's pick 2026-10-18):
+ * a habit marked elsewhere (the phone) - success on the card; the day's last one marked elsewhere
+ * - the celebration; from EVENING_HOUR, habits left - the reminder, once a day.
+ * The first read after start gives no event.
+ */
+export class AlmanacDriver {
+  private a: AlState | null = null;
+  private lang: Lang = 'ru';
+  /** done habits of the last read day; null until the first read */
+  private seen: Set<string> | null = null;
+  private day: string | null = null;
+  /** taps on the way to Almanac: the optimistic row stays until they are answered */
+  private inflight = new Map<string, { n: number; row: AlHabit }>();
+  /** the day the celebration already ran */
+  private cheered: string | null = null;
+  private pending: { type: EventType; label: string } | null = null;
+  constructor(
+    private s: IslandState,
+    private m: { trigger: (t: EventType) => void },
+    private now: () => number,
+    private send: (id: string) => Promise<unknown>,
+    private remembered: { get: () => string | null; set: (day: string) => void } = {
+      get: remindedDay,
+      set: setRemindedDay,
+    },
+  ) {
+    s.almanac = almanacFeed(null);
+  }
+
+  onState(a: AlState): void {
+    const ok = (a.auth === 'ok' || a.auth === 'net') && a.date !== null;
+    if (ok && a.date) {
+      const done = new Set(a.habits.filter((h) => h.done).map((h) => h.id));
+      if (this.seen && this.day === a.date) {
+        const elsewhere = a.habits.find((h) => h.done && !this.seen?.has(h.id) && !this.inflight.has(h.id));
+        if (elsewhere && a.total > 0 && a.done >= a.total && this.cheered !== a.date) {
+          this.cheered = a.date;
+          this.pending = { type: 'dance', label: 'Все привычки выполнены' };
+        } else if (elsewhere)
+          this.pending ??= { type: 'success', label: tr(this.s, 'Отмечено') + ' · ' + clip(elsewhere.name, 12) };
+      } else if (a.total > 0 && a.done >= a.total) this.cheered = a.date;
+      this.seen = done;
+      this.day = a.date;
+    } else if (a.auth === 'off' || a.auth === 'bad') {
+      this.seen = null;
+      this.day = null;
+      this.inflight.clear();
+    }
+    this.a = a;
+    this.show();
+  }
+
+  /** The card's row was tapped. */
+  tap(id: string): void {
+    const cur = this.view();
+    if (!cur || cur.auth !== 'ok') return;
+    const next = tapHabit(cur, id),
+      row = next && next.habits.find((h) => h.id === id);
+    if (!next || !row) return;
+    const was = this.inflight.get(id);
+    this.inflight.set(id, { n: (was ? was.n : 0) + 1, row });
+    // my own tick is no "marked elsewhere" event
+    if (row.done) this.seen?.add(id);
+    else this.seen?.delete(id);
+    this.show();
+    if (row.done && next.total > 0 && next.done >= next.total && next.date) this.cheered = next.date;
+    habitTicked(this.s, row.done, 'almanac');
+    const settle = (): void => {
+      const f = this.inflight.get(id);
+      if (f && --f.n <= 0) this.inflight.delete(id);
+      this.show();
+    };
+    this.send(id).then(settle, settle);
+  }
+
+  /** The last read with the taps still on their way laid over it. */
+  private view(): AlState | null {
+    const a = this.a;
+    if (!a || !this.inflight.size) return a;
+    const habits = a.habits.map((h) => this.inflight.get(h.id)?.row ?? h);
+    return { ...a, habits, done: a.done + habits.filter((h) => h.done).length - a.habits.filter((h) => h.done).length };
+  }
+
+  private show(): void {
+    this.lang = this.s.lang;
+    this.s.almanac = almanacFeed(this.view(), this.lang);
+  }
+
+  /** Per frame: the language, a waiting event, the evening reminder. */
+  tick(): void {
+    if (this.s.lang !== this.lang) this.show();
+    const ev = this.s.event;
+    if (ev && PROMPTS.includes(ev.type)) return;
+    const p = this.pending;
+    if (p) {
+      this.pending = null;
+      this.fire(p.type, p.label);
+      return;
+    }
+    const a = this.view(),
+      now = this.now(),
+      today = dayKey(now);
+    if (
+      !ev &&
+      a &&
+      a.auth === 'ok' &&
+      a.date === today &&
+      a.total > 0 &&
+      a.done < a.total &&
+      new Date(now).getHours() >= EVENING_HOUR &&
+      this.remembered.get() !== today
+    ) {
+      this.remembered.set(today);
+      this.fire('nudge', leftText(a.total - a.done, this.s.lang));
+    }
+  }
+
+  private fire(type: EventType, label: string): void {
+    this.m.trigger(type);
+    if (this.s.event) {
+      this.s.event.label = label;
+      this.s.event.src = 'almanac';
     }
   }
 }

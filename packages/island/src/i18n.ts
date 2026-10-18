@@ -203,6 +203,23 @@ export const EN: Readonly<Record<string, string>> = {
   'нет данных': 'no data',
   '{0} мс': '{0} ms',
   '{0} с': '{0} s',
+  // Almanac (apps/desktop/src/feeds.ts, sim/events.ts)
+  'Настройки → Almanac': 'Settings → Almanac',
+  'Almanac не подключён': 'Almanac not connected',
+  'Вход в Almanac истёк': 'Almanac sign-in expired',
+  'войдите снова · Настройки → Almanac': 'sign in again · Settings → Almanac',
+  'Нет связи с Almanac': 'No connection to Almanac',
+  'На сегодня привычек нет': 'No habits for today',
+  'добавьте привычку в Almanac': 'add a habit in Almanac',
+  'не подключён': 'not connected',
+  'вход истёк': 'signed out',
+  'нет привычек': 'no habits',
+  Отмечено: 'Done',
+  'Привычки ждут': 'Habits waiting',
+  напоминает: 'reminding',
+  'Осталась {0} привычка': '{0} habit left',
+  'Осталось {0} привычки': '{0} habits left',
+  'Осталось {0} привычек': '{0} habits left',
 };
 
 function fill(text: string, args: readonly (string | number)[]): string {

@@ -22,6 +22,7 @@ export {
   type VercelFeed,
   type NotionFeed,
   type GrafanaFeed,
+  type AlmanacFeed,
   type MascotEvent,
 } from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
@@ -37,6 +38,7 @@ export {
   islandDoubleClick,
   islandRect,
   hitTest,
+  habitTicked,
   type IslandPoint,
 } from './island/input';
 export {

@@ -34,12 +34,14 @@ import {
   VercelDriver,
   NotionDriver,
   GrafanaDriver,
+  AlmanacDriver,
   type Calendar,
   type GhState,
   type MediaMsg,
   type VcState,
   type NoState,
   type GfState,
+  type AlState,
 } from './feeds';
 
 interface Geometry {
@@ -205,6 +207,7 @@ let github: GithubDriver | null = null;
 let vercel: VercelDriver | null = null;
 let notion: NotionDriver | null = null;
 let grafana: GrafanaDriver | null = null;
+let almanac: AlmanacDriver | null = null;
 
 interface Feeds {
   calendar: Calendar | null;
@@ -214,6 +217,7 @@ interface Feeds {
   vercel: VcState | null;
   notion: NoState | null;
   grafana: GfState | null;
+  almanac: AlState | null;
 }
 
 async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
@@ -295,6 +299,13 @@ if (inTauri) {
     wake();
     grafana?.onState(e.payload);
   });
+  // a build without Almanac's address keeps the prototype's stub habits
+  if (await invoke<boolean>('almanac_available'))
+    almanac = new AlmanacDriver(s, m, Date.now, (id) => invoke('almanac_toggle', { id }));
+  await listen<AlState>('island://almanac', (e) => {
+    wake();
+    almanac?.onState(e.payload);
+  });
   // modules switched off in settings and the chat tab (stage 7)
   const applyModules = (c: { off: string[]; chat: boolean }): void => {
     s.off = c.off.filter((id): id is ModuleId => MODULE_IDS.includes(id as ModuleId));
@@ -320,6 +331,7 @@ if (inTauri) {
   if (f.vercel) vercel.onState(f.vercel);
   if (f.notion) notion.onState(f.notion);
   if (f.grafana) grafana.onState(f.grafana);
+  if (f.almanac) almanac?.onState(f.almanac);
   if (f.calendar) cal.onCalendar(f.calendar);
   if (f.media) media.onMessage(f.media);
   media.onVolume(f.volume);
@@ -386,11 +398,13 @@ function tick(now: number, id: number): void {
   vercel?.tick();
   notion?.tick();
   grafana?.tick();
+  almanac?.tick();
   for (const r of s.requests.splice(0))
     if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
     else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
+    else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();

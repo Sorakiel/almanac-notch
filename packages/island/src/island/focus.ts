@@ -62,9 +62,14 @@ export function minsText(s: IslandState, m: number): string {
   return r ? tr(s, '{0} ч {1} мин', h, r) : tr(s, '{0} ч', h);
 }
 
-/** proto: habitsDone */
+/** proto: habitsDone - or today's live Almanac count */
 export function habitsDone(s: IslandState): number {
-  return s.habits.filter((h) => h[1]).length;
+  return s.almanac ? s.almanac.done : s.habits.filter((h) => h[1]).length;
+}
+
+/** Habits counted today: the stub's list, or the live Almanac day. */
+export function habitsTotal(s: IslandState): number {
+  return s.almanac ? s.almanac.total : s.habits.length;
 }
 
 /** proto: autoFocus */
@@ -76,6 +81,8 @@ export function autoFocus(s: IslandState): ModuleId {
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'vercel' && on('vercel')) return 'vercel';
   if (ev === 'success' && s.event && s.event.src === 'notion' && on('notion')) return 'notion';
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'grafana' && on('grafana')) return 'grafana';
+  if ((ev === 'success' || ev === 'nudge' || ev === 'dance') && s.event && s.event.src === 'almanac' && on('almanac'))
+    return 'almanac';
   if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
   if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
   if (callMins(s) <= 30 && on('cal')) return 'cal';

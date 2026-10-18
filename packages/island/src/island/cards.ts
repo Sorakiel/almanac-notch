@@ -134,6 +134,25 @@ function brandHead(s: IslandState, c: Ctx, id: ModuleId, name: string, tx: numbe
 }
 
 /** Cut a string to a width with "…" instead of squeezing it (textAt's max narrows the glyphs). */
+/** proto: the habits card's checkbox (drawFocusCard) - pink filled with a tick when done */
+function checkBox(c: Ctx, x: number, y: number, on: boolean): void {
+  c.strokeStyle = on ? '#F4A9C6' : 'rgba(255,255,255,0.4)';
+  c.fillStyle = '#F4A9C6';
+  c.lineWidth = 1.4;
+  rrect(c, x, y - 5, 10, 10, 3);
+  if (on) c.fill();
+  else c.stroke();
+  if (on) {
+    c.strokeStyle = '#16171A';
+    c.lineWidth = 1.6;
+    c.beginPath();
+    c.moveTo(x + 2.5, y);
+    c.lineTo(x + 4.5, y + 2.2);
+    c.lineTo(x + 7.8, y - 2.4);
+    c.stroke();
+  }
+}
+
 function fit(c: Ctx, str: string, font: string, max: number): string {
   c.save();
   c.font = font;
@@ -493,25 +512,38 @@ export function drawFocusCard(
       c.fill();
       c.fillRect(x + 3, by - 5, 2, 10);
     });
+  } else if (s.almanac) {
+    // not in the prototype (docs/CHANGES.md): today's habits from Almanac, the open ones first;
+    // a row marks the habit in Almanac (one tap more for "8 glasses"), like the stub's checkbox
+    const al = s.almanac;
+    if (al.auth !== 'ok' || !al.rows.length) {
+      L(0, al.hint[0], '#FFFFFF');
+      if (al.hint[1]) L(1, al.hint[1], T_MUTED);
+    } else
+      al.rows.slice(0, 3).forEach((h, i) => {
+        const y = y0 + 40 + i * 18,
+          hov = hovering(s, tx - 2, y - 8, tmax, 16);
+        checkBox(c, tx, y, h.done);
+        c.save();
+        c.font = '400 11px Onest, system-ui, sans-serif';
+        const pw = h.progress ? c.measureText(h.progress).width + 6 : 0;
+        c.font = '400 11.5px Onest, system-ui, sans-serif';
+        const label = fit(c, h.name, c.font, tmax - 16 - pw),
+          nw = c.measureText(label).width;
+        c.restore();
+        textAt(c, label, tx + 16, y + 0.5, {
+          size: 11.5,
+          weight: 400,
+          color: h.done ? T_MUTED : hov ? '#FFFFFF' : 'rgba(255,255,255,0.85)',
+        });
+        if (h.progress) textAt(c, h.progress, tx + 22 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED });
+        addHit(s, c, { x: tx - 2, y: y - 8, w: tmax, h: 16, act: 'almanac:' + h.id });
+      });
   } else {
     s.habits.slice(0, 3).forEach((h, i) => {
       const y = y0 + 40 + i * 18,
         hov = hovering(s, tx - 2, y - 8, tmax, 16);
-      c.strokeStyle = h[1] ? '#F4A9C6' : 'rgba(255,255,255,0.4)';
-      c.fillStyle = '#F4A9C6';
-      c.lineWidth = 1.4;
-      rrect(c, tx, y - 5, 10, 10, 3);
-      if (h[1]) c.fill();
-      else c.stroke();
-      if (h[1]) {
-        c.strokeStyle = '#16171A';
-        c.lineWidth = 1.6;
-        c.beginPath();
-        c.moveTo(tx + 2.5, y);
-        c.lineTo(tx + 4.5, y + 2.2);
-        c.lineTo(tx + 7.8, y - 2.4);
-        c.stroke();
-      }
+      checkBox(c, tx, y, h[1]);
       textAt(c, tr(s, h[0]), tx + 16, y + 0.5, {
         size: 11.5,
         weight: 400,

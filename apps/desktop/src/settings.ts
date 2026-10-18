@@ -7,7 +7,7 @@ import '@fontsource/onest/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Calendar, GfState, GhState, NoState, VcState } from './feeds';
+import type { AlState, Calendar, GfState, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -27,7 +27,9 @@ let lastG: GhState | null = null,
   lastCal: Calendar | null = null,
   lastV: VcState | null = null,
   lastN: NoState | null = null,
-  lastGf: GfState | null = null;
+  lastGf: GfState | null = null,
+  lastAl: AlState | null = null,
+  alBuilt = true;
 
 function render(g: GhState | null): void {
   lastG = g;
@@ -269,6 +271,91 @@ noInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') void noConnect();
 });
 $('no-off').addEventListener('click', () => void invoke('notion_disconnect'));
+
+// ---------- Almanac (stage 8e) ----------
+const alEmail = $<HTMLInputElement>('al-email'),
+  alPass = $<HTMLInputElement>('al-pass'),
+  alCode = $<HTMLInputElement>('al-code'),
+  alGo = $<HTMLButtonElement>('al-go'),
+  alSend = $<HTMLButtonElement>('al-send'),
+  alVerify = $<HTMLButtonElement>('al-verify'),
+  alErr = $('al-error'),
+  alModes = [...document.querySelectorAll<HTMLInputElement>('input[name="al-mode"]')];
+function renderAlmanac(a: AlState | null): void {
+  lastAl = a;
+  const on = !!a && (a.auth === 'ok' || a.auth === 'net');
+  $('al-connect').hidden = on;
+  $('al-connected').hidden = !on;
+  $('al-nobuild').hidden = alBuilt;
+  $('al-form').hidden = !alBuilt;
+  $('almanac-dot').className = 'dot' + (on ? ' ok' : a && a.auth === 'bad' ? ' bad' : '');
+  $('almanac-status').textContent = !alBuilt
+    ? t('Пример из прототипа')
+    : on && a
+      ? (a.email ?? 'Almanac') +
+        (a.date ? ' · ' + t('привычки {0} из {1}', a.done, a.total) : '') +
+        (a.auth === 'net' ? t(' · нет связи') : '')
+      : a && a.auth === 'bad'
+        ? t('Вход истёк - войдите снова')
+        : t('Не подключён');
+  if (a && a.email && !alEmail.value) alEmail.value = a.email;
+}
+function alMode(): 'pass' | 'code' {
+  return alModes.find((r) => r.checked)?.value === 'code' ? 'code' : 'pass';
+}
+function renderAlMode(): void {
+  const code = alMode() === 'code';
+  $('al-pass-row').hidden = code;
+  $('al-code-row').hidden = !code;
+  alSend.hidden = !code;
+  alErr.textContent = '';
+}
+for (const r of alModes) r.addEventListener('change', renderAlMode);
+async function alRun(btn: HTMLButtonElement, job: () => Promise<unknown>): Promise<void> {
+  btn.disabled = true;
+  alErr.textContent = '';
+  alErr.classList.remove('ok-note');
+  try {
+    await job();
+  } catch (e) {
+    alErr.textContent = String(e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function alSignIn(): Promise<void> {
+  if (!alEmail.value.trim() || !alPass.value) return;
+  await alRun(alGo, async () => {
+    await invoke<string>('almanac_sign_in', { email: alEmail.value, password: alPass.value });
+    alPass.value = '';
+  });
+}
+async function alSendCode(): Promise<void> {
+  if (!alEmail.value.trim()) return;
+  await alRun(alSend, async () => {
+    await invoke('almanac_send_code', { email: alEmail.value });
+    alErr.textContent = t('Код отправлен на почту');
+    alErr.classList.add('ok-note');
+    alCode.focus();
+  });
+}
+async function alVerifyCode(): Promise<void> {
+  if (!alCode.value.trim()) return;
+  await alRun(alVerify, async () => {
+    await invoke<string>('almanac_verify', { email: alEmail.value, code: alCode.value });
+    alCode.value = '';
+  });
+}
+alGo.addEventListener('click', () => void alSignIn());
+alPass.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void alSignIn();
+});
+alSend.addEventListener('click', () => void alSendCode());
+alVerify.addEventListener('click', () => void alVerifyCode());
+alCode.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void alVerifyCode();
+});
+$('al-off').addEventListener('click', () => void invoke('almanac_sign_out'));
 
 // ---------- tabs and the module list (Raycast-like) ----------
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tab')],
@@ -547,6 +634,7 @@ function renderLang(c: LangCfg): void {
   renderVercel(lastV);
   renderNotion(lastN);
   renderGrafana(lastGf);
+  renderAlmanac(lastAl);
   renderCal(lastCal);
   renderMusic(lastMusic);
   renderIsland(lastIsland);
@@ -557,17 +645,21 @@ for (const r of langs)
     if (inTauri) void invoke<LangCfg>('lang_set', { pick: r.value }).then(renderLang);
   });
 renderLang({ pick: 'auto', lang: 'ru' });
+renderAlmanac(null);
+renderAlMode();
 if (inTauri) {
   await listen<Calendar>('island://calendar', (e) => renderCal(e.payload));
   await listen<GhState>('island://github', (e) => render(e.payload));
   await listen<VcState>('island://vercel', (e) => renderVercel(e.payload));
   await listen<NoState>('island://notion', (e) => renderNotion(e.payload));
   await listen<GfState>('island://grafana', (e) => renderGrafana(e.payload));
+  await listen<AlState>('island://almanac', (e) => renderAlmanac(e.payload));
   const f = await invoke<{
     github: GhState | null;
     vercel: VcState | null;
     notion: NoState | null;
     grafana: GfState | null;
+    almanac: AlState | null;
     calendar: Calendar | null;
     media: MediaNow | null;
   }>('feeds_state');
@@ -576,6 +668,8 @@ if (inTauri) {
   renderNotion(f.notion);
   gfCfg = await invoke<GfConfig>('grafana_config');
   renderGrafana(f.grafana);
+  alBuilt = await invoke<boolean>('almanac_available');
+  renderAlmanac(f.almanac);
   renderMusic(f.media);
   await listen<MediaNow>('island://media', (e) => renderMusic(e.payload));
   renderCal(f.calendar);

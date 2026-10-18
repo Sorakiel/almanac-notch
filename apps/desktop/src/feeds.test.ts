@@ -27,6 +27,7 @@ import {
   type VcState,
 } from './feeds';
 import { vercelFeed } from './feeds';
+import { AlmanacDriver, almanacFeed, dayKey, leftText, tapHabit, type AlHabit, type AlState } from './feeds';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EN } from '@almanac-notch/island';
@@ -548,5 +549,180 @@ describe('grafana feed', () => {
     d.onState(gf([], { auth: 'net', org: null }));
     d.onState(gf([al({ id: 'r-disk', name: 'Disk' })]));
     expect(m.state.event).toBeNull();
+  });
+});
+
+describe('almanac', () => {
+  // 2026-10-18 14:00 local
+  const T0 = new Date(2026, 9, 18, 14, 0).getTime();
+  const DAY = dayKey(T0);
+  const hb = (o: Partial<AlHabit> = {}): AlHabit => ({
+    id: 'h1',
+    name: 'Зарядка',
+    icon: null,
+    count: 0,
+    goal: 1,
+    done: false,
+    ...o,
+  });
+  const al = (habits: AlHabit[], o: Partial<AlState> = {}): AlState => ({
+    auth: 'ok',
+    email: 'me@example.com',
+    date: DAY,
+    done: habits.filter((h) => h.done).length,
+    total: habits.length,
+    habits,
+    ...o,
+  });
+  const mascot = () => createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+  const memo = () => {
+    let day: string | null = null;
+    return { get: () => day, set: (d: string) => (day = d) };
+  };
+
+  it('feed: hints without a sign-in, the day as the card shows it', () => {
+    expect(almanacFeed(null).hint).toEqual(['Almanac не подключён', 'Настройки → Almanac']);
+    expect(almanacFeed(null, 'en').hint).toEqual(['Almanac not connected', 'Settings → Almanac']);
+    expect(almanacFeed(al([], { auth: 'bad' })).auth).toBe('bad');
+    expect(almanacFeed(al([], { auth: 'net', date: null })).hint[0]).toBe('Нет связи с Almanac');
+    expect(almanacFeed(al([])).hint[0]).toBe('На сегодня привычек нет');
+    const f = almanacFeed(
+      al([
+        hb({ id: 'w', name: 'Вода', count: 3, goal: 8 }),
+        hb(),
+        hb({ id: 'b', name: 'Книга', done: true, count: 1 }),
+      ]),
+    );
+    expect(f.short).toBe('привычки 1 из 3');
+    expect(f.rows.map((r) => [r.name, r.done, r.progress])).toEqual([
+      ['Вода', false, '3/8'],
+      ['Зарядка', false, ''],
+      ['Книга', true, ''],
+    ]);
+  });
+
+  it('tap: a done habit clears, an open one gets one more', () => {
+    const a = al([hb({ id: 'w', count: 7, goal: 8 }), hb({ done: true, count: 1 })]);
+    const t1 = tapHabit(a, 'w');
+    expect(t1?.habits[0]).toMatchObject({ count: 8, done: true });
+    expect(t1?.done).toBe(2);
+    const t2 = tapHabit(a, 'h1');
+    expect(t2?.habits[1]).toMatchObject({ count: 0, done: false });
+    expect(t2?.done).toBe(0);
+    expect(tapHabit(a, 'nope')).toBeNull();
+  });
+
+  it('left text: Russian forms, English plural', () => {
+    expect([1, 2, 5, 11, 21, 22].map((n) => leftText(n))).toEqual([
+      'Осталась 1 привычка',
+      'Осталось 2 привычки',
+      'Осталось 5 привычек',
+      'Осталось 11 привычек',
+      'Осталась 21 привычка',
+      'Осталось 22 привычки',
+    ]);
+    expect(leftText(1, 'en')).toBe('1 habit left');
+    expect(leftText(3, 'en')).toBe('3 habits left');
+  });
+
+  it('driver: a tap ticks at once, sends it, and the day stays ticked while the answer is on its way', async () => {
+    const m = mascot();
+    const sent: string[] = [];
+    let answer: () => void = () => undefined;
+    const d = new AlmanacDriver(
+      m.state,
+      { trigger: (t) => m.trigger(t) },
+      () => T0,
+      (id) => {
+        sent.push(id);
+        return new Promise<void>((r) => (answer = r));
+      },
+      memo(),
+    );
+    d.onState(al([hb(), hb({ id: 'h2', name: 'Книга' })]));
+    d.tap('h1');
+    expect(sent).toEqual(['h1']);
+    expect(m.state.almanac?.done).toBe(1);
+    expect(m.state.happyUntil).toBeGreaterThan(m.state.t);
+    // a minute's read from before the tap must not untick it
+    d.onState(al([hb(), hb({ id: 'h2', name: 'Книга' })]));
+    expect(m.state.almanac?.rows[0]?.done).toBe(true);
+    // my own tick is no "marked elsewhere" event
+    d.onState(al([hb({ done: true, count: 1 }), hb({ id: 'h2', name: 'Книга' })]));
+    answer();
+    await Promise.resolve();
+    d.tick();
+    expect(m.state.event).toBeNull();
+    // the day's last one: the celebration at once, on the Almanac card
+    d.tap('h2');
+    expect(m.state.event?.type).toBe('dance');
+    expect(m.state.event?.src).toBe('almanac');
+    expect(m.state.event?.label).toBe('Все привычки выполнены');
+  });
+
+  it('driver: marked elsewhere is a success, the last one elsewhere the celebration; not on the first read', () => {
+    const m = mascot();
+    const d = new AlmanacDriver(
+      m.state,
+      { trigger: (t) => m.trigger(t) },
+      () => T0,
+      async () => undefined,
+      memo(),
+    );
+    d.onState(al([hb({ done: true, count: 1 }), hb({ id: 'h2', name: 'Книга' }), hb({ id: 'h3', name: 'Вода' })]));
+    d.tick();
+    expect(m.state.event).toBeNull();
+    d.onState(
+      al([hb({ done: true, count: 1 }), hb({ id: 'h2', name: 'Книга', done: true }), hb({ id: 'h3', name: 'Вода' })]),
+    );
+    d.tick();
+    expect(m.state.event?.type).toBe('success');
+    expect(m.state.event?.src).toBe('almanac');
+    expect(m.state.event?.label).toBe('Отмечено · Книга');
+    m.state.event = null;
+    d.onState(al([hb({ done: true }), hb({ id: 'h2', done: true }), hb({ id: 'h3', name: 'Вода', done: true })]));
+    d.tick();
+    expect((m.state.event as { type: string } | null)?.type).toBe('dance');
+    m.state.event = null;
+    // a new day starts quietly
+    d.onState(al([hb()], { date: '2026-10-19' }));
+    d.onState(al([hb({ done: true })], { date: '2026-10-19' }));
+    d.tick();
+    expect((m.state.event as { type: string } | null)?.type).toBe('dance');
+  });
+
+  it('driver: the evening reminder once a day, only with habits left', () => {
+    const m = mascot();
+    let now = T0;
+    const mem = memo();
+    const d = new AlmanacDriver(
+      m.state,
+      { trigger: (t) => m.trigger(t) },
+      () => now,
+      async () => undefined,
+      mem,
+    );
+    d.onState(al([hb(), hb({ id: 'h2', done: true })]));
+    d.tick();
+    expect(m.state.event).toBeNull();
+    now = new Date(2026, 9, 18, 20, 5).getTime();
+    d.tick();
+    expect(m.state.event?.type).toBe('nudge');
+    expect(m.state.event?.label).toBe('Осталась 1 привычка');
+    m.state.event = null;
+    d.tick();
+    expect(m.state.event).toBeNull();
+    // all done: no reminder on another evening either
+    const m2 = mascot();
+    const d2 = new AlmanacDriver(
+      m2.state,
+      { trigger: (t) => m2.trigger(t) },
+      () => now,
+      async () => undefined,
+      memo(),
+    );
+    d2.onState(al([hb({ done: true })]));
+    d2.tick();
+    expect(m2.state.event).toBeNull();
   });
 });

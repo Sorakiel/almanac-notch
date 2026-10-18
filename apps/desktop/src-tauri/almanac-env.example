@@ -1,0 +1,5 @@
+# Almanac's Supabase project for the notch's Almanac module (src/almanac.rs).
+# Copy to .env.almanac (gitignored) and fill in; both values are public by design
+# (Almanac's web app ships them), but are kept out of git like in Almanac.
+ALMANAC_URL=https://<project>.supabase.co
+ALMANAC_KEY=sb_publishable_...

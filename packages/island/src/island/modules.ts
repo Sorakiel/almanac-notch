@@ -4,7 +4,16 @@ import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { limitText, stepAt, stepIndex } from '../sim/events';
 import { TRACKS } from '../stub';
-import { MODULE_COL, callMins, claudeState, habitsDone, hasModule, minsText, type ClaudeState } from './focus';
+import {
+  MODULE_COL,
+  callMins,
+  claudeState,
+  habitsDone,
+  habitsTotal,
+  hasModule,
+  minsText,
+  type ClaudeState,
+} from './focus';
 import { STATE_COL, drawMini } from './crew';
 
 export type ModuleItem =
@@ -107,8 +116,9 @@ export function modules(s: IslandState): ModuleItem[] {
       kind: 'habits',
       name: 'Almanac',
       done,
-      total: s.habits.length,
-      short: tr(s, 'привычки {0} из {1}', done, s.habits.length),
+      total: habitsTotal(s),
+      // the live module says it itself (not signed in: "не подключён")
+      short: s.almanac ? s.almanac.short : tr(s, 'привычки {0} из {1}', done, s.habits.length),
     },
   ];
   // not in the prototype (docs/CHANGES.md): Vercel, only where the app feeds it
@@ -168,7 +178,9 @@ export function idleShort(s: IslandState, it: ModuleItem): string {
     : it.kind === 'music'
       ? tr(s, 'играет')
       : it.kind === 'habits'
-        ? it.done + '/' + it.total
+        ? s.almanac && (s.almanac.auth !== 'ok' || !it.total)
+          ? it.short
+          : it.done + '/' + it.total
         : it.short;
 }
 
@@ -269,7 +281,7 @@ export function drawGlyph(s: IslandState, c: Ctx, it: GlyphItem, x: number, y: n
     if (sz > 7.5)
       textAt(c, String(it.mins), x, y + 0.5, { size: Math.round(sz * 0.8), weight: 600, align: 'center', mono: true });
   } else if (it.kind === 'habits') {
-    ring(c, x, y, r, lw, it.done / it.total, '#F4A9C6', -Math.PI / 2);
+    ring(c, x, y, r, lw, it.total ? it.done / it.total : 0, '#F4A9C6', -Math.PI / 2);
     if (sz > 7.5)
       textAt(c, String(it.done), x, y + 0.5, { size: Math.round(sz * 0.8), weight: 600, align: 'center', mono: true });
   } else {

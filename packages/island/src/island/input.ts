@@ -6,7 +6,7 @@ import { answer, trigger, type Answer } from '../sim/events';
 import { nextTrack } from '../sim/music';
 import { TRACKS, TRACK_LEN } from '../stub';
 import type { ModuleId, Tab } from '../sim/state';
-import { habitsDone } from './focus';
+import { habitsDone, habitsTotal } from './focus';
 import { hitAt } from './hits';
 
 export interface IslandPoint {
@@ -32,6 +32,25 @@ export function islandPointerLeave(s: IslandState): void {
   s.islandPtr = null;
 }
 
+/**
+ * proto: the habit checkbox's feedback (island pointerdown) - the last one of the day starts the
+ * celebration, any other tick a short happy hop. Also used for live Almanac rows.
+ */
+export function habitTicked(s: IslandState, checked: boolean, src?: 'almanac'): void {
+  if (checked && habitsDone(s) === habitsTotal(s)) {
+    const keep = s.focusId;
+    trigger(s, 'dance');
+    if (s.event) {
+      s.event.label = 'Все привычки выполнены';
+      if (src) s.event.src = src;
+    }
+    s.focusId = keep;
+  } else if (checked) {
+    s.happyUntil = s.t + 0.8;
+    hop(s, 3);
+  }
+}
+
 /** proto: island pointerdown */
 export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   const h = hitAt(s, p);
@@ -45,19 +64,14 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   else if (act.startsWith('tab:'))
     s.tab = act.slice(4) === s.tab && s.tab === 'settings' ? 'home' : (act.slice(4) as Tab);
   else if (act === 'mute') s.muted = !s.muted;
+  // not in the prototype (docs/CHANGES.md): a live habit row - the app marks it in Almanac and
+  // answers with the same feedback as the stub's checkbox (src/feeds.ts AlmanacDriver)
+  else if (act.startsWith('almanac:')) s.requests.push(act);
   else if (act.startsWith('habit:')) {
     const hb = s.habits[+act.slice(6)];
     if (!hb) return;
     hb[1] = !hb[1];
-    if (hb[1] && habitsDone(s) === s.habits.length) {
-      const keep = s.focusId;
-      trigger(s, 'dance');
-      if (s.event) s.event.label = 'Все привычки выполнены';
-      s.focusId = keep;
-    } else if (hb[1]) {
-      s.happyUntil = s.t + 0.8;
-      hop(s, 3);
-    }
+    habitTicked(s, hb[1]);
   } else if (act === 'open:settings') s.requests.push('settings:');
   // not in the prototype: the Vercel card's arrow opens the deployment on vercel.com (the app)
   else if (act.startsWith('vercel:')) s.requests.push(act);

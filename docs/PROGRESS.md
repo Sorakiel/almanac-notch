@@ -3,13 +3,13 @@
 Обновляется в конце каждой сессии. Новая сессия начинает с этого файла.
 
 ## Сейчас
-- Этап: 8d - Grafana (ветка `stage-8-grafana` от `stage-8-notion`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Grafana. 8a (EN и RU), 8b (Vercel) и 8c (Notion) тоже ждут проверки, замечаний пока не было.
+- Этап: 8e - Almanac (ветка `stage-8-almanac` от `stage-8-grafana`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Almanac. 8a-8d тоже ждут проверки, замечаний пока не было. Следующий пункт порядка - полноценный удобный релиз.
 - Порядок этапа 8 (выбор владельца 2026-10-18, PLAN): EN/RU → Vercel → Notion → Grafana → Almanac → полноценный удобный релиз. Obsidian, n8n, почта, чат, телефон пока не берём.
 - Этап 7 (Windows) формально не принят: владелец проверит на Windows позже (`npm run installer`, README). Если пришлёт замечания - сначала исправить в `stage-7-windows`, затем влить в ветки этапа 8.
-- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18), Notion (2026-10-18), Grafana (2026-10-18).
+- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18), Notion (2026-10-18), Grafana (2026-10-18), Almanac (2026-10-18).
 - Репозиторий публичный: https://github.com/Sorakiel/almanac-notch. `master` - только каркас этапа 0. Пушить можно (разрешение владельца).
 - `npm run installer` (корень) собирает релиз для своей ОС и кладёт в `release/`: Windows - `Almanac Notch Setup.exe`, Mac - `Almanac Notch.app`. В Cargo.toml `[profile.release.build-override] strip = false` (иначе ломаются proc-macro на Mac).
-- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel`, `stage-8-notion`, `stage-8-grafana` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
+- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel`, `stage-8-notion`, `stage-8-grafana`, `stage-8-almanac` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
 
 ## Сделано
 - Монорепо на npm workspaces: `packages/island`, `apps/harness`, `apps/desktop`.
@@ -179,6 +179,15 @@
 - Проверки: тесты 111 (фронт + пакет), Rust 33 + сетевой, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76, `parity:inputs` 75/75. Форматы ответов `/rules`, `/api/dashboards/uid`, `/api/ds/query` сверены с play.grafana.org (анонимно).
 - Не проверено (нужен владелец, собранный `.app` и своя Grafana с токеном): реальные алерты в карточке, события при срабатывании и «прошло», выбор дашборда и панели, график на настоящих данных (Prometheus, Loki и др.; панели с переменными дашборда кроме datasource могут не нарисоваться - тогда «нет данных»), открытие дашборда и списка алертов, Grafana Cloud.
 
+
+### Этап 8e - Almanac (ветка `stage-8-almanac`)
+- Со стороны Almanac (отдельный репозиторий, сессия «API указания»): общее API интеграций, не под нотч - RPC `today_habits(p_date date)` и `toggle_habit(p_habit uuid, p_date date)`, миграция `0039_integration_api.sql`, `almanac-app/docs/API.md`, PR https://github.com/Sorakiel/almanac/pull/150. Применено в staging и проде. Ответ: `{date, done, total, habits:[{id, name, icon, color, unit, slot, count, goal, done}]}`, порядок как на экране Almanac. Приложение Almanac эти функции не вызывает, его поведение не менялось.
+- Rust `src-tauri/src/almanac.rs`: вход в Supabase Almanac (пароль; код из письма - `otp` + `verify`), refresh token в keyring (`almanac-refresh`, ротация: новый сохраняется каждый раз; отказ refresh = выход и `auth: bad`), access token в памяти, на 401 от RPC - одно обновление и повтор. Почта - `<app data>/almanac.json`. Адрес и anon key - из сборки (`build.rs` → `option_env!`: `ALMANAC_URL`, `ALMANAC_KEY` или gitignored `src-tauri/.env.almanac`, шаблон `almanac-env.example`); без них `almanac_available` = false и фронт не создаёт драйвер (остаётся заглушка). Поток раз в минуту; `LAST` и `EMIT` общие для потока и `toggle` (ответ `toggle_habit` сразу уходит в остров). Ошибка тапа → `poke` (перечитать правду). 4 теста + сетевой `--ignored` (выдуманный пароль → не «нет связи») проходит на проде.
+- Пакет: `AlmanacFeed` и `s.almanac` (null = заглушка), `habitsDone`/`habitsTotal` берут живые числа, карточка - живые строки (`checkBox` вынесен из заглушки без изменения рисования, прогресс «3/8», обрезка `fit`), `act 'almanac:<id>'` → `s.requests`, `habitTicked` (общая обратная связь галочки: прыжок или праздник), новое событие `nudge` (EVENTS, behavior, eyes; `src = 'almanac'`), `autoFocus` для success/nudge/dance от Almanac, EN-строки.
+- Фронт: `almanacFeed`, `tapHabit`, `leftText` (русские формы), `AlmanacDriver(s, m, now, send, remembered)`: тап - оптимистичная строка в `inflight` поверх чтений, пока ответ не пришёл; отмечено не мной - success «Отмечено · имя», последняя не мной - dance; напоминание с `EVENING_HOUR` 20, один раз за день (`localStorage` `almanac.reminded`); первое чтение и смена дня без событий. 6 тестов.
+- Окно настроек: страница Almanac (переключатель, статус «почта · привычки N из M», «Пароль / Код из письма», «Выйти», «Как войти», «Что читается и куда уходит»), без адреса в сборке - пояснение. Тексты в `SETTINGS_EN`.
+- Проверки: тесты 117 (фронт + пакет), Rust 4 новых, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76. `parity:inputs` 74/75: `approve-click click-300` 0.11% красная и на базе без правок этапа (stash) - не от этапа, разобрать отдельно. Кадры: `.parity/almanac-variant.png` (скрипт `.parity/shot-almanac.mjs`, не в git).
+- Не проверено (нужен владелец, собранный `.app` и свой аккаунт): вход паролем, реальные привычки, отметка с острова и в Almanac, событие с телефона, напоминание в 20:00. Код из письма заработает, когда в шаблон Magic Link Supabase Almanac добавят `{{ .Token }}` (DECISIONS, открыто).
 ## Дальше
 - Этап 7: проверка владельцем на Windows и исправления по ней.
 - Этап 8: после ответа владельца по EN/RU, Vercel, Notion и Grafana - Almanac (ветка `stage-8-almanac` от `stage-8-grafana`), затем релиз. В DECISIONS открыт вопрос «Как Almanac отдаёт данные: локальное API или файл» - спросить в начале.

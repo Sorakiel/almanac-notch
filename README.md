@@ -38,6 +38,8 @@
 
 Нужны Node 22+, Rust и Xcode Command Line Tools (`xcode-select --install`). `npm install`, потом `npm run desktop:dev` или `npm run installer` - готовое приложение появится в `release/Almanac Notch.app`.
 
+Модуль Almanac: чтобы приложение могло войти в Almanac, перед сборкой скопируйте `apps/desktop/src-tauri/almanac-env.example` в `apps/desktop/src-tauri/.env.almanac` и впишите адрес проекта и публичный ключ Almanac (или задайте переменные `ALMANAC_URL`, `ALMANAC_KEY`). Без файла сборка работает, а модуль показывает пример привычек.
+
 `release/` и `apps/desktop/src-tauri/target/` - результаты сборки, их нет в git: они появляются после сборки.
 
 ## Прототип

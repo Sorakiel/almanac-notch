@@ -25,5 +25,27 @@ fn main() {
             .expect("xcrun clang not found");
         assert!(status.success(), "media helper build failed");
     }
+    almanac_project();
     tauri_build::build()
+}
+
+/// Almanac's project address and public (anon) key: from the environment, or from the
+/// gitignored `.env.almanac` (template: `almanac-env.example`). Without them the build simply
+/// has no Almanac sign-in (src/almanac.rs).
+fn almanac_project() {
+    println!("cargo:rerun-if-changed=.env.almanac");
+    println!("cargo:rerun-if-env-changed=ALMANAC_URL");
+    println!("cargo:rerun-if-env-changed=ALMANAC_KEY");
+    let file = std::fs::read_to_string(".env.almanac").unwrap_or_default();
+    for name in ["ALMANAC_URL", "ALMANAC_KEY"] {
+        let value = env::var(name).ok().filter(|v| !v.is_empty()).or_else(|| {
+            file.lines()
+                .filter_map(|l| l.split_once('='))
+                .find(|(k, _)| k.trim() == name)
+                .map(|(_, v)| v.trim().trim_matches('"').to_owned())
+        });
+        if let Some(v) = value.filter(|v| !v.is_empty()) {
+            println!("cargo:rustc-env={name}={v}");
+        }
+    }
 }

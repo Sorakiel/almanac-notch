@@ -218,6 +218,15 @@ export function update(s: IslandState, dt: number, now: number): void {
         T.grump = 0;
         T.glow = Math.max(0, 1 - el / 1.6);
         break;
+      case 'nudge':
+        // a soft look down at the habits card, no mood: a reminder, not a reproach
+        T.happy = 0;
+        T.grump = 0;
+        T.wide = 0.25;
+        T.lookX = 0.35;
+        T.lookY = 0.35;
+        T.glow = Math.max(0.2, 1 - el / 2.5);
+        break;
       case 'error':
         T.grump = 0.7;
         T.lid = 0.5;

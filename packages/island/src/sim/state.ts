@@ -14,7 +14,9 @@ export type EventType =
   | 'success'
   | 'error'
   | 'dance'
-  | 'greeting';
+  | 'greeting'
+  /** not in the prototype (docs/CHANGES.md): Almanac's evening reminder, habits left today */
+  | 'nudge';
 
 export interface MascotEvent {
   type: EventType;
@@ -27,7 +29,7 @@ export interface MascotEvent {
   answer?: 'approve' | 'deny' | 'opt';
   answerAt?: number;
   /** set by real Claude Code sessions, Vercel, Notion and Grafana: success and error then belong to that card */
-  src?: 'agent' | 'vercel' | 'notion' | 'grafana';
+  src?: 'agent' | 'vercel' | 'notion' | 'grafana' | 'almanac';
 }
 
 /**
@@ -175,6 +177,25 @@ export interface GrafanaFeed {
   hint: [string, string];
 }
 
+/**
+ * Live Almanac data (stage 8e). Null = the prototype's stub habits (`s.habits`), which the
+ * harness and the parity frames use. Today's habits as Almanac counts them: the ones still open
+ * first, then the done ones.
+ */
+export interface AlmanacFeed {
+  /** "off" not signed in, "bad" the sign-in expired, "ok" data is shown */
+  auth: 'off' | 'bad' | 'ok';
+  /** today's habits in card order: id, name, done; "3/8" when a day takes more than one tap */
+  rows: { id: string; name: string; done: boolean; progress: string }[];
+  /** habits done today, habits counted today */
+  done: number;
+  total: number;
+  /** the rail's, chips' and ears' short text */
+  short: string;
+  /** the card's two lines while there is nothing to show (not signed in, no habits today) */
+  hint: [string, string];
+}
+
 export interface Particle {
   type: 'bit' | 'note' | 'z';
   color: string | undefined;
@@ -294,6 +315,7 @@ export interface IslandState {
   vercel: VercelFeed | null;
   notion: NotionFeed | null;
   grafana: GrafanaFeed | null;
+  almanac: AlmanacFeed | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
@@ -409,6 +431,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     vercel: null,
     notion: null,
     grafana: null,
+    almanac: null,
     requests: [],
     settingsLink: false,
     off: [],

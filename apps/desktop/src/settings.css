@@ -341,3 +341,11 @@ button:disabled {
 #gf-off {
   margin-top: 8px;
 }
+/* Almanac: password or a code from the email */
+.al-mode {
+  margin-bottom: 12px;
+}
+#al-pass-row,
+#al-code-row {
+  margin-top: 12px;
+}

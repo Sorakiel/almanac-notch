@@ -24,6 +24,8 @@ export const EVENTS: Readonly<Record<EventType, EventDef>> = {
   error: { label: 'ошибка', dur: 3, color: '#FF453A', text: 'Деплой упал' },
   dance: { label: 'празднует', dur: 4.5, color: '#FF5FA2', text: 'Праздник' },
   greeting: { label: 'просыпается', dur: 4.6, color: '#7CC4FF', text: '' },
+  // not in the prototype (docs/CHANGES.md): Almanac's evening reminder, in the module's pink
+  nudge: { label: 'напоминает', dur: 4, color: '#F4A9C6', text: 'Привычки ждут' },
 };
 
 export const EVENT_TYPES = Object.keys(EVENTS) as EventType[];
@@ -126,6 +128,10 @@ export function trigger(s: IslandState, type: EventType | 'sleep'): void {
     burst(s, 16, '#FF5FA2');
     after(s, 0.15, () => burst(s, 12, '#FFD27A'));
     after(s, 0.3, () => burst(s, 10, '#7CC4FF'));
+  }
+  if (type === 'nudge') {
+    hop(s, 3);
+    after(s, 0.45, () => hop(s, 2.2));
   }
   if (type === 'success') {
     hop(s, 5.2);

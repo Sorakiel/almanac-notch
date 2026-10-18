@@ -429,11 +429,70 @@
           <label class="switch-row"
             ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="almanac"
           /></label>
-          <p class="status"><span class="dot" id="almanac-dot"></span><span id="almanac-status">Пока заглушка</span></p>
-          <p class="plain">
-            Привычки дня. Сейчас это заглушка из прототипа; подключение к Almanac появится позже (локальное API или
-            файл). Сети нет.
-          </p>
+          <p class="status"><span class="dot" id="almanac-dot"></span><span id="almanac-status">…</span></p>
+
+          <section id="al-connect">
+            <p class="plain" id="al-nobuild" hidden>
+              В этой сборке нет адреса Almanac: остров показывает пример привычек. Адрес задаётся при сборке (файл
+              .env.almanac).
+            </p>
+            <div id="al-form">
+              <div class="seg al-mode" role="radiogroup" aria-label="Способ входа">
+                <label><input type="radio" name="al-mode" value="pass" checked />Пароль</label>
+                <label><input type="radio" name="al-mode" value="code" />Код из письма</label>
+              </div>
+              <label for="al-email">Почта</label>
+              <div class="row">
+                <input
+                  id="al-email"
+                  type="email"
+                  autocomplete="username"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  placeholder="you@example.com"
+                />
+                <button id="al-send" hidden>Прислать код</button>
+              </div>
+              <div id="al-pass-row">
+                <label for="al-pass">Пароль</label>
+                <div class="row">
+                  <input id="al-pass" type="password" autocomplete="current-password" />
+                  <button id="al-go" class="primary">Войти</button>
+                </div>
+              </div>
+              <div id="al-code-row" hidden>
+                <label for="al-code">Код из письма</label>
+                <div class="row">
+                  <input id="al-code" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" />
+                  <button id="al-verify" class="primary">Войти</button>
+                </div>
+              </div>
+              <p class="note" id="al-error" role="alert"></p>
+            </div>
+          </section>
+
+          <section id="al-connected" hidden>
+            <p class="plain">Остров показывает привычки на сегодня; нажатие на привычку отмечает её в Almanac.</p>
+            <button id="al-off">Выйти</button>
+          </section>
+
+          <section class="help">
+            <h3>Как войти</h3>
+            <ol>
+              <li>Почта и пароль от Almanac.</li>
+              <li>
+                Если в Almanac вы входите по ссылке из письма: «Код из письма» → «Прислать код», введите код из письма.
+              </li>
+            </ol>
+            <h3>Что читается и куда уходит</h3>
+            <p>
+              Привычки на сегодня из вашего аккаунта Almanac: название, сколько отмечено и сколько нужно за день.
+              Нажатие на привычку в острове отмечает её в Almanac, как нажатие в самом Almanac. Заметки, серии,
+              тренировки и другие данные не читаются. Запросы идут только на сервер Almanac, раз в минуту и только при
+              включённом модуле. Пароль не сохраняется; ключ входа хранится в связке ключей системы, почта - в файле
+              настроек приложения. В остров не попадают ни пароль, ни ключ.
+            </p>
+          </section>
         </main>
       </div>
     </div>

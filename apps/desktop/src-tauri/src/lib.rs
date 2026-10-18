@@ -5,6 +5,7 @@
 //! feeds it to packages/island as pointer moves (hover works while the window is see-through)
 //! and turns mouse events on with `set_interactive` only over `islandRect()` or a hit zone.
 
+mod almanac;
 mod calendar;
 mod claude;
 mod github;
@@ -98,6 +99,7 @@ struct Feeds {
     vercel: Option<vercel::State>,
     notion: Option<notion::State>,
     grafana: Option<grafana::State>,
+    almanac: Option<almanac::State>,
 }
 
 #[derive(Serialize)]
@@ -109,6 +111,7 @@ struct FeedsSnapshot {
     vercel: Option<vercel::State>,
     notion: Option<notion::State>,
     grafana: Option<grafana::State>,
+    almanac: Option<almanac::State>,
 }
 
 #[tauri::command]
@@ -122,6 +125,7 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
         vercel: f.vercel.clone(),
         notion: f.notion.clone(),
         grafana: f.grafana.clone(),
+        almanac: f.almanac.clone(),
     }
 }
 
@@ -163,6 +167,50 @@ fn vercel_open(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
 #[tauri::command]
 async fn vercel_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(vercel::disconnect).await;
+}
+
+/// Almanac sign-in with email and password; returns the account's email.
+#[tauri::command]
+async fn almanac_sign_in(email: String, password: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || almanac::sign_in(&email, &password))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Almanac sign-in by a code from the email: send it.
+#[tauri::command]
+async fn almanac_send_code(email: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || almanac::send_code(&email))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// ...and check it; returns the account's email.
+#[tauri::command]
+async fn almanac_verify(email: String, code: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || almanac::verify_code(&email, &code))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn almanac_sign_out() {
+    let _ = tauri::async_runtime::spawn_blocking(almanac::sign_out).await;
+}
+
+/// This build can sign in to Almanac (its address came with the build).
+#[tauri::command]
+fn almanac_available() -> bool {
+    almanac::available()
+}
+
+/// A habit row on the island: mark it (or clear it) for today; the new day follows as
+/// `island://almanac`, a failure re-reads the day.
+#[tauri::command]
+async fn almanac_toggle(id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || almanac::toggle(&id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Connect a Notion integration token: checked against Notion, then kept in the keychain.
@@ -327,6 +375,7 @@ fn modules_set(app: AppHandle, off: Vec<String>, chat: bool) -> Result<modules::
     vercel::poke();
     notion::poke();
     grafana::poke();
+    almanac::poke();
     calendar::poke();
     Ok(c)
 }
@@ -390,6 +439,11 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     grafana::start(move |g| {
         f2.lock().unwrap().grafana = Some(g.clone());
         let _ = app2.emit("island://grafana", g);
+    });
+    let (app2, f2) = (app.clone(), feeds.clone());
+    almanac::start(move |a| {
+        f2.lock().unwrap().almanac = Some(a.clone());
+        let _ = app2.emit("island://almanac", a);
     });
     let app2 = app.clone();
     media::start(Arc::new(move |name: &str, v: serde_json::Value| {
@@ -549,6 +603,12 @@ pub fn run() {
             grafana_panels,
             grafana_pick,
             grafana_open,
+            almanac_sign_in,
+            almanac_send_code,
+            almanac_verify,
+            almanac_sign_out,
+            almanac_available,
+            almanac_toggle,
             calendar_config,
             calendar_choose,
             calendar_access,

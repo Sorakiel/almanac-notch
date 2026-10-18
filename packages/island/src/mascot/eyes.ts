@@ -28,6 +28,8 @@ export function eyeGlow(s: IslandState): { c: string; a: number } | null {
       return { c: '#34C759', a: Math.max(0, 1 - el / 1.4) };
     case 'error':
       return { c: '#FF453A', a: Math.max(0, 1 - el / 1.6) * (0.6 + 0.4 * Math.sin(el * 18)) };
+    case 'nudge':
+      return { c: '#F4A9C6', a: 0.35 + 0.35 * Math.sin(el * 4) };
     case 'dance':
       return { c: '#FF5FA2', a: 0.5 + 0.45 * Math.sin(el * 12.6) };
     case 'ratelimit':

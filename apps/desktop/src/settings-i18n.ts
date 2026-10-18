@@ -3,6 +3,26 @@
 import { EN, type Lang } from '@almanac-notch/island';
 
 export const SETTINGS_EN: Readonly<Record<string, string>> = {
+  // Almanac
+  'В этой сборке нет адреса Almanac: остров показывает пример привычек. Адрес задаётся при сборке (файл .env.almanac).':
+    'This build has no Almanac address: the island shows sample habits. The address is set at build time (the .env.almanac file).',
+  Пароль: 'Password',
+  'Код из письма': 'Code from the email',
+  'Прислать код': 'Send a code',
+  Войти: 'Sign in',
+  'Остров показывает привычки на сегодня; нажатие на привычку отмечает её в Almanac.':
+    "The island shows today's habits; tapping a habit marks it in Almanac.",
+  Выйти: 'Sign out',
+  'Как войти': 'How to sign in',
+  'Почта и пароль от Almanac.': 'Your Almanac email and password.',
+  'Если в Almanac вы входите по ссылке из письма: «Код из письма» → «Прислать код», введите код из письма.':
+    'If you sign in to Almanac with an email link: "Code from the email" → "Send a code", then enter the code.',
+  'Привычки на сегодня из вашего аккаунта Almanac: название, сколько отмечено и сколько нужно за день. Нажатие на привычку в острове отмечает её в Almanac, как нажатие в самом Almanac. Заметки, серии, тренировки и другие данные не читаются. Запросы идут только на сервер Almanac, раз в минуту и только при включённом модуле. Пароль не сохраняется; ключ входа хранится в связке ключей системы, почта - в файле настроек приложения. В остров не попадают ни пароль, ни ключ.':
+    "Today's habits from your Almanac account: the name, how many taps are done and how many the day needs. Tapping a habit on the island marks it in Almanac, the same as a tap in Almanac. Notes, streaks, workouts and other data are not read. Requests go only to the Almanac server, once a minute and only while the module is on. The password is not kept; the sign-in key is kept in the system keychain, the email in the app's settings file. Neither the password nor the key reaches the island.",
+  'Способ входа': 'Sign-in method',
+  'Пример из прототипа': 'Prototype sample',
+  'Вход истёк - войдите снова': 'Signed out - sign in again',
+  'Код отправлен на почту': 'The code is on its way to your email',
   // tabs and the general page
   Общие: 'General',
   Модули: 'Modules',
@@ -66,9 +86,6 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Read-only permissions: Contents, Pull requests, Commit statuses, Actions (Metadata is added by itself).',
   'Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
     'Repository names, the check status of the latest commits, the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.',
-  'Пока заглушка': 'A stub for now',
-  'Привычки дня. Сейчас это заглушка из прототипа; подключение к Almanac появится позже (локальное API или файл). Сети нет.':
-    'Habits of the day. For now this is the prototype stub; the Almanac connection comes later (a local API or a file). No network.',
   // dynamic texts (src/settings.ts)
   'GitHub не принял сохранённый токен': 'GitHub rejected the saved token',
   // Vercel, the module limit
