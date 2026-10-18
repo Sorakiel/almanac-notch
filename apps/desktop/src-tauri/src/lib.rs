@@ -21,8 +21,10 @@ mod modules;
 #[cfg(windows)]
 mod outlook;
 mod platform;
+mod prefs;
 mod settings;
 mod tray;
+mod update;
 
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -395,6 +397,85 @@ fn lang_set(app: AppHandle, pick: String) -> Result<lang::Config, String> {
     Ok(c)
 }
 
+#[derive(Serialize)]
+struct AppInfo {
+    version: String,
+    onboarded: bool,
+    updates: bool,
+    autostart: bool,
+    update: update::State,
+}
+
+fn app_info_of(app: &AppHandle) -> AppInfo {
+    use tauri_plugin_autostart::ManagerExt;
+    let p = prefs::get();
+    AppInfo {
+        version: app.package_info().version.to_string(),
+        onboarded: p.onboarded,
+        updates: p.updates,
+        autostart: app.autolaunch().is_enabled().unwrap_or(false),
+        update: update::state(),
+    }
+}
+
+/// Version, first-run flag, launch at login, update switch and state (stage 8f).
+#[tauri::command]
+fn app_info(app: AppHandle) -> AppInfo {
+    app_info_of(&app)
+}
+
+/// `key`: "autostart" | "updates" | "onboarded".
+#[tauri::command]
+fn app_set(app: AppHandle, key: String, on: bool) -> Result<AppInfo, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    match key.as_str() {
+        "autostart" => {
+            let l = app.autolaunch();
+            if on { l.enable() } else { l.disable() }.map_err(|e| {
+                format!(
+                    "{}: {e}",
+                    lang::t(
+                        "Не удалось изменить запуск при входе",
+                        "Could not change launch at login"
+                    )
+                )
+            })?;
+        }
+        "updates" => {
+            prefs::set(|p| p.updates = on)?;
+            if on && update::state().state == "idle" {
+                tauri::async_runtime::spawn(update::check(app.clone()));
+            }
+        }
+        "onboarded" => {
+            prefs::set(|p| p.onboarded = on)?;
+        }
+        _ => return Err(format!("unknown setting {key}")),
+    }
+    Ok(app_info_of(&app))
+}
+
+#[tauri::command]
+async fn update_check(app: AppHandle) -> update::State {
+    update::check(app).await
+}
+
+#[tauri::command]
+async fn update_install(app: AppHandle) -> Result<(), String> {
+    update::install(app).await
+}
+
+/// The hook client's connection file goes with the process (exit, update restart).
+struct HookPort(Arc<Mutex<Option<u16>>>);
+
+pub(crate) fn remove_hook_connection(app: &AppHandle) {
+    if let Some(p) = app.try_state::<HookPort>() {
+        if let Some(port) = *p.0.lock().unwrap() {
+            claude::server::remove_connection_file(port);
+        }
+    }
+}
+
 /// Settings window (a regular window; the island panel never takes the keyboard).
 #[tauri::command]
 fn open_settings(app: AppHandle, section: Option<String>) {
@@ -576,6 +657,12 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .manage(HookPort(hook_port.clone()))
         .manage(state.clone())
         .manage(feeds.clone())
         .manage(usage.clone())
@@ -618,6 +705,10 @@ pub fn run() {
             modules_set,
             lang_get,
             lang_set,
+            app_info,
+            app_set,
+            update_check,
+            update_install,
             open_settings
         ])
         .setup(move |app| {
@@ -644,6 +735,11 @@ pub fn run() {
             let media = start_feeds(app.handle(), feeds.clone());
             app.manage(media);
             spawn_cursor_poller(app.handle().clone(), window, state.clone());
+            update::start(app.handle());
+            // first run: the guide (language, Claude Code, calendar, modules, launch at login)
+            if !prefs::get().onboarded {
+                settings::open(app.handle(), Some("welcome"));
+            }
             // Launch activation (tao, wry) arrives asynchronously; undo it once it has.
             let handle = app.handle().clone();
             thread::spawn(move || {

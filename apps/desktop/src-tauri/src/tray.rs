@@ -1,7 +1,8 @@
 //! Debug tray menu: fire any island event like the prototype's 1-0 and Q buttons,
 //! and force the notch state like its "Состояние" radios. Items are forwarded to the
 //! frontend as `island://debug` with the menu id ("ev:<type>" or "nstate:<state>").
-//! Also: install / remove the Claude Code hooks (shows the diff first), calendar access.
+//! Also: install / remove the Claude Code hooks (shows the diff first), calendar access, the
+//! setup guide and, when a newer version is out, "Update to X" (stage 8f).
 
 use std::sync::Mutex;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -25,6 +26,15 @@ pub fn action(app: &AppHandle, id: &str) {
     match id {
         "quit" => app.exit(0),
         "settings" => crate::settings::open(app, None),
+        "welcome" => crate::settings::open(app, Some("welcome")),
+        // install right away; progress and errors show in the settings window
+        "update:install" => {
+            crate::settings::open(app, Some("general"));
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = crate::update::install(app).await;
+            });
+        }
         // Mac: the system access dialog; Windows: the source is picked in settings
         "calendar:access" if cfg!(target_os = "macos") => crate::calendar::open_access(),
         "calendar:access" => crate::settings::open(app, Some("calendar")),
@@ -154,12 +164,30 @@ fn menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, Vec<CheckMenuItem<Wry>>)> 
     )?)?;
     menu.append(&MenuItem::with_id(
         app,
+        "welcome",
+        t("Мастер настройки…", "Setup guide…"),
+        true,
+        None::<&str>,
+    )?)?;
+    menu.append(&MenuItem::with_id(
+        app,
         "settings",
         t("Настройки…", "Settings…"),
         true,
         Some("CmdOrCtrl+,"),
     )?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    if let Some(v) = crate::update::available() {
+        let label = format!("{} {v}", t("Обновить до", "Update to"));
+        menu.append(&MenuItem::with_id(
+            app,
+            "update:install",
+            label,
+            true,
+            None::<&str>,
+        )?)?;
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+    }
     menu.append(&MenuItem::with_id(
         app,
         "quit",
