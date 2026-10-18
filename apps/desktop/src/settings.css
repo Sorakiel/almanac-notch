@@ -330,3 +330,14 @@ button:disabled {
   background: #3a1d1d;
   color: #ffb4ae;
 }
+
+/* Grafana: address and token, dashboard and panel - one field under another */
+#grafana .row + label {
+  margin-top: 14px;
+}
+#gf-connected .row + .plain {
+  margin-top: 6px;
+}
+#gf-off {
+  margin-top: 8px;
+}

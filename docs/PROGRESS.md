@@ -3,13 +3,13 @@
 Обновляется в конце каждой сессии. Новая сессия начинает с этого файла.
 
 ## Сейчас
-- Этап: 8c - Notion (ветка `stage-8-notion` от `stage-8-vercel`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Notion. 8a (EN и RU) и 8b (Vercel) тоже ждут проверки, замечаний пока не было.
+- Этап: 8d - Grafana (ветка `stage-8-grafana` от `stage-8-notion`). Код готов, ждёт проверки владельцем: строка CHANGES 2026-10-18 про Grafana. 8a (EN и RU), 8b (Vercel) и 8c (Notion) тоже ждут проверки, замечаний пока не было.
 - Порядок этапа 8 (выбор владельца 2026-10-18, PLAN): EN/RU → Vercel → Notion → Grafana → Almanac → полноценный удобный релиз. Obsidian, n8n, почта, чат, телефон пока не берём.
 - Этап 7 (Windows) формально не принят: владелец проверит на Windows позже (`npm run installer`, README). Если пришлёт замечания - сначала исправить в `stage-7-windows`, затем влить в ветки этапа 8.
-- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18), Notion (2026-10-18).
+- Открыто в CHANGES: тексты карточки календаря на Windows (2026-10-17), язык интерфейса (2026-10-18), Vercel и лимит модулей (2026-10-18), Notion (2026-10-18), Grafana (2026-10-18).
 - Репозиторий публичный: https://github.com/Sorakiel/almanac-notch. `master` - только каркас этапа 0. Пушить можно (разрешение владельца).
 - `npm run installer` (корень) собирает релиз для своей ОС и кладёт в `release/`: Windows - `Almanac Notch Setup.exe`, Mac - `Almanac Notch.app`. В Cargo.toml `[profile.release.build-override] strip = false` (иначе ломаются proc-macro на Mac).
-- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel`, `stage-8-notion` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
+- Ветки: `stage-0-scaffold` … `stage-7-windows`, `stage-8-i18n`, `stage-8-vercel`, `stage-8-notion`, `stage-8-grafana` - каждая от предыдущей, PR не созданы, в `master` ничего не влито.
 
 ## Сделано
 - Монорепо на npm workspaces: `packages/island`, `apps/harness`, `apps/desktop`.
@@ -170,9 +170,18 @@
 - Проверки: тесты 105 (фронт + пакет), Rust 28, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76, `parity:inputs` 75/75 зелёные.
 - Не проверено (нужен владелец, собранный `.app` и своя интеграция Notion): реальные страницы в карточке, открытие страницы по строке, событие при чужой правке, выбор «Это вы» с настоящими участниками, эмодзи на Windows (WebView2).
 
+### Этап 8d - Grafana (ветка `stage-8-grafana`)
+- Rust `src-tauri/src/grafana.rs` по образцу `notion.rs`: адрес и токен сервисного аккаунта в keyring (`grafana-url`, `grafana-token`), поток раз в минуту, только при `modules::is_on("grafana")`, с адресом и токеном, сеть - только на этот адрес. `normalize` - адрес без схемы получает `https://`, `http://` только для локальной сети, без `@ ? #`, порт - цифры. Токен проверяется `/api/user` (401 = отказ; 403 не считается отказом), имя организации - `/api/org`. Правила - `/api/prometheus/grafana/api/v1/rules` (firing и pending, сначала firing, внутри новые первыми; id - `uid` правила). Дашборд и панель (`<app data>/grafana.json`): `/api/dashboards/uid/{uid}`, первый видимый запрос панели → `POST /api/ds/query` за `now-1h`, `maxDataPoints` 60, первая числовая серия. Команды: `grafana_connect(url, token)`, `grafana_disconnect` (стирает и выбор), `grafana_config`, `grafana_dashboards`, `grafana_panels(uid)`, `grafana_pick(board, panel)`, `grafana_open("alerts" | "board")`. 6 тестов + сетевой `--ignored bogus` (play.grafana.org, выдуманный токен → «не принят») проходит.
+- `modules::ALL` += grafana, по умолчанию выключен; файл этапа Notion с включённым Notion - Grafana приходит выключенной (тест).
+- Пакет: `ModuleId` += `'grafana'`, `GrafanaFeed` (`state` fail/run/ok/none, `rows`, `total`, `board`), `s.grafana` (null в харнессе), `hasModule` переписан на `if` по модулям, `autoFocus` (success и error с `src = 'grafana'`), `FALLBACK`, `MODULE_COL.grafana` `#FF8C66`, `kind: 'alerts'` + значок `alertMark` (пульс), `focusTint` красный при firing, `miniCrew` (seed 6, fail/ask), предмет `mascot/props/monitor.ts`. Карточка в `cards.ts`: `brandHead` теперь берёт слово из `HEAD_WORD` и стрелку `grafana:alerts`; строки алертов (`alertDot`), блок дашборда `boardBlock` (`grafana:board`), обрезка текста `fit` (вместо сжатия `textAt max`). `miniCrew` теперь возвращает элементы с `id` (была ошибка типов в `focus.test.ts`).
+- Фронт: `grafanaFeed`, `unitText` (percent, percentunit, bytes, decbytes, ms, s, reqps, иначе компактное число), `GrafanaDriver` (первое чтение - без событий; новое firing → error «Алерт · имя», firing пропал → success «Прошло · имя»; «нет связи» не сбрасывает список).
+- Окно настроек: страница Grafana (переключатель, статус «орг · N правил · горит K», адрес, токен, после подключения - «Дашборд в карточке» и «Панель для графика», как получить токен, «Что читается и куда уходит»), строка в списке модулей. Кадры: `.parity/grafana-variant.png`, `.parity/grafana-settings.png` (не в git), скрипты `.parity/shot-grafana.mjs`, `.parity/shot-grafana-settings.mjs`.
+- Проверки: тесты 111 (фронт + пакет), Rust 33 + сетевой, tsc, eslint, prettier, clippy Mac и Windows, `npm run parity` 76/76, `parity:inputs` 75/75. Форматы ответов `/rules`, `/api/dashboards/uid`, `/api/ds/query` сверены с play.grafana.org (анонимно).
+- Не проверено (нужен владелец, собранный `.app` и своя Grafana с токеном): реальные алерты в карточке, события при срабатывании и «прошло», выбор дашборда и панели, график на настоящих данных (Prometheus, Loki и др.; панели с переменными дашборда кроме datasource могут не нарисоваться - тогда «нет данных»), открытие дашборда и списка алертов, Grafana Cloud.
+
 ## Дальше
 - Этап 7: проверка владельцем на Windows и исправления по ней.
-- Этап 8: после ответа владельца по EN/RU, Vercel и Notion - Grafana (ветка `stage-8-grafana` от `stage-8-notion`), затем Almanac, релиз. Новый модуль включается с учётом лимита 4 (`modules.rs`); у Grafana своего предмета пока нет - спросить владельца.
+- Этап 8: после ответа владельца по EN/RU, Vercel, Notion и Grafana - Almanac (ветка `stage-8-almanac` от `stage-8-grafana`), затем релиз. В DECISIONS открыт вопрос «Как Almanac отдаёт данные: локальное API или файл» - спросить в начале.
 - Поведение в полноэкранных приложениях: сейчас `fullScreenAuxiliary` - остров виден поверх. В ARCHITECTURE по умолчанию «прячется» - решить вместе с вопросом из DECISIONS.
 
 ## Грабли и решения
@@ -213,3 +222,6 @@
 - Вопросы владельцу - по-русски и простыми словами (вопрос по-английски он не понял).
 - **Кадры окна в браузере.** Холст острова 560×200 растягивается на всё окно браузера - текст сжат. Снимать Playwright с `viewport: {width: 560, height: 200}`, `deviceScaleFactor: 2`; перед кадром `s.event = null; s.postLaunchUntil = 0` (иначе висит приветствие). Окно настроек - `localhost:1420/settings.html#notion`.
 - В окне настроек `.note` - красный (ошибки), для пояснений - `.plain`.
+- **Grafana с анонимным доступом** (например play.grafana.org) отвечает на `/api/org` и `/api/search` с любым, даже выдуманным токеном - проверять токен только по `/api/user` (анонимно 401). Сервисный аккаунт без роли может получить 403 на части запросов - это не «токен не принят».
+- Длинные русские строки в heredoc `python3 - <<'EOF'` однажды дали `SyntaxError: Non-UTF-8 code`: большие правки документов - через файл скрипта в scratchpad (Write), не через heredoc.
+- Текст в карточке: `textAt(..., {max})` сжимает буквы, а не обрезает - для живых названий в узких строках использовать `fit` из `cards.ts` (обрезка с «…»).

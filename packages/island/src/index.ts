@@ -21,6 +21,7 @@ export {
   type GithubFeed,
   type VercelFeed,
   type NotionFeed,
+  type GrafanaFeed,
   type MascotEvent,
 } from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';

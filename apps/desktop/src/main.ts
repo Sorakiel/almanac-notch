@@ -33,11 +33,13 @@ import {
   MediaDriver,
   VercelDriver,
   NotionDriver,
+  GrafanaDriver,
   type Calendar,
   type GhState,
   type MediaMsg,
   type VcState,
   type NoState,
+  type GfState,
 } from './feeds';
 
 interface Geometry {
@@ -202,6 +204,7 @@ let media: MediaDriver | null = null;
 let github: GithubDriver | null = null;
 let vercel: VercelDriver | null = null;
 let notion: NotionDriver | null = null;
+let grafana: GrafanaDriver | null = null;
 
 interface Feeds {
   calendar: Calendar | null;
@@ -210,6 +213,7 @@ interface Feeds {
   github: GhState | null;
   vercel: VcState | null;
   notion: NoState | null;
+  grafana: GfState | null;
 }
 
 async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
@@ -221,7 +225,7 @@ async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
   }
 }
 
-const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac', 'vercel', 'notion'];
+const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac', 'vercel', 'notion', 'grafana'];
 
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
@@ -286,6 +290,11 @@ if (inTauri) {
     wake();
     notion?.onState(e.payload);
   });
+  grafana = new GrafanaDriver(s, m, Date.now);
+  await listen<GfState>('island://grafana', (e) => {
+    wake();
+    grafana?.onState(e.payload);
+  });
   // modules switched off in settings and the chat tab (stage 7)
   const applyModules = (c: { off: string[]; chat: boolean }): void => {
     s.off = c.off.filter((id): id is ModuleId => MODULE_IDS.includes(id as ModuleId));
@@ -310,6 +319,7 @@ if (inTauri) {
   if (f.github) github.onState(f.github);
   if (f.vercel) vercel.onState(f.vercel);
   if (f.notion) notion.onState(f.notion);
+  if (f.grafana) grafana.onState(f.grafana);
   if (f.calendar) cal.onCalendar(f.calendar);
   if (f.media) media.onMessage(f.media);
   media.onVolume(f.volume);
@@ -375,10 +385,12 @@ function tick(now: number, id: number): void {
   github?.tick();
   vercel?.tick();
   notion?.tick();
+  grafana?.tick();
   for (const r of s.requests.splice(0))
     if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
     else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
+    else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();

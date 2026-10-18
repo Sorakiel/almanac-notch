@@ -10,8 +10,8 @@ use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 
 /// The island's module ids (packages/island ModuleId).
-pub const ALL: [&str; 7] = [
-    "claude", "cal", "music", "github", "almanac", "vercel", "notion",
+pub const ALL: [&str; 8] = [
+    "claude", "cal", "music", "github", "almanac", "vercel", "notion", "grafana",
 ];
 
 /// The main module: never counted against `MAX_ON`.
@@ -38,7 +38,7 @@ impl Default for Config {
     fn default() -> Self {
         // a new module starts off: the prototype's five stay as they were
         Config {
-            off: vec!["vercel".into(), "notion".into()],
+            off: vec!["vercel".into(), "notion".into(), "grafana".into()],
             chat: true,
         }
     }
@@ -135,7 +135,7 @@ mod tests {
                 chat: false
             }),
             Config {
-                off: vec!["notion".into(), "vercel".into()],
+                off: vec!["grafana".into(), "notion".into(), "vercel".into()],
                 chat: false
             }
         );
@@ -144,7 +144,14 @@ mod tests {
             chat: true,
         });
         // five others on: the newest goes off
-        assert_eq!(c.off, vec!["github".to_string(), "notion".to_string()]);
+        assert_eq!(
+            c.off,
+            vec![
+                "github".to_string(),
+                "grafana".to_string(),
+                "notion".to_string()
+            ]
+        );
     }
 
     #[test]
@@ -154,17 +161,48 @@ mod tests {
             off: Vec::new(),
             chat: true,
         });
-        assert_eq!(c.off, vec!["notion".to_string(), "vercel".to_string()]);
+        assert_eq!(
+            c.off,
+            vec![
+                "grafana".to_string(),
+                "notion".to_string(),
+                "vercel".to_string()
+            ]
+        );
         assert_eq!(
             Config::default().off,
-            vec!["vercel".to_string(), "notion".to_string()]
+            vec![
+                "vercel".to_string(),
+                "notion".to_string(),
+                "grafana".to_string()
+            ]
         );
-        // a file from the Vercel stage, Vercel switched on: Notion comes in off
+        // a file from the Vercel stage, Vercel switched on: Notion and Grafana come in off
         let c = clean(Config {
             off: vec!["almanac".into()],
             chat: true,
         });
-        assert_eq!(c.off, vec!["almanac".to_string(), "notion".to_string()]);
+        assert_eq!(
+            c.off,
+            vec![
+                "almanac".to_string(),
+                "grafana".to_string(),
+                "notion".to_string()
+            ]
+        );
+        // a file from the Notion stage, Notion switched on: Grafana comes in off
+        let c = clean(Config {
+            off: vec!["almanac".into(), "vercel".into()],
+            chat: true,
+        });
+        assert_eq!(
+            c.off,
+            vec![
+                "almanac".to_string(),
+                "vercel".to_string(),
+                "grafana".to_string()
+            ]
+        );
         // Claude off does not free a fifth slot
         let c = clean(Config {
             off: vec!["claude".into()],
@@ -174,6 +212,7 @@ mod tests {
             c.off,
             vec![
                 "claude".to_string(),
+                "grafana".to_string(),
                 "notion".to_string(),
                 "vercel".to_string()
             ]

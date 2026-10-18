@@ -7,6 +7,7 @@ import {
   type CalFeed,
   type EventType,
   type GithubFeed,
+  type GrafanaFeed,
   type IslandState,
   type Lang,
   type MediaFeed,
@@ -770,6 +771,195 @@ export class NotionDriver {
       if (this.s.event) {
         this.s.event.label = p;
         this.s.event.src = 'notion';
+      }
+    }
+  }
+}
+
+// ---------- grafana ----------
+/** `island://grafana` (src-tauri/src/grafana.rs). */
+export interface GfAlert {
+  /** stable across reads: the rule's uid, or folder/group/name */
+  id: string;
+  name: string;
+  state: 'firing' | 'pending';
+  /** the oldest active instance, epoch ms; null when Grafana gave no time */
+  since: number | null;
+}
+
+export interface GfBoard {
+  uid: string;
+  title: string;
+  /** the picked panel's title; null = none picked */
+  panel: string | null;
+  unit: string | null;
+  /** the last hour, oldest first */
+  points: number[];
+  firing: number;
+}
+
+export interface GfState {
+  auth: 'off' | 'ok' | 'bad' | 'net';
+  /** the organisation the token belongs to */
+  org: string | null;
+  /** alert rules in all */
+  rules: number;
+  /** firing first, then pending; newest first within each */
+  alerts: GfAlert[];
+  board: GfBoard | null;
+}
+
+const GF_HINT = 'Настройки → Grafana';
+
+/** 1234 -> "1.2k", 0.0421 -> "0.042": three significant digits at most */
+function compact(x: number): string {
+  const a = Math.abs(x);
+  for (const [d, sfx] of [
+    [1e9, 'G'],
+    [1e6, 'M'],
+    [1e3, 'k'],
+  ] as const)
+    if (a >= d) return compact(x / d) + sfx;
+  const s = a >= 100 ? x.toFixed(0) : a >= 10 ? x.toFixed(1) : a >= 1 ? x.toFixed(2) : x.toPrecision(2);
+  return s.includes('.') && !s.includes('e') ? s.replace(/\.?0+$/, '') : s;
+}
+
+/** A panel's value in its Grafana unit, the common ones; anything else as a bare number. */
+export function unitText(x: number, unit: string | null, lang: Lang = 'ru'): string {
+  const L = { lang };
+  switch (unit) {
+    case 'percent':
+      return compact(x) + '%';
+    case 'percentunit':
+      return compact(x * 100) + '%';
+    case 'bytes':
+    case 'decbytes': {
+      const k = unit === 'bytes' ? 1024 : 1000,
+        u = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let i = 0;
+      for (; Math.abs(x) >= k && i < u.length - 1; i++) x /= k;
+      return compact(x) + ' ' + u[i];
+    }
+    case 'ms':
+      return Math.abs(x) >= 1000 ? tr(L, '{0} с', compact(x / 1000)) : tr(L, '{0} мс', compact(x));
+    case 's':
+      return Math.abs(x) < 1 ? tr(L, '{0} мс', compact(x * 1000)) : tr(L, '{0} с', compact(x));
+    case 'reqps':
+      return compact(x) + ' req/s';
+    default:
+      return compact(x);
+  }
+}
+
+/** Not in the prototype (docs/CHANGES.md): the Grafana card - the alert rules firing or pending now. */
+export function grafanaFeed(g: GfState | null, now: number, lang: Lang = 'ru'): GrafanaFeed {
+  const L = { lang };
+  const empty = (hint: [string, string], short: string): GrafanaFeed => ({
+    auth: g && g.auth === 'bad' ? 'bad' : 'off',
+    state: 'none',
+    rows: [],
+    total: 0,
+    board: null,
+    short: tr(L, short),
+    hint: [tr(L, hint[0]), tr(L, hint[1])],
+  });
+  if (!g || g.auth === 'off') return empty(['Grafana не подключена', GF_HINT], 'нет токена');
+  if (g.auth === 'bad') return empty(['Grafana не приняла токен', GF_HINT], 'токен не принят');
+  if (!g.org) return empty(['Нет связи с Grafana', 'попробую снова через минуту'], 'нет связи');
+  const firing = g.alerts.filter((a) => a.state === 'firing').length,
+    pending = g.alerts.length - firing;
+  const b = g.board;
+  const board = b
+    ? {
+        title: clip(b.panel ? b.title + ' · ' + b.panel : b.title, 26),
+        value: b.points.length ? unitText(b.points[b.points.length - 1] as number, b.unit, lang) : tr(L, 'нет данных'),
+        points: b.points,
+        firing: b.firing,
+      }
+    : null;
+  const base = { auth: 'ok' as const, rows: [], total: 0, board };
+  if (!g.alerts.length)
+    return g.rules
+      ? { ...base, state: 'ok', short: tr(L, 'спокойно'), hint: [tr(L, 'Всё спокойно'), tr(L, 'правил: {0}', g.rules)] }
+      : {
+          ...base,
+          state: 'none',
+          short: tr(L, 'нет правил'),
+          hint: [tr(L, 'правил пока нет'), tr(L, 'создайте правило алерта в Grafana')],
+        };
+  return {
+    auth: 'ok',
+    state: firing ? 'fail' : 'run',
+    total: g.alerts.length,
+    board,
+    rows: g.alerts.slice(0, 3).map((a) => ({
+      id: a.id,
+      name: clip(a.name, 16),
+      state: a.state === 'firing' ? 'fail' : 'run',
+      ago: a.since === null ? '' : agoText(a.since, now, lang),
+    })),
+    short: firing ? tr(L, 'горит {0}', firing) : tr(L, 'ждёт {0}', pending),
+    hint: ['', ''],
+  };
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): keeps s.grafana current; a rule starting to fire is the
+ * island's error, a firing rule resolving its success, both on the Grafana card. The first read
+ * after start only seeds what was already so; pending alone is no event.
+ */
+export class GrafanaDriver {
+  private g: GfState | null = null;
+  private lastMin = -1;
+  private lang: Lang = 'ru';
+  /** rule id -> name while firing; null until the first read */
+  private firing: Map<string, string> | null = null;
+  private pending: { type: EventType; label: string } | null = null;
+  constructor(
+    private s: IslandState,
+    private m: { trigger: (t: EventType) => void },
+    private now: () => number,
+  ) {
+    s.grafana = grafanaFeed(null, now());
+  }
+
+  onState(g: GfState): void {
+    let hit: { type: EventType; label: string } | null = null;
+    if (g.org && g.auth === 'ok') {
+      const was = this.firing,
+        now = new Map(g.alerts.filter((a) => a.state === 'firing').map((a) => [a.id, a.name]));
+      if (was) {
+        for (const [id, name] of now)
+          if (!was.has(id)) hit = { type: 'error', label: tr(this.s, 'Алерт') + ' · ' + clip(name, 12) };
+        if (!hit)
+          for (const [id, name] of was)
+            if (!now.has(id)) hit = { type: 'success', label: tr(this.s, 'Прошло') + ' · ' + clip(name, 12) };
+      }
+      this.firing = now;
+    } else if (g.auth === 'off' || g.auth === 'bad') this.firing = null;
+    this.g = g;
+    this.lastMin = -1;
+    if (hit) this.pending = hit;
+    this.tick();
+  }
+
+  /** Per frame: the relative times, the language, a waiting alert event. */
+  tick(): void {
+    const now = this.now(),
+      min = Math.floor(now / 60_000);
+    if (min !== this.lastMin || this.s.lang !== this.lang) {
+      this.lastMin = min;
+      this.lang = this.s.lang;
+      this.s.grafana = grafanaFeed(this.g, now, this.lang);
+    }
+    const p = this.pending,
+      ev = this.s.event;
+    if (p && !(ev && PROMPTS.includes(ev.type))) {
+      this.pending = null;
+      this.m.trigger(p.type);
+      if (this.s.event) {
+        this.s.event.label = p.label;
+        this.s.event.src = 'grafana';
       }
     }
   }

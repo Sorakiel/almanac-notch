@@ -183,6 +183,26 @@ export const EN: Readonly<Record<string, string>> = {
   Недавние: 'Recent',
   'пишет в Notion': 'writing in Notion',
   Правка: 'Edited',
+  // Grafana (apps/desktop/src/feeds.ts, island/cards.ts)
+  'Настройки → Grafana': 'Settings → Grafana',
+  'Grafana не подключена': 'Grafana not connected',
+  'Grafana не приняла токен': 'Grafana rejected the token',
+  'Нет связи с Grafana': 'No connection to Grafana',
+  'Всё спокойно': 'All calm',
+  спокойно: 'calm',
+  'правил пока нет': 'no alert rules yet',
+  'создайте правило алерта в Grafana': 'create an alert rule in Grafana',
+  'нет правил': 'no rules',
+  'правил: {0}': 'rules: {0}',
+  'горит {0}': '{0} firing',
+  'ждёт {0}': '{0} pending',
+  Алерты: 'Alerts',
+  Алерт: 'Alert',
+  Прошло: 'Resolved',
+  'следит за графиками': 'watching the graphs',
+  'нет данных': 'no data',
+  '{0} мс': '{0} ms',
+  '{0} с': '{0} s',
 };
 
 function fill(text: string, args: readonly (string | number)[]): string {

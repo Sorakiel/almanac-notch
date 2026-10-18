@@ -14,7 +14,8 @@ export type ModuleItem =
   | { id: 'music'; kind: 'music'; name: string; playing: boolean; short: string; state?: undefined }
   | { id: 'almanac'; kind: 'habits'; name: string; done: number; total: number; short: string; state?: undefined }
   | { id: 'vercel'; kind: 'deploy'; name: string; state: CiState; short: string }
-  | { id: 'notion'; kind: 'pages'; name: string; short: string; state?: undefined };
+  | { id: 'notion'; kind: 'pages'; name: string; short: string; state?: undefined }
+  | { id: 'grafana'; kind: 'alerts'; name: string; state: CiState; short: string };
 
 /** what drawGlyph needs; prIcon-free glyphs can be drawn from a bare { kind, state } */
 /** 'off' = live GitHub with nothing to show (no token, no CI): a grey ring */
@@ -23,7 +24,8 @@ export type GlyphItem =
   | ModuleItem
   | { kind: 'ci'; state: CiState }
   | { kind: 'deploy'; state: CiState }
-  | { kind: 'pages'; state?: undefined };
+  | { kind: 'pages'; state?: undefined }
+  | { kind: 'alerts'; state: CiState };
 
 function workShort(s: IslandState): string {
   const st = stepAt(s, stepIndex(s));
@@ -121,7 +123,17 @@ export function modules(s: IslandState): ModuleItem[] {
     });
   // not in the prototype (docs/CHANGES.md): Notion, only where the app feeds it
   if (s.notion) all.push({ id: 'notion', kind: 'pages', name: 'Notion', short: s.notion.short });
-  return s.off.length || vc || s.notion ? all.filter((m) => hasModule(s, m.id)) : all;
+  // not in the prototype (docs/CHANGES.md): Grafana, only where the app feeds it
+  const gf = s.grafana;
+  if (gf)
+    all.push({
+      id: 'grafana',
+      kind: 'alerts',
+      name: 'Grafana',
+      state: gf.auth === 'ok' && gf.state !== 'none' ? gf.state : 'off',
+      short: gf.short,
+    });
+  return s.off.length || vc || s.notion || gf ? all.filter((m) => hasModule(s, m.id)) : all;
 }
 
 /** proto: isHot */
@@ -180,6 +192,8 @@ export function focusTint(s: IslandState, f: ModuleId): { c: string; a: number }
     if (st === 'fail') return { c: '#FF453A', a: 0.45 };
     if (st === 'run') return { c: '#3D8BFF', a: 0.22 };
   }
+  if (f === 'grafana' && s.grafana && s.grafana.auth === 'ok' && s.grafana.state === 'fail')
+    return { c: '#FF453A', a: 0.45 };
   if (f === 'cal' && callMins(s) <= 5) return { c: '#F5A524', a: 0.35 };
   if (f === 'music' && s.musicPlaying) return { c: '#9EE6B8', a: 0.16 };
   return null;
@@ -246,6 +260,8 @@ export function drawGlyph(s: IslandState, c: Ctx, it: GlyphItem, x: number, y: n
     }
   } else if (it.kind === 'deploy') {
     deployDot(c, x, y, r * 0.75, it.state, t);
+  } else if (it.kind === 'alerts') {
+    alertMark(c, x, y, r, it.state, t);
   } else if (it.kind === 'pages') {
     pageMark(c, x, y, r, 'rgba(255,255,255,0.85)');
   } else if (it.kind === 'cal') {
@@ -346,6 +362,29 @@ export function prIcon(c: Ctx, x: number, y: number): void {
   c.moveTo(x + 1, y - 5.6);
   c.lineTo(x - 0.6, y - 4);
   c.lineTo(x + 1, y - 2.4);
+  c.stroke();
+  c.restore();
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): Grafana's mark - a monitor's pulse line; red and
+ * breathing while an alert fires, amber while one is pending, grey without data.
+ */
+export function alertMark(c: Ctx, x: number, y: number, r: number, st: CiState, t: number): void {
+  c.save();
+  if (st === 'fail') c.globalAlpha *= 0.6 + 0.4 * Math.sin(t * 5);
+  c.strokeStyle =
+    st === 'fail' ? '#FF453A' : st === 'run' ? '#F5A524' : st === 'ok' ? '#34C759' : 'rgba(255,255,255,0.3)';
+  c.lineWidth = Math.max(1.2, r * 0.26);
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(x - r, y);
+  c.lineTo(x - r * 0.45, y);
+  c.lineTo(x - r * 0.18, y - r * 0.8);
+  c.lineTo(x + r * 0.18, y + r * 0.8);
+  c.lineTo(x + r * 0.45, y);
+  c.lineTo(x + r, y);
   c.stroke();
   c.restore();
 }

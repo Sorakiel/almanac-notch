@@ -204,3 +204,38 @@ describe('Vercel (the app, stage 8)', () => {
     expect(modules(s).map((m) => m.id)).not.toContain('vercel');
   });
 });
+
+describe('Grafana (the app, stage 8)', () => {
+  const feed = {
+    auth: 'ok' as const,
+    state: 'fail' as const,
+    rows: [{ id: 'r', name: 'CPU', state: 'fail' as const, ago: '1 мин' }],
+    total: 1,
+    board: null,
+    short: 'горит 1',
+    hint: ['', ''] as [string, string],
+  };
+  it('no feed: no module, the prototype is untouched', () => {
+    const s = make();
+    s.focusId = 'grafana';
+    expect(modules(s).map((m) => m.id)).not.toContain('grafana');
+    expect(miniCrew(s)).toHaveLength(4);
+    expect(effectiveFocus(s)).not.toBe('grafana');
+  });
+  it('with a feed: a module of its own, firing in its mini, its events, can be switched off', () => {
+    const s = make();
+    s.grafana = feed;
+    expect(modules(s).map((m) => m.id)).toEqual(['claude', 'github', 'cal', 'music', 'almanac', 'grafana']);
+    expect(modules(s).find((m) => m.id === 'grafana')?.state).toBe('fail');
+    s.off = ['music', 'github', 'cal'];
+    expect(miniCrew(s).map((m) => [m.id, m.state])).toEqual([
+      ['claude', 'idle'],
+      ['grafana', 'fail'],
+    ]);
+    s.off = [];
+    s.event = { ...ev('success'), type: 'error', src: 'grafana' };
+    expect(autoFocus(s)).toBe('grafana');
+    s.off = ['grafana'];
+    expect(autoFocus(s)).toBe('github');
+  });
+});

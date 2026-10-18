@@ -24,7 +24,7 @@ export const STATE_COL: Readonly<Record<string, string>> = {
 };
 
 /** proto: miniCrew */
-export function miniCrew(s: IslandState): MiniItem[] {
+export function miniCrew(s: IslandState): (MiniItem & { id: ModuleId })[] {
   const ev = s.event && s.event.type;
   const all: (MiniItem & { id: ModuleId })[] = [
     { id: 'claude', body: MODULE_COL.claude.body, seed: 0, state: claudeState(s) },
@@ -46,8 +46,22 @@ export function miniCrew(s: IslandState): MiniItem[] {
       state: s.vercel.auth === 'ok' && s.vercel.state === 'fail' ? 'fail' : s.vercel.state === 'run' ? 'work' : 'idle',
     });
   if (s.notion) all.push({ id: 'notion', body: MODULE_COL.notion.body, seed: 5, state: 'idle' });
-  // the ear holds a 2 × 2 crew: with Vercel or Notion on, the first four of those switched on
-  return s.off.length || s.vercel || s.notion ? all.filter((m) => hasModule(s, m.id)).slice(0, 4) : all;
+  if (s.grafana)
+    all.push({
+      id: 'grafana',
+      body: MODULE_COL.grafana.body,
+      seed: 6,
+      state:
+        s.grafana.auth !== 'ok'
+          ? 'idle'
+          : s.grafana.state === 'fail'
+            ? 'fail'
+            : s.grafana.state === 'run'
+              ? 'ask'
+              : 'idle',
+    });
+  // the ear holds a 2 × 2 crew: with a stage 8 module on, the first four of those switched on
+  return s.off.length || s.vercel || s.notion || s.grafana ? all.filter((m) => hasModule(s, m.id)).slice(0, 4) : all;
 }
 
 /** proto: drawMini - a tiny flat mascot with its state as a dot */

@@ -7,7 +7,7 @@ import '@fontsource/onest/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Calendar, GhState, NoState, VcState } from './feeds';
+import type { Calendar, GfState, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -26,7 +26,8 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 let lastG: GhState | null = null,
   lastCal: Calendar | null = null,
   lastV: VcState | null = null,
-  lastN: NoState | null = null;
+  lastN: NoState | null = null,
+  lastGf: GfState | null = null;
 
 function render(g: GhState | null): void {
   lastG = g;
@@ -110,6 +111,112 @@ vcInput.addEventListener('keydown', (e) => {
 });
 $('vc-off').addEventListener('click', () => void invoke('vercel_disconnect'));
 
+// ---------- Grafana (stage 8) ----------
+interface GfConfig {
+  url: string | null;
+  board: string | null;
+  panel: number | null;
+}
+const gfUrl = $<HTMLInputElement>('gf-url'),
+  gfInput = $<HTMLInputElement>('gf-token'),
+  gfGo = $<HTMLButtonElement>('gf-go'),
+  gfErr = $('gf-error'),
+  gfBoard = $<HTMLSelectElement>('gf-board'),
+  gfPanel = $<HTMLSelectElement>('gf-panel');
+let gfCfg: GfConfig = { url: null, board: null, panel: null },
+  /** the dashboard list, read once per connection */
+  gfBoards: { uid: string; title: string; folder: string | null }[] | null = null,
+  gfPanels: { id: number; title: string }[] = [];
+function renderGrafana(g: GfState | null): void {
+  lastGf = g;
+  const on = !!g && g.auth !== 'off' && g.auth !== 'bad' && !!g.org;
+  $('gf-connect').hidden = on;
+  $('gf-connected').hidden = !on;
+  $('gf-dot').className = 'dot' + (on ? ' ok' : g && g.auth === 'bad' ? ' bad' : '');
+  const firing = g ? g.alerts.filter((a) => a.state === 'firing').length : 0;
+  $('gf-status').textContent =
+    on && g
+      ? (g.org ?? '') +
+        ' · ' +
+        count(g.rules, ['правило', 'правила', 'правил'], ['rule', 'rules']) +
+        (firing ? t(' · горит {0}', firing) : '') +
+        (g.auth === 'net' ? t(' · нет связи') : '')
+      : g && g.auth === 'bad'
+        ? t('Grafana не приняла сохранённый токен')
+        : t('Не подключена');
+  $('gf-addr').textContent = gfCfg.url ? t('Адрес: {0}', gfCfg.url) : '';
+  if (!on) gfBoards = null;
+  else if (!gfBoards && inTauri) void loadBoards();
+  renderGfPick();
+}
+function renderGfPick(): void {
+  const boards = gfBoards ?? [];
+  gfBoard.replaceChildren(
+    new Option(t('Не выбран'), '', false, !gfCfg.board),
+    ...boards.map(
+      (b) => new Option(b.folder ? b.folder + ' / ' + b.title : b.title, b.uid, false, b.uid === gfCfg.board),
+    ),
+  );
+  gfPanel.disabled = !gfCfg.board;
+  gfPanel.replaceChildren(
+    new Option(t('Без графика'), '', false, gfCfg.panel === null),
+    ...gfPanels.map((p) => new Option(p.title || '#' + p.id, String(p.id), false, p.id === gfCfg.panel)),
+  );
+}
+async function loadBoards(): Promise<void> {
+  try {
+    gfBoards = await invoke('grafana_dashboards');
+    gfPanels = gfCfg.board ? await invoke('grafana_panels', { uid: gfCfg.board }) : [];
+    $('gf-pick-error').textContent = '';
+  } catch (e) {
+    gfBoards = [];
+    $('gf-pick-error').textContent = String(e);
+  }
+  renderGfPick();
+}
+async function gfPick(board: string | null, panel: number | null): Promise<void> {
+  try {
+    if (board !== gfCfg.board) gfPanels = board ? await invoke('grafana_panels', { uid: board }) : [];
+    // one panel only: pick it right away
+    if (board !== gfCfg.board) panel = gfPanels.length === 1 ? (gfPanels[0] as { id: number }).id : null;
+    await invoke('grafana_pick', { board, panel });
+    gfCfg = { ...gfCfg, board, panel };
+    $('gf-pick-error').textContent = '';
+  } catch (e) {
+    $('gf-pick-error').textContent = String(e);
+  }
+  renderGfPick();
+}
+gfBoard.addEventListener('change', () => void gfPick(gfBoard.value || null, null));
+gfPanel.addEventListener('change', () => void gfPick(gfCfg.board, gfPanel.value ? +gfPanel.value : null));
+async function gfConnect(): Promise<void> {
+  const url = gfUrl.value.trim(),
+    token = gfInput.value.trim();
+  if (!url || !token) return;
+  gfGo.disabled = true;
+  gfErr.textContent = '';
+  try {
+    await invoke<string>('grafana_connect', { url, token });
+    gfInput.value = '';
+    gfCfg = await invoke<GfConfig>('grafana_config');
+    gfBoards = null;
+  } catch (e) {
+    gfErr.textContent = String(e);
+  } finally {
+    gfGo.disabled = false;
+  }
+}
+gfGo.addEventListener('click', () => void gfConnect());
+for (const el of [gfUrl, gfInput])
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') void gfConnect();
+  });
+$('gf-off').addEventListener('click', () => {
+  gfCfg = { url: null, board: null, panel: null };
+  gfPanels = [];
+  void invoke('grafana_disconnect');
+});
+
 // ---------- Notion (stage 8) ----------
 const noInput = $<HTMLInputElement>('no-token'),
   noGo = $<HTMLButtonElement>('no-go'),
@@ -192,6 +299,7 @@ const STATUS: Record<string, [string, string]> = {
   github: ['status-text', 'dot'],
   vercel: ['vc-status', 'vc-dot'],
   notion: ['no-status', 'no-dot'],
+  grafana: ['gf-status', 'gf-dot'],
 };
 for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   const copy = (): void => {
@@ -221,6 +329,7 @@ const MOD_OF: Record<string, string> = {
   almanac: 'almanac',
   vercel: 'vercel',
   notion: 'notion',
+  grafana: 'grafana',
 };
 let modCfg: Modules = { off: [], chat: true };
 let toastTimer = 0;
@@ -437,6 +546,7 @@ function renderLang(c: LangCfg): void {
   render(lastG);
   renderVercel(lastV);
   renderNotion(lastN);
+  renderGrafana(lastGf);
   renderCal(lastCal);
   renderMusic(lastMusic);
   renderIsland(lastIsland);
@@ -452,16 +562,20 @@ if (inTauri) {
   await listen<GhState>('island://github', (e) => render(e.payload));
   await listen<VcState>('island://vercel', (e) => renderVercel(e.payload));
   await listen<NoState>('island://notion', (e) => renderNotion(e.payload));
+  await listen<GfState>('island://grafana', (e) => renderGrafana(e.payload));
   const f = await invoke<{
     github: GhState | null;
     vercel: VcState | null;
     notion: NoState | null;
+    grafana: GfState | null;
     calendar: Calendar | null;
     media: MediaNow | null;
   }>('feeds_state');
   render(f.github);
   renderVercel(f.vercel);
   renderNotion(f.notion);
+  gfCfg = await invoke<GfConfig>('grafana_config');
+  renderGrafana(f.grafana);
   renderMusic(f.media);
   await listen<MediaNow>('island://media', (e) => renderMusic(e.payload));
   renderCal(f.calendar);

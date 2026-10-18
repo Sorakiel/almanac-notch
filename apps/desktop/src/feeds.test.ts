@@ -3,6 +3,7 @@ import { createMascot, defaultSettings } from '@almanac-notch/island';
 import {
   CalDriver,
   GithubDriver,
+  GrafanaDriver,
   MediaDriver,
   NotionDriver,
   VercelDriver,
@@ -11,11 +12,15 @@ import {
   calFeed,
   commitDays,
   githubFeed,
+  grafanaFeed,
+  unitText,
   notionFeed,
   whenText,
   type Calendar,
   type GhRepo,
   type GhState,
+  type GfAlert,
+  type GfState,
   type NoPage,
   type NoState,
   type VcDeploy,
@@ -451,6 +456,97 @@ describe('notion feed', () => {
     d.onState(no([page({ edited: T0 + 2 * min })], { me: null }));
     // an old page newly shared: not an event
     d.onState(no([page({ id: 'old', edited: T0 - 60 * min })]));
+    expect(m.state.event).toBeNull();
+  });
+});
+
+describe('grafana feed', () => {
+  const al = (o: Partial<GfAlert> = {}): GfAlert => ({
+    id: 'r-cpu',
+    name: 'CPU > 90%',
+    state: 'firing',
+    since: T0 - 12 * min,
+    ...o,
+  });
+  const gf = (alerts: GfAlert[], o: Partial<GfState> = {}): GfState => ({
+    auth: 'ok',
+    org: 'Main Org.',
+    rules: 12,
+    alerts,
+    board: null,
+    ...o,
+  });
+  const mascot = () => createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+
+  it('no address or token, a refused one, no answer, no rules, all calm: say so', () => {
+    expect(grafanaFeed(null, T0).hint).toEqual(['Grafana не подключена', 'Настройки → Grafana']);
+    expect(grafanaFeed(null, T0, 'en').hint).toEqual(['Grafana not connected', 'Settings → Grafana']);
+    expect(grafanaFeed(gf([], { auth: 'bad', org: null }), T0).auth).toBe('bad');
+    expect(grafanaFeed(gf([], { auth: 'net', org: null }), T0).hint[0]).toBe('Нет связи с Grafana');
+    expect(grafanaFeed(gf([], { rules: 0 }), T0)).toMatchObject({ state: 'none', short: 'нет правил', rows: [] });
+    expect(grafanaFeed(gf([]), T0)).toMatchObject({
+      state: 'ok',
+      short: 'спокойно',
+      hint: ['Всё спокойно', 'правил: 12'],
+    });
+  });
+  it('firing rows first, red; pending amber; at most three, the total kept', () => {
+    const f = grafanaFeed(
+      gf([
+        al(),
+        al({ id: 'r-5xx', name: 'Ошибки 5xx на шлюзе платежей', since: T0 - 3 * min }),
+        al({ id: 'r-disk', name: 'Disk', state: 'pending', since: null }),
+        al({ id: 'r-mem', name: 'Mem', state: 'pending' }),
+      ]),
+      T0,
+    );
+    expect(f.state).toBe('fail');
+    expect(f.short).toBe('горит 2');
+    expect(f.total).toBe(4);
+    expect(f.rows.map((r) => [r.name, r.state, r.ago])).toEqual([
+      ['CPU > 90%', 'fail', '12 мин'],
+      ['Ошибки 5xx на ш…', 'fail', '3 мин'],
+      ['Disk', 'run', ''],
+    ]);
+    expect(grafanaFeed(gf([al({ state: 'pending' })]), T0, 'en')).toMatchObject({ state: 'run', short: '1 pending' });
+  });
+  it('the picked dashboard: title with the panel, last value in its unit, no data said so', () => {
+    const board = { uid: 'd', title: 'API', panel: 'RPS', unit: 'reqps', points: [800, 1234], firing: 1 };
+    expect(grafanaFeed(gf([], { board }), T0).board).toEqual({
+      title: 'API · RPS',
+      value: '1.23k req/s',
+      points: [800, 1234],
+      firing: 1,
+    });
+    expect(grafanaFeed(gf([], { board: { ...board, points: [] } }), T0, 'en').board?.value).toBe('no data');
+    expect(unitText(73.456, 'percent')).toBe('73.5%');
+    expect(unitText(0.5, 'percentunit')).toBe('50%');
+    expect(unitText(3 * 1024 ** 3, 'bytes')).toBe('3 GB');
+    expect(unitText(1500, 'ms', 'en')).toBe('1.5 s');
+    expect(unitText(0.12, 's')).toBe('120 мс');
+    expect(unitText(4_200_000, null)).toBe('4.2M');
+    expect(unitText(0.0421, null)).toBe('0.042');
+    expect(unitText(-12, null)).toBe('-12');
+  });
+  it('driver: no event on the first read; a rule starting to fire is an error, resolving a success', () => {
+    const m = mascot();
+    const d = new GrafanaDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(gf([al()]));
+    expect(m.state.event).toBeNull();
+    // pending alone is no event
+    d.onState(gf([al(), al({ id: 'r-disk', name: 'Disk', state: 'pending' })]));
+    expect(m.state.event).toBeNull();
+    d.onState(gf([al(), al({ id: 'r-disk', name: 'Disk' })]));
+    expect(m.state.event?.type).toBe('error');
+    expect(m.state.event?.src).toBe('grafana');
+    expect(m.state.event?.label).toBe('Алерт · Disk');
+    m.state.event = null;
+    d.onState(gf([al({ id: 'r-disk', name: 'Disk' })]));
+    expect((m.state.event as { type: string; label?: string } | null)?.label).toBe('Прошло · CPU > 90%');
+    m.state.event = null;
+    // no answer keeps what was firing: nothing resolved
+    d.onState(gf([], { auth: 'net', org: null }));
+    d.onState(gf([al({ id: 'r-disk', name: 'Disk' })]));
     expect(m.state.event).toBeNull();
   });
 });

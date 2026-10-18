@@ -8,6 +8,7 @@
 mod calendar;
 mod claude;
 mod github;
+mod grafana;
 mod notion;
 mod vercel;
 // on Mac only its tests use it: the choice of sources is Windows-only
@@ -96,6 +97,7 @@ struct Feeds {
     github: Option<github::State>,
     vercel: Option<vercel::State>,
     notion: Option<notion::State>,
+    grafana: Option<grafana::State>,
 }
 
 #[derive(Serialize)]
@@ -106,6 +108,7 @@ struct FeedsSnapshot {
     github: Option<github::State>,
     vercel: Option<vercel::State>,
     notion: Option<notion::State>,
+    grafana: Option<grafana::State>,
 }
 
 #[tauri::command]
@@ -118,6 +121,7 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
         github: f.github.clone(),
         vercel: f.vercel.clone(),
         notion: f.notion.clone(),
+        grafana: f.grafana.clone(),
     }
 }
 
@@ -195,6 +199,73 @@ async fn notion_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(notion::disconnect).await;
 }
 
+/// Connect Grafana: the address and service account token are checked, then kept in the
+/// keychain. Returns the organisation's name.
+#[tauri::command]
+async fn grafana_connect(url: String, token: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || grafana::connect(&url, &token))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn grafana_disconnect() {
+    let _ = tauri::async_runtime::spawn_blocking(grafana::disconnect).await;
+}
+
+/// The settings page: the saved address (the token is never sent back) and the pick.
+#[derive(Serialize)]
+struct GrafanaConfig {
+    url: Option<String>,
+    board: Option<String>,
+    panel: Option<u64>,
+}
+
+#[tauri::command]
+async fn grafana_config() -> GrafanaConfig {
+    tauri::async_runtime::spawn_blocking(|| {
+        let p = grafana::pick();
+        GrafanaConfig {
+            url: grafana::address(),
+            board: p.board,
+            panel: p.panel,
+        }
+    })
+    .await
+    .unwrap_or(GrafanaConfig {
+        url: None,
+        board: None,
+        panel: None,
+    })
+}
+
+#[tauri::command]
+async fn grafana_dashboards() -> Result<Vec<grafana::BoardInfo>, String> {
+    tauri::async_runtime::spawn_blocking(grafana::dashboards)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn grafana_panels(uid: String) -> Result<Vec<grafana::PanelInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || grafana::dashboard_panels(&uid))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Settings: the dashboard and panel the card shows (None = none).
+#[tauri::command]
+fn grafana_pick(board: Option<String>, panel: Option<u64>) -> Result<(), String> {
+    grafana::set_pick(grafana::Pick { board, panel })
+}
+
+/// The card: "alerts" opens the alert list, "board" the picked dashboard; the URL is built
+/// here from the saved address, not sent by the page.
+#[tauri::command]
+fn grafana_open(what: String) {
+    grafana::open(&what);
+}
+
 /// Calendar source as the settings window shows it.
 #[tauri::command]
 async fn calendar_config() -> calendar::Config {
@@ -255,6 +326,7 @@ fn modules_set(app: AppHandle, off: Vec<String>, chat: bool) -> Result<modules::
     github::poke();
     vercel::poke();
     notion::poke();
+    grafana::poke();
     calendar::poke();
     Ok(c)
 }
@@ -313,6 +385,11 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     notion::start(move |n| {
         f2.lock().unwrap().notion = Some(n.clone());
         let _ = app2.emit("island://notion", n);
+    });
+    let (app2, f2) = (app.clone(), feeds.clone());
+    grafana::start(move |g| {
+        f2.lock().unwrap().grafana = Some(g.clone());
+        let _ = app2.emit("island://grafana", g);
     });
     let app2 = app.clone();
     media::start(Arc::new(move |name: &str, v: serde_json::Value| {
@@ -465,6 +542,13 @@ pub fn run() {
             notion_disconnect,
             notion_open,
             notion_me,
+            grafana_connect,
+            grafana_disconnect,
+            grafana_config,
+            grafana_dashboards,
+            grafana_panels,
+            grafana_pick,
+            grafana_open,
             calendar_config,
             calendar_choose,
             calendar_access,

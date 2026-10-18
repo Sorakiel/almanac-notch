@@ -29,6 +29,8 @@ export const MODULE_COL: Readonly<Record<ModuleId, MascotColor>> = {
   vercel: { body: '#C9C3E8', shade: '#918AC0', eye: '#16171A' },
   // not in the prototype (docs/CHANGES.md): paper grey, like a Notion page
   notion: { body: '#E4DFD3', shade: '#ACA594', eye: '#16171A' },
+  // not in the prototype (docs/CHANGES.md): between orange and red, the owner's pick
+  grafana: { body: '#FF8C66', shade: '#CC5A3A', eye: '#16171A' },
 };
 
 export type ClaudeState = 'work' | 'think' | 'search' | 'ask' | 'question' | 'limit' | 'idle';
@@ -73,6 +75,7 @@ export function autoFocus(s: IslandState): ModuleId {
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'agent' && on('claude')) return 'claude';
   if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'vercel' && on('vercel')) return 'vercel';
   if (ev === 'success' && s.event && s.event.src === 'notion' && on('notion')) return 'notion';
+  if ((ev === 'success' || ev === 'error') && s.event && s.event.src === 'grafana' && on('grafana')) return 'grafana';
   if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
   if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
   if (callMins(s) <= 30 && on('cal')) return 'cal';
@@ -82,11 +85,15 @@ export function autoFocus(s: IslandState): ModuleId {
 }
 
 /** the rest card when nothing is going on; the app keeps at least one module on */
-const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github', 'vercel', 'notion'];
+const FALLBACK: ModuleId[] = ['almanac', 'claude', 'cal', 'music', 'github', 'vercel', 'notion', 'grafana'];
 
-/** The module is shown: not switched off, and Vercel and Notion only where the app feeds them (not in the prototype). */
+/** The module is shown: not switched off, and Vercel, Notion and Grafana only where the app feeds them (not in the prototype). */
 export function hasModule(s: IslandState, id: ModuleId): boolean {
-  return !s.off.includes(id) && (id !== 'vercel' || s.vercel !== null) && (id !== 'notion' || s.notion !== null);
+  if (s.off.includes(id)) return false;
+  if (id === 'vercel') return s.vercel !== null;
+  if (id === 'notion') return s.notion !== null;
+  if (id === 'grafana') return s.grafana !== null;
+  return true;
 }
 
 /**

@@ -26,8 +26,8 @@ export interface MascotEvent {
   label?: string;
   answer?: 'approve' | 'deny' | 'opt';
   answerAt?: number;
-  /** set by real Claude Code sessions, Vercel and Notion: success and error then belong to that card */
-  src?: 'agent' | 'vercel' | 'notion';
+  /** set by real Claude Code sessions, Vercel, Notion and Grafana: success and error then belong to that card */
+  src?: 'agent' | 'vercel' | 'notion' | 'grafana';
 }
 
 /**
@@ -151,6 +151,30 @@ export interface NotionFeed {
   hint: [string, string];
 }
 
+/**
+ * Live Grafana data (stage 8, not in the prototype). Null = no Grafana module at all (harness,
+ * parity): the module exists only in the app. The alert rules firing or pending right now.
+ */
+export interface GrafanaFeed {
+  /** "off" no address or token, "bad" the token was refused, "ok" data is shown */
+  auth: 'off' | 'bad' | 'ok';
+  /** the worst rule: "fail" something fires, "run" something is pending, "ok" all calm, "none" no rules */
+  state: 'fail' | 'run' | 'ok' | 'none';
+  /** the card's rows, firing first (at most three): name, "fail" or "run", "12 мин" */
+  rows: { id: string; name: string; state: 'fail' | 'run'; ago: string }[];
+  /** rules firing or pending in all (the rows show three) */
+  total: number;
+  /**
+   * the dashboard picked in settings: its title (and the panel's), the panel's last value as
+   * text, the last hour's points oldest first (empty = nothing to draw), rules on it firing now
+   */
+  board: { title: string; value: string; points: number[]; firing: number } | null;
+  /** the rail's, chips' and ears' short text */
+  short: string;
+  /** the card's two lines while there are no rows (no token, refused, all calm) */
+  hint: [string, string];
+}
+
 export interface Particle {
   type: 'bit' | 'note' | 'z';
   color: string | undefined;
@@ -224,7 +248,7 @@ export const DEFAULT_THEME: Theme = {
 };
 
 export type Tab = 'home' | 'chat' | 'add' | 'settings';
-export type ModuleId = 'claude' | 'github' | 'cal' | 'music' | 'almanac' | 'vercel' | 'notion';
+export type ModuleId = 'claude' | 'github' | 'cal' | 'music' | 'almanac' | 'vercel' | 'notion' | 'grafana';
 
 /**
  * Everything the prototype kept in closure-level `let`s. Time only moves in update(dt),
@@ -269,6 +293,7 @@ export interface IslandState {
   github: GithubFeed | null;
   vercel: VercelFeed | null;
   notion: NotionFeed | null;
+  grafana: GrafanaFeed | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
@@ -383,6 +408,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     github: null,
     vercel: null,
     notion: null,
+    grafana: null,
     requests: [],
     settingsLink: false,
     off: [],

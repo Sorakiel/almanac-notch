@@ -82,6 +82,30 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Имя пользователя, список команд и последние деплои ваших проектов: название проекта, состояние сборки, продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на api.vercel.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
     'Your username, team list and the latest deployments of your projects: project name, build state, production or preview, branch and time. Code, environment variables and logs are not read. Requests go only to api.vercel.com, once a minute, and only while the module is on. The token is kept in the system keychain and never gets into files or the island.',
   'Vercel не принял сохранённый токен': 'Vercel rejected the saved token',
+  // Grafana
+  'Адрес Grafana': 'Grafana address',
+  'Токен сервисного аккаунта': 'Service account token',
+  'Дашборд в карточке': 'Dashboard on the card',
+  'Панель для графика': 'Panel to graph',
+  'Карточка показывает график панели за последний час; клик по нему открывает дашборд.':
+    "The card shows the panel's graph for the last hour; clicking it opens the dashboard.",
+  'В Grafana: Administration → Users and access → Service accounts → Add service account, роль Viewer.':
+    'In Grafana: Administration → Users and access → Service accounts → Add service account, role Viewer.',
+  'В сервисном аккаунте: Add service account token → Generate token, скопируйте токен (glsa_…).':
+    'In the service account: Add service account token → Generate token, copy the token (glsa_…).',
+  'Вставьте сюда адрес Grafana, как в браузере (например, https://имя.grafana.net), и токен.':
+    'Paste the Grafana address as in your browser (for example, https://name.grafana.net) and the token here.',
+  'Название организации, правила алертов (название, состояние, с какого времени горит), список дашбордов для выбора и у выбранного дашборда - название и данные одной панели за последний час. Другие данные, логи и настройки Grafana не читаются. Запросы идут только на адрес, который вы ввели, раз в минуту и только при включённом модуле. Адрес и токен хранятся в связке ключей системы и не попадают ни в файлы, ни в остров; выбранный дашборд - в файле настроек приложения. По http можно подключить только адрес в локальной сети.':
+    "The organization name, alert rules (name, state, since when it fires), the dashboard list to pick from and, for the picked dashboard, its title and one panel's data for the last hour. Other data, logs and Grafana settings are not read. Requests go only to the address you entered, once a minute, and only while the module is on. The address and token are kept in the system keychain and never get into files or the island; the picked dashboard is kept in the app's settings file. Plain http works only for an address on your local network.",
+  'Не подключена': 'Not connected',
+  'Grafana не приняла сохранённый токен': 'Grafana rejected the saved token',
+  ' · горит {0}': ' · {0} firing',
+  'Адрес: {0}': 'Address: {0}',
+  'Не выбран': 'Not picked',
+  'Без графика': 'No graph',
+  правило: 'rule',
+  правила: 'rules',
+  правил: 'rules',
   // Notion
   'Токен интеграции': 'Integration token',
   'Откройте notion.so/profile/integrations → New integration, тип Internal.':

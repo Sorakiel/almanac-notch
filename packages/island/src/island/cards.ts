@@ -14,6 +14,9 @@ import { MODULE_COL, minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
 import { deployDot, drawGlyph, modules, pageMark, prIcon, type ModuleItem } from './modules';
 
+/** the muted word after the name in coucou's card head */
+const HEAD_WORD: Partial<Record<ModuleId, string>> = { vercel: 'Деплои', notion: 'Недавние', grafana: 'Алерты' };
+
 /** proto: QUESTION */
 export const QUESTION: readonly [string, readonly string[]] = [
   'Какой раннер тестов взять?',
@@ -84,7 +87,8 @@ function commitsWord(s: IslandState, n: number): string {
 
 /**
  * Not in the prototype (docs/CHANGES.md): coucou's card head - a dot in the module colour, the
- * name, a muted word ("Деплои", "Недавние"), an optional arrow (Vercel: the newest deployment).
+ * name, a muted word ("Деплои", "Недавние", "Алерты"), an optional arrow (Vercel: the newest
+ * deployment, Grafana: the alert list).
  */
 function brandHead(s: IslandState, c: Ctx, id: ModuleId, name: string, tx: number, y0: number, x1: number): void {
   c.fillStyle = MODULE_COL[id].body;
@@ -96,13 +100,18 @@ function brandHead(s: IslandState, c: Ctx, id: ModuleId, name: string, tx: numbe
   c.font = '600 13px Onest, system-ui, sans-serif';
   const nw = c.measureText(name).width;
   c.restore();
-  textAt(c, tr(s, id === 'notion' ? 'Недавние' : 'Деплои'), tx + 20 + nw, y0 + 18.5, {
+  textAt(c, tr(s, HEAD_WORD[id] ?? ''), tx + 20 + nw, y0 + 18.5, {
     size: 12,
     weight: 400,
     color: T_MUTED,
   });
   const top = id === 'vercel' && s.vercel && s.vercel.auth === 'ok' ? s.vercel.rows[0] : undefined;
-  if (!top) return;
+  const act = top
+    ? 'vercel:' + top.id
+    : id === 'grafana' && s.grafana && s.grafana.auth === 'ok'
+      ? 'grafana:alerts'
+      : '';
+  if (!act) return;
   const bx = x1 - 20,
     by = y0 + 17,
     hov = hovering(s, bx - 11, by - 11, 22, 22);
@@ -121,7 +130,97 @@ function brandHead(s: IslandState, c: Ctx, id: ModuleId, name: string, tx: numbe
   c.lineTo(bx + 3.5, by - 3.5);
   c.lineTo(bx + 3.5, by + 2);
   c.stroke();
-  addHit(s, c, { x: bx - 11, y: by - 11, w: 22, h: 22, act: 'vercel:' + top.id });
+  addHit(s, c, { x: bx - 11, y: by - 11, w: 22, h: 22, act });
+}
+
+/** Cut a string to a width with "…" instead of squeezing it (textAt's max narrows the glyphs). */
+function fit(c: Ctx, str: string, font: string, max: number): string {
+  c.save();
+  c.font = font;
+  let out = str;
+  if (c.measureText(out).width > max) {
+    while (out.length > 1 && c.measureText(out + '…').width > max) out = out.slice(0, -1);
+    out = out.trimEnd() + '…';
+  }
+  c.restore();
+  return out;
+}
+
+/** Not in the prototype (docs/CHANGES.md): a Grafana row's dot - red breathing, amber, green. */
+function alertDot(c: Ctx, x: number, y: number, st: 'fail' | 'run' | 'ok', t: number): void {
+  c.save();
+  if (st === 'fail') c.globalAlpha *= 0.6 + 0.4 * Math.sin(t * 5);
+  c.fillStyle = st === 'fail' ? '#FF453A' : st === 'run' ? '#F5A524' : '#34C759';
+  c.beginPath();
+  c.arc(x, y, 2.6, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+/**
+ * Not in the prototype (docs/CHANGES.md): the picked Grafana dashboard - its title, the panel's
+ * last value and a small graph of its last hour; the block opens the dashboard.
+ */
+function boardBlock(
+  s: IslandState,
+  c: Ctx,
+  b: NonNullable<NonNullable<IslandState['grafana']>['board']>,
+  tx: number,
+  y: number,
+  tmax: number,
+): void {
+  const h = 36,
+    hov = hovering(s, tx - 6, y, tmax + 6, h);
+  c.fillStyle = hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
+  rrect(c, tx - 6, y, tmax + 6, h, 8);
+  c.fill();
+  const gw = Math.min(110, tmax * 0.48),
+    gx1 = tx + tmax - 6,
+    gx0 = gx1 - gw;
+  let lx = tx;
+  if (b.firing) {
+    alertDot(c, tx + 3, y + 10.5, 'fail', s.t);
+    lx = tx + 11;
+  }
+  // the title takes the whole width; the graph sits under it, right of the value
+  const title = fit(c, b.title, '400 10.5px Onest, system-ui, sans-serif', tx + tmax - 6 - lx);
+  textAt(c, title, lx, y + 10.5, { size: 10.5, weight: 400, color: T_MUTED });
+  textAt(c, b.value, tx, y + 25.5, { size: 14, weight: 600, color: '#FFFFFF', max: gx0 - tx - 6 });
+  const pts = b.points;
+  if (pts.length > 1) {
+    const lo = Math.min(...pts),
+      hi = Math.max(...pts);
+    const gy0 = y + 18,
+      gh = h - 22,
+      span = hi - lo || 1,
+      px = (i: number): number => gx0 + (i / (pts.length - 1)) * gw,
+      py = (v: number): number => (hi === lo ? gy0 + gh / 2 : gy0 + gh - ((v - lo) / span) * gh);
+    const col = b.firing ? '#FF6B61' : MODULE_COL.grafana.body;
+    c.beginPath();
+    pts.forEach((v, i) => (i ? c.lineTo(px(i), py(v)) : c.moveTo(px(i), py(v))));
+    c.save();
+    c.lineTo(gx1, gy0 + gh);
+    c.lineTo(gx0, gy0 + gh);
+    c.closePath();
+    const g = c.createLinearGradient(0, gy0, 0, gy0 + gh);
+    g.addColorStop(0, b.firing ? 'rgba(255,107,97,0.28)' : 'rgba(255,140,102,0.28)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.fill();
+    c.restore();
+    c.beginPath();
+    pts.forEach((v, i) => (i ? c.lineTo(px(i), py(v)) : c.moveTo(px(i), py(v))));
+    c.strokeStyle = col;
+    c.lineWidth = 1.4;
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    c.stroke();
+    c.fillStyle = col;
+    c.beginPath();
+    c.arc(gx1, py(pts[pts.length - 1] as number), 2, 0, Math.PI * 2);
+    c.fill();
+  }
+  addHit(s, c, { x: tx - 6, y, w: tmax + 6, h, act: 'grafana:board' });
 }
 
 /** proto: drawFocusCard - the large card of the module in focus */
@@ -140,7 +239,7 @@ export function drawFocusCard(
   cardMascot(s, c, x0, y0, y1, f, f === 'claude' ? fx : null, propFor(s, f));
   const tx = x0 + 84,
     tmax = x1 - tx - 10;
-  if (it.kind === 'deploy' || it.kind === 'pages') brandHead(s, c, it.id, it.name, tx, y0, x1);
+  if (it.kind === 'deploy' || it.kind === 'pages' || it.kind === 'alerts') brandHead(s, c, it.id, it.name, tx, y0, x1);
   else {
     drawGlyph(s, c, it, tx + 6, y0 + 18, 5.5);
     textAt(c, it.name, tx + 17, y0 + 18.5, { size: 13, weight: 600, max: tmax - 17 });
@@ -279,6 +378,53 @@ export function drawFocusCard(
         textAt(c, r.ago, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED, max: tmax - 18 - nw });
         addHit(s, c, { x: tx - 6, y: y - 9, w: tmax + 6, h: 18, act: 'notion:' + r.id });
       });
+  } else if (it.kind === 'alerts' && s.grafana) {
+    // not in the prototype (docs/CHANGES.md): the alert rules firing (red) or pending (amber),
+    // then the dashboard picked in settings with one panel's last hour
+    const gf = s.grafana,
+      n = gf.board ? 1 : 3;
+    const row = (i: number, dot: 'fail' | 'run' | 'ok', name: string, ago: string): void => {
+      const y = y0 + 40 + i * 18;
+      if (i === 0 && dot !== 'ok') {
+        c.fillStyle = dot === 'fail' ? 'rgba(255,69,58,0.14)' : 'rgba(255,255,255,0.06)';
+        rrect(c, tx - 6, y - 9, tmax + 6, 18, 6);
+        c.fill();
+      }
+      alertDot(c, tx + 3, y + 0.5, dot, s.t);
+      c.save();
+      c.font = '400 11px Onest, system-ui, sans-serif';
+      const aw = c.measureText(ago).width;
+      c.font = '600 11.5px Onest, system-ui, sans-serif';
+      // the name keeps at least 60% of the row; the age gives way first
+      const label = fit(c, name, c.font, Math.max(tmax * 0.6, tmax - 18 - aw)),
+        nw = c.measureText(label).width;
+      c.restore();
+      const when = fit(c, ago, '400 11px Onest, system-ui, sans-serif', tmax - 18 - nw);
+      textAt(c, label, tx + 12, y + 0.5, {
+        size: 11.5,
+        weight: 600,
+        color: dot === 'run' ? 'rgba(255,255,255,0.75)' : '#FFFFFF',
+      });
+      textAt(c, when, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED });
+    };
+    if (gf.auth !== 'ok') {
+      L(0, gf.hint[0], '#FFFFFF');
+      if (gf.hint[1]) L(1, gf.hint[1], T_MUTED);
+    } else {
+      if (gf.rows.length)
+        gf.rows.slice(0, n).forEach((r, i) => {
+          const more = i === n - 1 && gf.total > n ? '+' + (gf.total - n) : '';
+          row(i, r.state, r.name, r.ago && more ? r.ago + ' · ' + more : r.ago || more);
+        });
+      else if (gf.state === 'ok') {
+        row(0, 'ok', gf.hint[0], '');
+        if (!gf.board) L(1, gf.hint[1], T_MUTED);
+      } else {
+        L(0, gf.hint[0], '#FFFFFF');
+        if (!gf.board && gf.hint[1]) L(1, gf.hint[1], T_MUTED);
+      }
+      if (gf.board) boardBlock(s, c, gf.board, tx, y0 + 51, tmax);
+    }
   } else if (it.kind === 'cal' && s.cal) {
     const cal = s.cal;
     if (cal.mins === null) {
