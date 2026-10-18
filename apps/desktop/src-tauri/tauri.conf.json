@@ -45,7 +45,22 @@
     "macOS": {
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-",
-      "entitlements": "Entitlements.plist"
+      "entitlements": "Entitlements.plist",
+      "dmg": {
+        "background": "dmg/background.tiff",
+        "windowSize": {
+          "width": 640,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 170,
+          "y": 214
+        },
+        "applicationFolderPosition": {
+          "x": 470,
+          "y": 214
+        }
+      }
     },
     "windows": {
       "webviewInstallMode": {

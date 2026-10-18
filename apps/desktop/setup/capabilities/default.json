@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Installer window: its own commands, progress events, dragging",
+  "windows": ["setup"],
+  "permissions": ["core:event:default", "core:default", "core:window:allow-start-dragging"]
+}

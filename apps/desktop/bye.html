@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Удалить Almanac Notch</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+    <link rel="stylesheet" href="/src/solo.css" />
+  </head>
+  <body>
+    <div class="pane welcome solo" id="bye" data-glow="#6f86ff">
+      <div class="w-glow" aria-hidden="true"></div>
+      <div class="w-drag" data-tauri-drag-region></div>
+      <button class="w-close win-only" id="close" title="Закрыть" aria-label="Закрыть">×</button>
+      <canvas class="w-stage" id="stage"></canvas>
+      <div class="w-steps">
+        <section class="step" id="ask">
+          <h1>Удалить Almanac Notch?</h1>
+          <p class="lead mac-only">Сниму хуки Claude Code и запуск при входе, затем перенесу приложение в Корзину.</p>
+          <p class="lead win-only">Сниму хуки Claude Code и запуск при входе, удалю программу и её ярлыки.</p>
+          <div class="group">
+            <label class="g-row"
+              ><span
+                >Удалить настройки и данные<small class="mac-only"
+                  >Подключения, токены в связке ключей, кэш и доступ к календарю</small
+                ><small class="win-only">Подключения, токены в диспетчере учётных данных и кэш</small></span
+              ><input type="checkbox" class="toggle" id="wipe"
+            /></label>
+          </div>
+          <div class="w-actions">
+            <button class="pill ghost" id="cancel">Отмена</button>
+            <button class="pill primary danger" id="go">Удалить</button>
+          </div>
+        </section>
+        <section class="step" id="busy" hidden>
+          <h1>Удаляю…</h1>
+          <p class="lead">Снимаю хуки Claude Code и убираю файлы.</p>
+          <div class="bar busy"><i></i></div>
+        </section>
+        <section class="step" id="done" hidden>
+          <h1>Almanac Notch удалён</h1>
+          <p class="lead" id="done-kept">
+            Хуки Claude Code сняты. Настройки остались - пригодятся, если вернёте приложение.
+          </p>
+          <p class="lead" id="done-wiped" hidden>Хуки Claude Code сняты, настройки и данные удалены.</p>
+          <p class="note" id="warnings"></p>
+          <div class="w-actions">
+            <button class="pill primary" id="finish">Закрыть</button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/src/bye.ts"></script>
+  </body>
+</html>

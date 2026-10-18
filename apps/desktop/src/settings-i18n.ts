@@ -35,8 +35,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Обновить и перезапустить': 'Update and restart',
   // first-run guide (stage 8f)
   'Привет! Я живу у выреза камеры': 'Hi! I live at the camera notch',
-  'Покажу, что делает Claude Code, сколько осталось до созвона и что играет. Настроим за минуту.':
-    "I'll show what Claude Code is doing, how long until your next call and what's playing. Setup takes a minute.",
+  'Покажу, сколько осталось до созвона, что играет и всё, что подключите: от CI и деплоев до привычек. Настроим за минуту.':
+    "I'll show how long until your next call, what's playing and everything you connect - from CI and deploys to habits. Setup takes a minute.",
   'Подключим Claude Code': "Let's connect Claude Code",
   'Буду показывать шаги агента и отвечать на его вопросы и запросы разрешений прямо с острова.':
     "I'll show the agent's steps and answer its questions and permission requests right from the island.",
@@ -250,8 +250,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Сниму хуки Claude Code и запуск при входе; настройки и данные - по желанию':
     'Removes the Claude Code hooks and launch at login; settings and data if you choose',
   'Установка Almanac Notch': 'Almanac Notch Setup',
-  'Остров у выреза камеры: агенты Claude Code, встречи, музыка и ваши сервисы.':
-    'An island at the camera notch: Claude Code agents, meetings, music and your services.',
+  'Живой остров у выреза камеры: ближайший созвон, музыка и модули, которые вы выберете сами.':
+    'A living island at the camera notch: your next call, music and the modules you pick.',
   Папка: 'Folder',
   Изменить: 'Change',
   'Ярлык на рабочем столе': 'Desktop shortcut',

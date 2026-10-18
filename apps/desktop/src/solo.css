@@ -1,0 +1,121 @@
+/* Installer and uninstall windows (stage 8g): one screen in the style of the first-run guide -
+   black, the coloured glow, the live mascot, a white pill. Builds on settings.css. */
+.solo {
+  flex: 1;
+  display: flex;
+}
+.solo .w-stage {
+  height: 168px;
+  margin-top: 6px;
+}
+.solo .w-steps {
+  padding: 0 48px;
+}
+.solo .step h1 {
+  font-size: 22px;
+}
+.solo .lead {
+  margin-bottom: 16px;
+}
+.solo .group {
+  max-width: 400px;
+}
+.solo .w-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+.solo .w-actions .pill {
+  min-width: 112px;
+}
+.solo .note {
+  max-width: 420px;
+  margin: 12px 0 0;
+  text-align: center;
+}
+/* frameless window on Windows: our own close button in the corner */
+.w-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 18px;
+  line-height: 28px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.w-close:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+}
+/* the install folder: the path in mono, cut in the middle by the browser's ellipsis at the end */
+.path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font:
+    11.5px/1.4 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.g-row > .grow {
+  min-width: 0;
+  flex: 1;
+}
+/* progress: a thin pill that fills, and the percentage under it */
+.bar {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  height: 6px;
+  margin: 6px 0 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 3px;
+  background: #f4f4f2;
+  transition: width 0.25s var(--ease);
+}
+.bar.busy > i {
+  width: 30%;
+  animation: bar-busy 1.2s var(--ease) infinite;
+}
+@keyframes bar-busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+.pct {
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.pill.danger:hover {
+  background: #ff5a4f;
+  color: #fff;
+}
+.pill:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
