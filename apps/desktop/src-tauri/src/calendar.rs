@@ -558,6 +558,9 @@ mod mac {
                 }
             }
         });
-        request_access();
+        // first run: the guide's calendar step asks, so the dialog doesn't jump ahead of it
+        if crate::prefs::get().onboarded {
+            request_access();
+        }
     }
 }
