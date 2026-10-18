@@ -2,16 +2,41 @@
   "name": "almanac-notch",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
+    "dev:harness": "npm run dev -w @almanac-notch/harness",
+    "desktop:dev": "npm run dev -w @almanac-notch/desktop",
+    "installer": "node apps/desktop/scripts/installer.mjs",
+    "release:version": "node apps/desktop/scripts/version.mjs",
+    "hook:build": "cargo build --release --quiet --manifest-path apps/desktop/hook/Cargo.toml",
+    "hook:diff": "npm run hook:build && apps/desktop/hook/target/release/almanac-hook install",
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "ref:screens": "node tools/snapshot.mjs",
     "ref:clips": "node tools/snapshot.mjs --clips",
     "parity:shoot": "node tools/snapshot.mjs --target port --url http://localhost:5173/harness.html",
     "parity:compare": "node tools/compare.mjs",
-    "parity": "npm run parity:shoot && npm run parity:compare"
+    "parity:inputs": "node tools/inputs.mjs",
+    "parity": "node tools/parity.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
     "pixelmatch": "^6.0.0",
-    "playwright": "^1.56.0",
-    "pngjs": "^7.0.0"
+    "playwright": "1.64.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
   }
 }

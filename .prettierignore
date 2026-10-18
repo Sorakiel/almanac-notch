@@ -1,0 +1,10 @@
+prototype/
+reference/
+tools/
+docs/
+*.md
+package-lock.json
+.parity/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/target/
+apps/harness/harness.html

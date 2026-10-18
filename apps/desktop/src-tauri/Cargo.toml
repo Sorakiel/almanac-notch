@@ -1,0 +1,67 @@
+[package]
+name = "almanac-notch"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "almanac_notch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["macos-private-api", "tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+getrandom = "0.3"
+sha2 = "0.10"
+base64 = "0.22"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "system-proxy", "zip"] }
+tauri-plugin-autostart = "2"
+almanac-hook = { path = "../hook" }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+ureq = { version = "3", default-features = false, features = ["json", "native-tls", "gzip"] }
+rrule = "0.14"
+chrono = "0.4"
+chrono-tz = "0.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSLocale", "NSGeometry", "NSArray", "NSThread", "NSDate", "NSString", "NSPredicate", "NSNotification", "NSError", "NSRunLoop"] }
+objc2-event-kit = { version = "0.3", features = ["EKEventStore", "EKEvent", "EKCalendarItem", "EKObject", "EKTypes", "EKCalendar", "EKParticipant", "block2"] }
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics", "NSWorkspace", "NSPanel", "NSView", "NSColor"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_System_Ole",
+    "Win32_Globalization",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Foundation",
+    "Media",
+    "Media_Control",
+    "Storage_Streams",
+] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# Proc macros and build scripts run inside the compiler: a stripped proc-macro dylib does not
+# load on current macOS ("mis-aligned LINKEDIT string pool"). Strip only the app itself.
+[profile.release.build-override]
+strip = false

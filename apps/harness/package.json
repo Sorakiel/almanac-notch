@@ -1,0 +1,17 @@
+{
+  "name": "@almanac-notch/harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@almanac-notch/island": "*",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/onest": "^5.3.1",
+    "@fontsource/unbounded": "^5.3.0"
+  }
+}
