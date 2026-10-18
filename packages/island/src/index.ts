@@ -78,7 +78,7 @@ export function createMascot(opts: MascotOptions) {
     /** oc: offscreen context of an IW·2 × IH·2 canvas; ic: island canvas; lc: loupe canvas (none in the real window) */
     renderIsland: (ic: CanvasRenderingContext2D, oc: CanvasRenderingContext2D, lc?: CanvasRenderingContext2D) =>
       renderIsland(s, ic, oc, lc),
-    trigger: (type: EventType | 'sleep') => trigger(s, type),
+    trigger: (type: EventType | 'sleep', opts?: { keepView?: boolean }) => trigger(s, type, opts),
     /** n quick pokes at (0.2, -0.3) of the body, as tools/snapshot.mjs does */
     poke: (n: number, lx = 0.2, ly = -0.3) => {
       for (let i = 0; i < n; i++) poke(s, lx, ly);

@@ -187,3 +187,21 @@ describe('half-open hold after open (CHANGES 2026-10-14)', () => {
     expect(notchState(s)).toBe('closed');
   });
 });
+
+describe('events and the open view', () => {
+  const mk = () => createMascot({ settings: defaultSettings(false), now: 0, greetAfter: null });
+  it('reset the tab and card like the prototype by default', () => {
+    const m = mk();
+    m.setTab('settings');
+    m.setFocus('github');
+    m.trigger('working');
+    expect([m.state.tab, m.state.focusId]).toEqual(['home', null]);
+  });
+  it('keep them with keepView (live statuses in the app)', () => {
+    const m = mk();
+    m.setTab('settings');
+    m.setFocus('github');
+    m.trigger('working', { keepView: true });
+    expect([m.state.tab, m.state.focusId, m.state.event?.type]).toEqual(['settings', 'github', 'working']);
+  });
+});

@@ -70,6 +70,12 @@ await document.fonts.ready;
 const S = defaultSettings(matchMedia('(prefers-reduced-motion: reduce)').matches);
 const m = createMascot({ settings: S, now: performance.now() });
 const s = m.state;
+// Live events keep the open tab and card; only the ones that need an answer bring the island
+// home to their card (CHANGES 2026-10-18: statuses on every tool call threw the user out of settings).
+{
+  const raw = m.trigger;
+  m.trigger = (type, opts) => raw(type, opts ?? { keepView: type !== 'attention' && type !== 'question' });
+}
 s.bare = true;
 s.settingsLink = true;
 s.iconSet = 'solid';

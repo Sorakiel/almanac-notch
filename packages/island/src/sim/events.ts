@@ -70,7 +70,12 @@ export function greetText(d: Date): string {
 }
 
 /** proto: trigger - start an event; infinite events toggle off */
-export function trigger(s: IslandState, type: EventType | 'sleep'): void {
+/**
+ * opts.keepView (app only, CHANGES 2026-10-18): leave the open tab and the picked card alone. The
+ * prototype resets both on every event, which is right for its demo buttons, but a live Claude Code
+ * session fires a status on every tool call and would keep throwing the user out of settings.
+ */
+export function trigger(s: IslandState, type: EventType | 'sleep', opts?: { keepView?: boolean }): void {
   const { sp } = s;
   if (type === 'sleep') {
     if (s.sleeping) wake(s, true);
@@ -92,8 +97,10 @@ export function trigger(s: IslandState, type: EventType | 'sleep'): void {
   }
   const t = s.t;
   const event = (s.event = { type, start: t, until: t + E.dur, nextHop: t + 1.5 } as NonNullable<IslandState['event']>);
-  s.focusId = null;
-  s.tab = 'home';
+  if (!opts?.keepView) {
+    s.focusId = null;
+    s.tab = 'home';
+  }
   s.glowColor = E.color;
   if (type === 'attention') {
     sp.wide.v += 4;
