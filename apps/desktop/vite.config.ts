@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 // Tauri dev loads the frontend from this fixed port (src-tauri/tauri.conf.json devUrl).
-// `--mode setup`: only the Windows installer's page (apps/desktop/setup embeds dist/setup).
+// `--mode setup`: only the Windows installer's page (apps/setup embeds dist/setup).
 export default defineConfig(({ mode }) => ({
   clearScreen: false,
   server: { port: 1420, strictPort: true, host: '127.0.0.1' },

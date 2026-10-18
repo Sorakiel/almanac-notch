@@ -52,7 +52,7 @@ jobs:
           workspaces: |
             apps/desktop/src-tauri -> target
             apps/desktop/hook -> target
-            apps/desktop/setup -> target
+            apps/setup -> target
 
       - run: npm ci
 

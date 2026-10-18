@@ -141,7 +141,7 @@ npm run parity          # сверка кадров с прототипом
 
 Установщики собирает GitHub Actions (`.github/workflows/release.yml`) по тегу `v*`: один universal `.dmg` для Mac (фон - `src-tauri/dmg/background.tiff`, рисует `scripts/dmg-background.mjs`), `Almanac.Notch.Setup.exe` для Windows и файлы обновления (`latest.json`, подписанные архивы). Релиз создаётся черновиком.
 
-Setup.exe - наше окно установки (`apps/desktop/setup`, страница `setup.html`), внутри - обычный NSIS-установщик Tauri, который запускается тихо: `/S /D=папка`. Собирает его `scripts/setup-exe.mjs` после `tauri build`. Сам NSIS-файл `*_x64-setup.exe` тоже лежит в релизе: его скачивает автообновление и ставит тихо в ту же папку. Удаление на Windows - окно самого приложения (`almanac-notch.exe --uninstall`, `src-tauri/src/uninstall.rs`), NSIS-хуки - `src-tauri/windows/hooks.nsh`.
+Setup.exe - наше окно установки (`apps/setup`, страница `setup.html`), внутри - обычный NSIS-установщик Tauri, который запускается тихо: `/S /D=папка`. Собирает его `scripts/setup-exe.mjs` после `tauri build`. Сам NSIS-файл `*_x64-setup.exe` тоже лежит в релизе: его скачивает автообновление и ставит тихо в ту же папку. Удаление на Windows - окно самого приложения (`almanac-notch.exe --uninstall`, `src-tauri/src/uninstall.rs`), NSIS-хуки - `src-tauri/windows/hooks.nsh`.
 
 Секреты репозитория (Settings → Secrets and variables → Actions):
 

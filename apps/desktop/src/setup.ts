@@ -1,4 +1,4 @@
-// The Windows installer window (stage 8g, apps/desktop/setup): "Install", the folder with
+// The Windows installer window (stage 8g, apps/setup): "Install", the folder with
 // "Change", progress, "Open". Tauri's NSIS installer does the work silently underneath.
 // Outside Tauri (plain Vite) it plays through for screenshots: setup.html?lang=en&over=0.1.0
 import '@fontsource/onest/400.css';
