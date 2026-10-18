@@ -361,6 +361,8 @@ $('al-off').addEventListener('click', () => void invoke('almanac_sign_out'));
 const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tab')],
   mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
 function showTab(name: string): void {
+  // the guide hides the tab bar; any other page brings it back
+  $('tabs').hidden = name === 'welcome';
   for (const t of tabs) t.classList.toggle('on', t.dataset.tab === name);
   for (const p of document.querySelectorAll<HTMLElement>('.pane')) p.hidden = p.id !== 'tab-' + name;
 }
@@ -373,7 +375,8 @@ for (const t of tabs) t.addEventListener('click', () => showTab(t.dataset.tab ??
 for (const m of mods) m.addEventListener('click', () => showModule(m.dataset.module ?? 'claude'));
 /** "island" and "general" open the general tab, module names open their page */
 function showSection(sec: string): void {
-  if (mods.some((m) => m.dataset.module === sec)) showModule(sec);
+  if (sec === 'welcome') showWelcome();
+  else if (mods.some((m) => m.dataset.module === sec)) showModule(sec);
   else showTab('general');
 }
 
@@ -608,6 +611,142 @@ $('quit').addEventListener('click', () => act('quit'));
 // the hook dialogs finish outside this window; read the status again when it is back in front
 window.addEventListener('focus', () => void refreshIsland());
 
+// ---------- app: version, launch at login, updates (stage 8f) ----------
+interface UpdateState {
+  state: 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'error';
+  version: string | null;
+  progress: number | null;
+  error: string | null;
+}
+interface AppInfo {
+  version: string;
+  onboarded: boolean;
+  updates: boolean;
+  autostart: boolean;
+  update: UpdateState;
+}
+const isWin = navigator.userAgent.includes('Windows');
+let appInfo: AppInfo | null = null,
+  lastUpd: UpdateState = { state: 'idle', version: null, progress: null, error: null };
+function renderApp(a: AppInfo | null): void {
+  appInfo = a;
+  $('app-version').textContent = a ? t('Версия {0}', a.version) : '';
+  $<HTMLInputElement>('autostart').checked = !!a?.autostart;
+  $<HTMLInputElement>('updates').checked = !!a?.updates;
+  if (a) renderUpdate(a.update);
+}
+function renderUpdate(u: UpdateState): void {
+  lastUpd = u;
+  const go = $<HTMLButtonElement>('upd-go');
+  $('upd-status').textContent =
+    u.state === 'checking'
+      ? t('Проверяю…')
+      : u.state === 'latest'
+        ? t('Установлена последняя версия')
+        : u.state === 'available'
+          ? t('Вышла версия {0}', u.version ?? '')
+          : u.state === 'downloading'
+            ? t('Скачиваю обновление… {0}%', Math.round((u.progress ?? 0) * 100))
+            : '';
+  go.textContent = u.state === 'available' ? t('Обновить и перезапустить') : t('Проверить сейчас');
+  go.classList.toggle('primary', u.state === 'available');
+  go.disabled = u.state === 'checking' || u.state === 'downloading';
+  $('upd-error').textContent = u.error ?? '';
+}
+$('upd-go').addEventListener('click', () => {
+  if (!inTauri) return;
+  if (lastUpd.state === 'available')
+    void invoke('update_install').catch((e: unknown) => ($('upd-error').textContent = String(e)));
+  else void invoke<UpdateState>('update_check').then(renderUpdate);
+});
+async function appSet(key: string, on: boolean): Promise<void> {
+  try {
+    renderApp(await invoke<AppInfo>('app_set', { key, on }));
+  } catch (e) {
+    say(String(e));
+    renderApp(appInfo);
+  }
+}
+$<HTMLInputElement>('autostart').addEventListener('change', (e) => {
+  void appSet('autostart', (e.target as HTMLInputElement).checked);
+});
+$<HTMLInputElement>('updates').addEventListener('change', (e) => {
+  void appSet('updates', (e.target as HTMLInputElement).checked);
+});
+
+// ---------- first-run guide (stage 8f): language, Claude Code, calendar, modules, launch at login ----------
+const steps = [...document.querySelectorAll<HTMLElement>('.step')];
+let step = 0;
+function renderStep(): void {
+  steps.forEach((el, i) => (el.hidden = i !== step));
+  const last = step === steps.length - 1;
+  $('w-back').style.visibility = step === 0 ? 'hidden' : '';
+  $('w-skip').hidden = last;
+  $('w-next').textContent = t(last ? 'Готово' : 'Дальше');
+  $('w-count').textContent = step + 1 + ' / ' + steps.length;
+  $('w-cal-mac').hidden = isWin;
+  $('w-cal-win').hidden = !isWin;
+  $('w-cal').textContent = t(isWin ? 'Выбрать источник' : 'Разрешить доступ');
+  $('w-where').textContent = t(
+    isWin
+      ? 'Остров - у верхнего края экрана, наведите на него курсор. Меню - значок Almanac Notch в трее.'
+      : 'Остров - у выреза камеры, наведите на него курсор. Меню - значок Almanac Notch в строке меню.',
+  );
+}
+function showWelcome(): void {
+  step = 0;
+  showTab('welcome');
+  renderStep();
+}
+async function finishWelcome(): Promise<void> {
+  $('w-error').textContent = '';
+  if (inTauri)
+    try {
+      await invoke('app_set', { key: 'autostart', on: $<HTMLInputElement>('w-autostart').checked });
+      await invoke('app_set', { key: 'updates', on: $<HTMLInputElement>('w-updates').checked });
+      renderApp(await invoke<AppInfo>('app_set', { key: 'onboarded', on: true }));
+    } catch (e) {
+      $('w-error').textContent = String(e);
+      return;
+    }
+  showTab('general');
+}
+$('w-next').addEventListener('click', () => {
+  if (step === steps.length - 1) void finishWelcome();
+  else {
+    step++;
+    renderStep();
+  }
+});
+$('w-skip').addEventListener('click', () => {
+  step++;
+  renderStep();
+});
+$('w-back').addEventListener('click', () => {
+  step = Math.max(0, step - 1);
+  renderStep();
+});
+$('w-hooks').addEventListener('click', () => act('hooks:install'));
+$('w-cal').addEventListener('click', () => {
+  // Windows: the source is picked on the calendar page; the guide comes back from the tray
+  if (isWin) showModule('calendar');
+  else void invoke('calendar_access');
+});
+// the guide repeats the Claude Code and calendar status lines
+for (const [from, to] of [
+  ['hooks', 'w-hooks'],
+  ['cal', 'w-cal'],
+] as const) {
+  const copy = (): void => {
+    $(to + '-status').textContent = $(from + '-status').textContent;
+    $(to + '-dot').className = $(from + '-dot').className;
+  };
+  const o = new MutationObserver(copy);
+  o.observe($(from + '-status'), { childList: true, characterData: true, subtree: true });
+  o.observe($(from + '-dot'), { attributes: true });
+  copy();
+}
+
 render(null);
 renderVercel(null);
 renderNotion(null);
@@ -620,7 +759,7 @@ interface LangCfg {
   pick: string;
   lang: string;
 }
-const langs = [...document.querySelectorAll<HTMLInputElement>('input[name=lang]')];
+const langs = [...document.querySelectorAll<HTMLInputElement>('input[name=lang], input[name=lang-w]')];
 function renderLang(c: LangCfg): void {
   setLang(c.lang === 'en' ? 'en' : 'ru');
   for (const r of langs) r.checked = r.value === c.pick;
@@ -639,6 +778,8 @@ function renderLang(c: LangCfg): void {
   renderMusic(lastMusic);
   renderIsland(lastIsland);
   renderPick();
+  renderApp(appInfo);
+  renderStep();
 }
 for (const r of langs)
   r.addEventListener('change', () => {
@@ -686,5 +827,9 @@ if (inTauri) {
   // the island's rows open the window on their section
   if (location.hash) showSection(location.hash.slice(1));
   await listen<string>('settings://section', (e) => showSection(e.payload));
+  renderApp(await invoke<AppInfo>('app_info'));
+  await listen<UpdateState>('app://update', (e) => renderUpdate(e.payload));
   input.focus();
 }
+// plain Vite (screenshots): the hash still picks the page
+else if (location.hash) showSection(location.hash.slice(1));

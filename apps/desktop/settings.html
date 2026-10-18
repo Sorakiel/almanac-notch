@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/src/settings.css" />
   </head>
   <body>
-    <header class="tabs" role="tablist">
+    <header class="tabs" id="tabs" role="tablist">
       <button class="tab on" data-tab="general" role="tab">Общие</button>
       <button class="tab" data-tab="modules" role="tab">Модули</button>
     </header>
@@ -47,7 +47,108 @@
           <button data-ev="sleep">Сон</button>
         </div>
         <h3>Приложение</h3>
+        <p class="plain" id="app-version"></p>
+        <label class="switch-row"
+          ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="autostart"
+        /></label>
+        <label class="switch-row"
+          ><span>Проверять обновления</span><input type="checkbox" class="toggle" id="updates"
+        /></label>
+        <div class="row update-row">
+          <span class="plain" id="upd-status"></span>
+          <button id="upd-go">Проверить сейчас</button>
+        </div>
+        <p class="note" id="upd-error"></p>
         <button id="quit">Выйти из Almanac Notch</button>
+      </main>
+    </div>
+
+    <div class="pane" id="tab-welcome" hidden>
+      <main class="wizard">
+        <section class="step" data-step="1">
+          <h2>Almanac Notch</h2>
+          <p class="plain">
+            Остров у выреза камеры: что делает Claude Code, ближайшая встреча, музыка и другие модули. Несколько шагов -
+            и всё готово. Любой шаг можно пропустить и вернуться к нему в настройках.
+          </p>
+          <h3>Язык</h3>
+          <div class="seg" role="radiogroup" aria-label="Язык интерфейса">
+            <label><input type="radio" name="lang-w" value="auto" />Как в системе</label>
+            <label><input type="radio" name="lang-w" value="ru" />Русский</label>
+            <label><input type="radio" name="lang-w" value="en" />English</label>
+          </div>
+        </section>
+        <section class="step" data-step="2" hidden>
+          <h2>Claude Code</h2>
+          <p class="plain">
+            Остров показывает, что делает Claude Code, и отвечает на его вопросы и запросы разрешений. Для этого в файл
+            ~/.claude/settings.json добавляются хуки. Перед записью приложение покажет, что изменится, и сохранит копию
+            файла. Чужие хуки остаются на месте.
+          </p>
+          <p class="status"><span class="dot" id="w-hooks-dot"></span><span id="w-hooks-status">…</span></p>
+          <button class="primary" id="w-hooks">Подключить Claude Code</button>
+        </section>
+        <section class="step" data-step="3" hidden>
+          <h2>Календарь</h2>
+          <p class="plain" id="w-cal-mac">Ближайшая встреча в острове. macOS один раз спросит разрешение.</p>
+          <p class="plain" id="w-cal-win">
+            Ближайшая встреча в острове: классический Outlook на этом компьютере или секретная ссылка iCal (Google,
+            iCloud, Яндекс и другие).
+          </p>
+          <p class="status"><span class="dot" id="w-cal-dot"></span><span id="w-cal-status">…</span></p>
+          <button class="primary" id="w-cal">Разрешить доступ</button>
+        </section>
+        <section class="step" data-step="4" hidden>
+          <h2>Модули</h2>
+          <p class="plain">
+            Claude Code включён всегда, кроме него - не больше 4 модулей. Токены и входы подключаются позже, во вкладке
+            «Модули».
+          </p>
+          <div class="w-mods">
+            <label class="switch-row"
+              ><span>Календарь</span><input type="checkbox" class="toggle" data-mod="cal"
+            /></label>
+            <label class="switch-row"
+              ><span>Музыка</span><input type="checkbox" class="toggle" data-mod="music"
+            /></label>
+            <label class="switch-row"
+              ><span>GitHub</span><input type="checkbox" class="toggle" data-mod="github"
+            /></label>
+            <label class="switch-row"
+              ><span>Vercel</span><input type="checkbox" class="toggle" data-mod="vercel"
+            /></label>
+            <label class="switch-row"
+              ><span>Notion</span><input type="checkbox" class="toggle" data-mod="notion"
+            /></label>
+            <label class="switch-row"
+              ><span>Grafana</span><input type="checkbox" class="toggle" data-mod="grafana"
+            /></label>
+            <label class="switch-row"
+              ><span>Almanac</span><input type="checkbox" class="toggle" data-mod="almanac"
+            /></label>
+          </div>
+        </section>
+        <section class="step" data-step="5" hidden>
+          <h2>Готово</h2>
+          <label class="switch-row"
+            ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="w-autostart" checked
+          /></label>
+          <label class="switch-row"
+            ><span>Проверять обновления</span><input type="checkbox" class="toggle" id="w-updates" checked
+          /></label>
+          <p class="plain">
+            Раз в день приложение смотрит на GitHub, вышла ли новая версия. Обновление скачивается, только когда вы
+            нажмёте «Обновить». Больше приложение никуда не обращается, кроме модулей, которые вы подключили.
+          </p>
+          <p class="plain" id="w-where"></p>
+          <p class="note" id="w-error"></p>
+        </section>
+        <footer class="w-nav">
+          <button id="w-back">Назад</button>
+          <span class="plain" id="w-count"></span>
+          <button id="w-skip">Пропустить</button>
+          <button class="primary" id="w-next">Дальше</button>
+        </footer>
       </main>
     </div>
 

@@ -23,6 +23,39 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Пример из прототипа': 'Prototype sample',
   'Вход истёк - войдите снова': 'Signed out - sign in again',
   'Код отправлен на почту': 'The code is on its way to your email',
+  // app and updates (stage 8f)
+  'Запускать вместе с системой': 'Launch at login',
+  'Проверять обновления': 'Check for updates',
+  'Проверить сейчас': 'Check now',
+  'Версия {0}': 'Version {0}',
+  'Проверяю…': 'Checking…',
+  'Установлена последняя версия': 'You have the latest version',
+  'Вышла версия {0}': 'Version {0} is out',
+  'Скачиваю обновление… {0}%': 'Downloading the update… {0}%',
+  'Обновить и перезапустить': 'Update and restart',
+  // first-run guide (stage 8f)
+  'Остров у выреза камеры: что делает Claude Code, ближайшая встреча, музыка и другие модули. Несколько шагов - и всё готово. Любой шаг можно пропустить и вернуться к нему в настройках.':
+    'An island at the camera notch: what Claude Code is doing, your next meeting, music and other modules. A few steps and you are set. Any step can be skipped and done later in settings.',
+  'Остров показывает, что делает Claude Code, и отвечает на его вопросы и запросы разрешений. Для этого в файл ~/.claude/settings.json добавляются хуки. Перед записью приложение покажет, что изменится, и сохранит копию файла. Чужие хуки остаются на месте.':
+    "The island shows what Claude Code is doing and answers its questions and permission requests. For that, hooks are added to ~/.claude/settings.json. Before writing, the app shows what will change and keeps a copy of the file. Other apps' hooks stay in place.",
+  'Подключить Claude Code': 'Connect Claude Code',
+  'Ближайшая встреча в острове. macOS один раз спросит разрешение.':
+    'Your next meeting on the island. macOS will ask for permission once.',
+  'Ближайшая встреча в острове: классический Outlook на этом компьютере или секретная ссылка iCal (Google, iCloud, Яндекс и другие).':
+    'Your next meeting on the island: classic Outlook on this computer or a secret iCal link (Google, iCloud, Yandex and others).',
+  'Разрешить доступ': 'Allow access',
+  'Выбрать источник': 'Pick a source',
+  'Claude Code включён всегда, кроме него - не больше 4 модулей. Токены и входы подключаются позже, во вкладке «Модули».':
+    'Claude Code is always on; up to 4 other modules. Tokens and sign-ins are added later, in the Modules tab.',
+  'Раз в день приложение смотрит на GitHub, вышла ли новая версия. Обновление скачивается, только когда вы нажмёте «Обновить». Больше приложение никуда не обращается, кроме модулей, которые вы подключили.':
+    'Once a day the app checks GitHub for a new version. An update is downloaded only when you press "Update". The app contacts nothing else except the modules you connect.',
+  'Остров - у верхнего края экрана, наведите на него курсор. Меню - значок Almanac Notch в трее.':
+    'The island sits at the top edge of the screen - hover over it. The menu is the Almanac Notch icon in the tray.',
+  'Остров - у выреза камеры, наведите на него курсор. Меню - значок Almanac Notch в строке меню.':
+    'The island sits at the camera notch - hover over it. The menu is the Almanac Notch icon in the menu bar.',
+  Назад: 'Back',
+  Пропустить: 'Skip',
+  Дальше: 'Next',
   // tabs and the general page
   Общие: 'General',
   Модули: 'Modules',

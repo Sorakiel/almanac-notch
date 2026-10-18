@@ -349,3 +349,45 @@ button:disabled {
 #al-code-row {
   margin-top: 12px;
 }
+/* stage 8f: updates row and the first-run guide */
+.update-row {
+  align-items: center;
+  max-width: 420px;
+  margin-bottom: 0;
+}
+.update-row .plain {
+  flex: 1;
+  margin: 0;
+}
+.wizard {
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  margin: 0 auto;
+  padding-top: 32px;
+}
+.step {
+  flex: 1;
+}
+.step .plain {
+  max-width: 480px;
+}
+.w-mods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 10px;
+}
+.w-mods .switch-row {
+  margin: 0 0 8px;
+}
+.w-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 16px;
+}
+.w-nav .plain {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+}
