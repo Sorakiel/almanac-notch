@@ -44,14 +44,9 @@ pub fn set(f: impl FnOnce(&mut Prefs)) -> Result<Prefs, String> {
     let mut p = get();
     f(&mut p);
     let dir = almanac_hook::paths::app_dir();
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(crate::lang::save_failed)?;
     let json = serde_json::to_vec_pretty(&p).map_err(|e| e.to_string())?;
-    fs::write(path(), json).map_err(|e| {
-        format!(
-            "{}: {e}",
-            crate::lang::t("Не удалось сохранить настройки", "Could not save settings")
-        )
-    })?;
+    fs::write(path(), json).map_err(crate::lang::save_failed)?;
     *CACHE.lock().unwrap() = Some(p.clone());
     Ok(p)
 }

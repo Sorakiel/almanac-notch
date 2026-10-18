@@ -71,11 +71,6 @@ fn explain(e: &tauri_plugin_updater::Error) -> String {
             "The update's signature didn't match - nothing was installed. Download it from the releases page",
         )
         .into(),
-        E::ReleaseNotFound => t(
-            "На GitHub пока нет опубликованного релиза",
-            "No published release on GitHub yet",
-        )
-        .into(),
         other => format!("{}: {other}", t("Обновление не удалось", "Update failed")),
     }
 }
@@ -101,7 +96,8 @@ pub async fn check(app: AppHandle) -> State {
                 s.version = Some(v);
             });
         }
-        Ok(None) => publish(&app, |s| {
+        // no published release yet (or only drafts): nothing newer to offer
+        Ok(None) | Err(tauri_plugin_updater::Error::ReleaseNotFound) => publish(&app, |s| {
             s.state = "latest";
             s.version = None;
         }),

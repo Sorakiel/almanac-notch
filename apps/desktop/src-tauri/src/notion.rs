@@ -103,10 +103,10 @@ fn picked() -> Option<String> {
 
 /// From the settings window: who I am among the workspace's people (None = forget).
 pub fn set_me(me: Option<String>) -> Result<(), String> {
-    fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(crate::lang::save_failed)?;
     fs::write(
         cfg_path(),
-        serde_json::to_string(&Config { me }).map_err(|e| e.to_string())?,
+        serde_json::to_string(&Config { me }).map_err(crate::lang::save_failed)?,
     )
     .map_err(|e| e.to_string())?;
     poke();
@@ -402,19 +402,21 @@ pub fn connect(token: &str) -> Result<String, String> {
         return Err(crate::lang::t("Пустой токен", "Empty token").into());
     }
     let ws = workspace(token).map_err(|e| match e {
-        Failure::Unauthorized => {
-            crate::lang::t("Notion не принял токен", "Notion rejected the token").to_owned()
-        }
+        Failure::Unauthorized => crate::lang::t(
+            "Notion не принял токен - проверьте, что он скопирован целиком и не отозван",
+            "Notion rejected the token - check it was copied in full and hasn't been revoked",
+        )
+        .to_owned(),
         Failure::Net => crate::lang::t(
-            "Нет связи с api.notion.com",
-            "No connection to api.notion.com",
+            "Нет связи с api.notion.com - проверьте интернет и попробуйте ещё раз",
+            "No connection to api.notion.com - check the connection and try again",
         )
         .to_owned(),
     })?;
     entry().and_then(|e| e.set_password(token)).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать токен в Связку ключей",
-            "Cannot save the token to the system keychain",
+            "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
+            "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
         )
         .to_owned()
     })?;

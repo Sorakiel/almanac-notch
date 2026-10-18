@@ -140,8 +140,9 @@ mod choice {
 
     fn save_source(s: &str) -> Result<(), String> {
         let dir = almanac_hook::paths::app_dir();
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        fs::write(path(), serde_json::json!({ "source": s }).to_string()).map_err(|e| e.to_string())
+        fs::create_dir_all(&dir).map_err(crate::lang::save_failed)?;
+        fs::write(path(), serde_json::json!({ "source": s }).to_string())
+            .map_err(crate::lang::save_failed)
     }
 
     fn entry() -> Option<keyring::Entry> {

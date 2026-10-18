@@ -91,11 +91,22 @@ pub fn set(pick: &str) -> Result<Config, String> {
     if !matches!(pick, "auto" | "ru" | "en") {
         return Err(format!("unknown language: {pick}"));
     }
-    fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(crate::lang::save_failed)?;
     let body = serde_json::to_string(&File { pick: pick.into() }).map_err(|e| e.to_string())?;
-    fs::write(path(), body).map_err(|e| e.to_string())?;
+    fs::write(path(), body).map_err(crate::lang::save_failed)?;
     *PICK.write().unwrap() = Some(pick.into());
     Ok(get())
+}
+
+/// A settings file could not be written: what happened, in the interface language.
+pub fn save_failed(e: impl std::fmt::Display) -> String {
+    format!(
+        "{} ({e})",
+        t(
+            "Не удалось сохранить настройки - проверьте, что на диске есть место",
+            "Could not save settings - check there is free disk space",
+        )
+    )
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ serde_json = "1"
 getrandom = "0.3"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
-tauri-plugin-updater = "2"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "system-proxy", "zip"] }
 tauri-plugin-autostart = "2"
 almanac-hook = { path = "../hook" }
 keyring = { version = "3", features = ["apple-native", "windows-native"] }

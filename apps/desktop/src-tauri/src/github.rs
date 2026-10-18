@@ -474,19 +474,21 @@ pub fn connect(token: &str) -> Result<String, String> {
         return Err(crate::lang::t("Пустой токен", "Empty token").into());
     }
     let (login, _) = viewer(token).map_err(|e| match e {
-        Failure::Unauthorized => {
-            crate::lang::t("GitHub не принял токен", "GitHub rejected the token").to_owned()
-        }
+        Failure::Unauthorized => crate::lang::t(
+            "GitHub не принял токен - проверьте, что он скопирован целиком и не отозван",
+            "GitHub rejected the token - check it was copied in full and hasn't been revoked",
+        )
+        .to_owned(),
         Failure::Net => crate::lang::t(
-            "Нет связи с api.github.com",
-            "No connection to api.github.com",
+            "Нет связи с api.github.com - проверьте интернет и попробуйте ещё раз",
+            "No connection to api.github.com - check the connection and try again",
         )
         .to_owned(),
     })?;
     entry().and_then(|e| e.set_password(token)).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать токен в Связку ключей",
-            "Cannot save the token to the system keychain",
+            "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
+            "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
         )
         .to_owned()
     })?;

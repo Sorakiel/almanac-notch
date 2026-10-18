@@ -1,0 +1,82 @@
+# Release (stage 8f): a tag v* builds the Mac .dmg (one universal build for Apple silicon and
+# Intel) and the Windows Setup.exe, plus the update files (latest.json, signed archives), and puts
+# them in a draft GitHub release. Publish the draft by hand: only then do installed apps see it.
+#
+# Repository secrets:
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD - updater key (README, "Релиз")
+#   ALMANAC_URL, ALMANAC_KEY - Almanac project address and public key (optional)
+# Apple signing and notarization are off (owner, 2026-10-18); to turn them on add APPLE_CERTIFICATE,
+# APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID to
+# the secrets and to the env below.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - os: windows-latest
+            args: ''
+            targets: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/desktop/src-tauri -> target
+            apps/desktop/hook -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          ALMANAC_URL: ${{ secrets.ALMANAC_URL }}
+          ALMANAC_KEY: ${{ secrets.ALMANAC_KEY }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: npx tauri
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_name }}
+          releaseName: Almanac Notch ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          includeUpdaterJson: true
+          releaseBody: |
+            **Mac** - `Almanac_Notch_*_universal.dmg`: открыть, перетащить в «Программы». Приложение пока без подписи Apple: при первом запуске macOS скажет, что не может проверить разработчика. Откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть» (один раз).
+
+            **Windows** - `Almanac_Notch_*_x64-setup.exe`. Прав администратора не нужно. Подписи пока нет: SmartScreen спросит - «Подробнее» → «Выполнить в любом случае».
+
+            Дальше приложение обновляется само: раз в день проверяет новую версию, обновление ставится по кнопке (выключается в настройках).
+
+            ---
+
+            **Mac** - `Almanac_Notch_*_universal.dmg`: open it and drag the app to Applications. The app is not signed by Apple yet: on first launch macOS says it can't verify the developer. Open System Settings → Privacy & Security and press "Open Anyway" (once).
+
+            **Windows** - `Almanac_Notch_*_x64-setup.exe`. No admin rights needed. Not signed yet: SmartScreen asks - "More info" → "Run anyway".
+
+            After that the app keeps itself up to date: it checks once a day, the update installs on a click (can be turned off in settings).

@@ -112,10 +112,10 @@ pub fn set(off: Vec<String>, chat: bool) -> Result<Config, String> {
         .into());
     }
     let c = Config { off, chat };
-    fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(|e| e.to_string())?;
+    fs::create_dir_all(almanac_hook::paths::app_dir()).map_err(crate::lang::save_failed)?;
     fs::write(
         path(),
-        serde_json::to_string(&c).map_err(|e| e.to_string())?,
+        serde_json::to_string(&c).map_err(crate::lang::save_failed)?,
     )
     .map_err(|e| e.to_string())?;
     *CFG.write().unwrap() = Some(c.clone());

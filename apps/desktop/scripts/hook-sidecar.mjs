@@ -13,14 +13,26 @@ const triple = process.env.TAURI_ENV_TARGET_TRIPLE || host;
 if (!triple) throw new Error('no target triple: rustc -vV gave no host');
 
 const manifest = join(root, 'hook', 'Cargo.toml');
-execFileSync('cargo', ['build', '--release', '--quiet', '--manifest-path', manifest, '--target', triple], {
-  stdio: 'inherit',
-});
+const build = (t) =>
+  execFileSync('cargo', ['build', '--release', '--quiet', '--manifest-path', manifest, '--target', t], {
+    stdio: 'inherit',
+  });
 const exe = triple.includes('windows') ? '.exe' : '';
 const out = join(root, 'src-tauri', 'binaries');
 mkdirSync(out, { recursive: true });
-copyFileSync(
-  join(root, 'hook', 'target', triple, 'release', 'almanac-hook' + exe),
-  join(out, `almanac-hook-${triple}${exe}`),
-);
+const dest = join(out, `almanac-hook-${triple}${exe}`);
+const built = (t) => join(root, 'hook', 'target', t, 'release', 'almanac-hook' + exe);
+if (triple === 'universal-apple-darwin') {
+  // one Mac release for Apple silicon and Intel: both slices glued by lipo
+  const parts = ['aarch64-apple-darwin', 'x86_64-apple-darwin'];
+  for (const t of parts) {
+    build(t);
+    // tauri-build checks each slice's own file too
+    copyFileSync(built(t), join(out, `almanac-hook-${t}`));
+  }
+  execFileSync('lipo', ['-create', '-output', dest, ...parts.map(built)]);
+} else {
+  build(triple);
+  copyFileSync(built(triple), dest);
+}
 console.log(`[hook-sidecar] almanac-hook for ${triple}`);
