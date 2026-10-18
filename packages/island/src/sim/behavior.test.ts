@@ -4,6 +4,7 @@ import { defaultSettings } from './settings';
 import { mulberry32, PARITY_SEED } from './rng';
 import type { IslandState } from './state';
 import { notchState } from '../island/focus';
+import { islandPointerDown, islandPointerLeave } from '../island/input';
 
 const DT = 1 / 60;
 
@@ -203,5 +204,54 @@ describe('events and the open view', () => {
     m.setFocus('github');
     m.trigger('working', { keepView: true });
     expect([m.state.tab, m.state.focusId, m.state.event?.type]).toEqual(['settings', 'github', 'working']);
+  });
+});
+
+describe("the app's open on hover and auto-close (stage 8g)", () => {
+  function host(openOnHover: boolean) {
+    const m = make();
+    m.run(80);
+    m.touch();
+    m.s.host = { openOnHover, autoClose: 10, status: [], version: '' };
+    return m;
+  }
+
+  it('off: hovering only peeks, a click opens, leaving keeps it open for the delay', () => {
+    const { s, run, touch } = host(false);
+    s.islandHover = true;
+    run(1);
+    expect(notchState(s)).toBe('half');
+    islandPointerDown(s, { x: 0, y: 0 });
+    run(0.1);
+    expect(notchState(s)).toBe('open');
+    islandPointerLeave(s);
+    touch();
+    run(9.5);
+    expect(notchState(s)).toBe('open');
+    run(1);
+    // the delay ran out: back to the half-open hold, and the next visit only peeks again
+    expect(notchState(s)).toBe('half');
+    expect(s.clickOpen).toBe(false);
+    s.islandHover = true;
+    run(0.1);
+    expect(notchState(s)).toBe('half');
+  });
+
+  it('on: hovering opens and leaving folds at once, as in the prototype', () => {
+    const { s, run } = host(true);
+    s.islandHover = true;
+    run(1);
+    expect(notchState(s)).toBe('open');
+    islandPointerLeave(s);
+    run(0.1);
+    expect(notchState(s)).toBe('half');
+  });
+
+  it('the harness (no host) ignores clicks for opening', () => {
+    const { s, run } = make();
+    run(80);
+    s.islandHover = true;
+    islandPointerDown(s, { x: 0, y: 0 });
+    expect(s.clickOpen).toBe(false);
   });
 });

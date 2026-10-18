@@ -1,6 +1,6 @@
 // Pointer input on the island canvas, without DOM listeners. Points are in island CSS px (proto: islandPoint).
 import { clamp } from '../util/math';
-import type { Hit, HostPrefs, IslandState, MediaFeed } from '../sim/state';
+import type { Hit, IslandState, MediaFeed } from '../sim/state';
 import { hop, poke, wake } from '../sim/actions';
 import { answer, trigger, type Answer } from '../sim/events';
 import { nextTrack } from '../sim/music';
@@ -18,7 +18,9 @@ export interface IslandPoint {
 export function islandPointerMove(s: IslandState, p: IslandPoint, now: number): string {
   const B = s.islandBox;
   s.islandPtr = p;
+  const was = s.islandHover;
   s.islandHover = p.x > B.x0 - 10 && p.x < B.x1 + 10 && p.y < B.y1 + 10;
+  if (was && !s.islandHover) s.hoverLeftAt = s.t;
   const cursor = hitAt(s, p) ? 'pointer' : 'default';
   s.ptr.lastMoveReal = now;
   s.ptr.seen = true;
@@ -28,6 +30,7 @@ export function islandPointerMove(s: IslandState, p: IslandPoint, now: number): 
 
 /** proto: island pointerleave */
 export function islandPointerLeave(s: IslandState): void {
+  if (s.islandHover) s.hoverLeftAt = s.t;
   s.islandHover = false;
   s.islandPtr = null;
 }
@@ -53,6 +56,9 @@ export function habitTicked(s: IslandState, checked: boolean, src?: 'almanac'): 
 
 /** proto: island pointerdown */
 export function islandPointerDown(s: IslandState, p: IslandPoint): void {
+  // the app: a click inside opens the island (it only peeks without "open on hover") and keeps it
+  // open after the pointer leaves, like coucou's
+  if (s.host && s.islandHover) s.clickOpen = true;
   const h = hitAt(s, p);
   if (!h) return;
   const act = h.act;
@@ -73,11 +79,11 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
     hb[1] = !hb[1];
     habitTicked(s, hb[1]);
   } else if (act === 'open:settings') s.requests.push('settings:');
-  // the app's settings card: shown at once, carried out by the host
+  // the app's settings card: shown at once, saved by the host
   else if (act.startsWith('host:') && s.host) {
     const [, key, v] = act.split(':');
-    if (key === 'nstate') s.host.nstate = v as HostPrefs['nstate'];
-    else if (key === 'lang') s.host.lang = v as HostPrefs['lang'];
+    if (key === 'hover') s.host.openOnHover = !s.host.openOnHover;
+    else if (key === 'close') s.host.autoClose = Number(v);
     s.requests.push(act);
   }
   // not in the prototype: the Vercel card's arrow opens the deployment on vercel.com (the app)

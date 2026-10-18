@@ -323,6 +323,10 @@ export interface IslandState {
   /** the app's own settings card (stage 8g, docs/CHANGES.md): its real settings; null = the
    *  prototype's card (harness) */
   host: HostPrefs | null;
+  /** the app: the island was opened by a click and stays open until `autoClose` after leaving */
+  clickOpen: boolean;
+  /** when the pointer last left the island (s.t) */
+  hoverLeftAt: number;
   /** modules the user switched off in the app: no chip, rail item, card or mini mascot */
   off: ModuleId[];
   /** the chat tab is switched off: no chat icon in the top bar */
@@ -384,10 +388,14 @@ export interface IslandState {
 }
 
 /** a clickable zone of the island, rebuilt every frame (proto: hits) */
-/** What the app's settings card shows and changes (the island state, the language, quit). */
+/** The app's settings card (stage 8g, as coucou's): how the island opens and the statuses. */
 export interface HostPrefs {
-  nstate: 'auto' | 'closed' | 'half' | 'open';
-  lang: 'auto' | 'ru' | 'en';
+  /** on: the pointer opens the island (the prototype); off: it only peeks (half), a click opens */
+  openOnHover: boolean;
+  /** seconds a clicked-open island stays open after the pointer leaves */
+  autoClose: number;
+  /** connection dots in the card's footer: Claude Code and the switched-on services */
+  status: { name: string; state: 'ok' | 'bad' | 'off' }[];
   version: string;
 }
 
@@ -445,6 +453,8 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     requests: [],
     settingsLink: false,
     host: null,
+    clickOpen: false,
+    hoverLeftAt: 0,
     off: [],
     chatOff: false,
     iconSet: 'proto',

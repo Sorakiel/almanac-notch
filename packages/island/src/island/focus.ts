@@ -10,7 +10,12 @@ export type NotchState = 'closed' | 'half' | 'open';
 export function notchState(s: IslandState): NotchState {
   const { S, event, t } = s;
   if (S.nstate !== 'auto') return S.nstate as NotchState;
-  if (s.islandHover) return 'open';
+  // the app's "open on hover" and auto-close (stage 8g, docs/CHANGES.md); the harness has no host
+  // and keeps the prototype's rule: hover opens, leaving closes
+  if (s.host) {
+    if (s.islandHover) return s.host.openOnHover || s.clickOpen ? 'open' : 'half';
+    if (s.clickOpen && t - s.hoverLeftAt < s.host.autoClose) return 'open';
+  } else if (s.islandHover) return 'open';
   if (event && (event.type === 'attention' || event.type === 'question' || event.type === 'greeting')) return 'open';
   if (s.overloadUntil > t || s.sp.alertA.x > 0.15) return 'open';
   if (event || (s.grab && s.grab.active) || s.grumpyUntil > t || s.hideUntil > t || s.petting) return 'half';

@@ -166,10 +166,28 @@ function linkButton(s: IslandState, c: Ctx, right: number, y: number, label: str
   return x;
 }
 
-/** The app's settings card (stage 8g, docs/CHANGES.md; the reference is coucou's): the mascot,
- *  the island state and the language, the version, "Settings…" and "Quit". Every control is
- *  real; the prototype's switches for sounds, launch at login and open on hover are gone (sounds
- *  come back in stage 9, launch at login lives in the settings window). */
+/** A small toggle like the prototype's settings rows, its right edge at `right`. */
+function toggle(c: Ctx, right: number, y: number, on: boolean): void {
+  const sx = right - 30,
+    sy = y - 8;
+  c.fillStyle = on ? '#34C759' : 'rgba(255,255,255,0.2)';
+  rrect(c, sx, sy, 30, 16, 8);
+  c.fill();
+  c.fillStyle = '#FFFFFF';
+  c.beginPath();
+  c.arc(on ? sx + 22 : sx + 8, sy + 8, 6, 0, Math.PI * 2);
+  c.fill();
+}
+
+const DOT: Readonly<Record<'ok' | 'bad' | 'off', string>> = {
+  ok: '#34C759',
+  bad: '#FF453A',
+  off: 'rgba(255,255,255,0.28)',
+};
+
+/** The app's settings card (stage 8g, docs/CHANGES.md), after coucou's: the mascot, auto-close,
+ *  open on hover, the connection dots, "Settings…" and "Quit". Coucou's sound row comes with the
+ *  sounds in stage 9. Every control is real; the prototype's dummy switches are gone. */
 function drawHostSettings(
   s: IslandState,
   c: Ctx,
@@ -186,37 +204,60 @@ function drawHostSettings(
     h = y1 - y0,
     r1 = y0 + h * 0.24,
     r2 = y0 + h * 0.52,
-    r3 = y0 + h * 0.82;
-  textAt(c, tr(s, 'Остров'), L, r1 + 0.5, { size: 12.5 });
+    r3 = y0 + h * 0.81;
+  // auto-close: a clock, the delay, the choices
+  c.save();
+  c.strokeStyle = 'rgba(255,255,255,0.6)';
+  c.lineWidth = 1.4;
+  c.lineCap = 'round';
+  c.beginPath();
+  c.arc(L + 7, r1, 6.5, 0, Math.PI * 2);
+  c.moveTo(L + 7, r1);
+  c.lineTo(L + 7, r1 - 3.6);
+  c.moveTo(L + 7, r1);
+  c.lineTo(L + 9.6, r1 + 1.6);
+  c.stroke();
+  c.restore();
+  textAt(c, tr(s, 'Автозакрытие · {0} с', host.autoClose), L + 22, r1 + 0.5, { size: 12.5 });
   segment(
     s,
     c,
     R,
     r1,
     [
-      ['Авто', 'auto'],
-      ['Закрыто', 'closed'],
-      ['Полуоткрыто', 'half'],
-      ['Открыто', 'open'],
+      ['10 с', '10'],
+      ['15 с', '15'],
+      ['30 с', '30'],
     ],
-    host.nstate,
-    'host:nstate',
+    String(host.autoClose),
+    'host:close',
   );
-  textAt(c, tr(s, 'Язык'), L, r2 + 0.5, { size: 12.5 });
-  segment(
-    s,
-    c,
-    R,
-    r2,
-    [
-      ['Как в системе', 'auto'],
-      ['Русский', 'ru'],
-      ['English', 'en'],
-    ],
-    host.lang,
-    'host:lang',
-  );
-  textAt(c, 'Almanac Notch ' + host.version, L, r3 + 0.5, { size: 11, color: T_MUTED });
+  // open on hover: the whole row toggles
+  const hov = hovering(s, L - 6, r2 - 13, R - L + 12, 26);
+  if (hov) {
+    c.fillStyle = 'rgba(255,255,255,0.05)';
+    rrect(c, L - 6, r2 - 13, R - L + 12, 26, 13);
+    c.fill();
+  }
+  textAt(c, tr(s, 'Открывать при наведении'), L, r2 + 0.5, { size: 12.5 });
+  toggle(c, R - 4, r2, host.openOnHover);
+  addHit(s, c, { x: L - 6, y: r2 - 13, w: R - L + 12, h: 26, act: 'host:hover' });
+  // footer: links on the right, the connection dots as far as they fit on the left
   const quitX = linkButton(s, c, R, r3, 'Выйти', 'host:quit');
-  linkButton(s, c, quitX - 4, r3, 'Настройки…', 'open:settings');
+  const linksX = linkButton(s, c, quitX - 4, r3, 'Настройки…', 'open:settings');
+  c.save();
+  c.font = SEG_FONT;
+  let x = L;
+  for (const st of host.status) {
+    const label = tr(s, st.name),
+      w = 10 + c.measureText(label).width;
+    if (x + w > linksX - 8) break;
+    c.fillStyle = DOT[st.state];
+    c.beginPath();
+    c.arc(x + 3, r3, 3, 0, Math.PI * 2);
+    c.fill();
+    textAt(c, label, x + 10, r3 + 0.5, { size: 11.5, color: T_MUTED });
+    x += w + 12;
+  }
+  c.restore();
 }

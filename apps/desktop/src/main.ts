@@ -43,6 +43,7 @@ import {
   type NoState,
   type GfState,
   type AlState,
+  type Dot,
 } from './feeds';
 
 interface Geometry {
@@ -79,8 +80,25 @@ const s = m.state;
 }
 s.bare = true;
 s.settingsLink = true;
-// the settings tab is the app's own card with real controls (stage 8g, docs/CHANGES.md)
-s.host = { nstate: 'auto', lang: 'auto', version: '' };
+// the settings tab is the app's own card, after coucou's (stage 8g, docs/CHANGES.md); its two
+// choices are this window's own, kept in its storage
+const CARD_KEY = 'almanac-notch.card';
+s.host = { openOnHover: true, autoClose: 15, status: [], version: '' };
+try {
+  const saved = JSON.parse(localStorage.getItem(CARD_KEY) ?? '{}') as Partial<HostPrefs>;
+  if (typeof saved.openOnHover === 'boolean') s.host.openOnHover = saved.openOnHover;
+  if (saved.autoClose === 10 || saved.autoClose === 15 || saved.autoClose === 30) s.host.autoClose = saved.autoClose;
+} catch {
+  // unreadable storage: defaults
+}
+function saveCard(): void {
+  if (!s.host) return;
+  try {
+    localStorage.setItem(CARD_KEY, JSON.stringify({ openOnHover: s.host.openOnHover, autoClose: s.host.autoClose }));
+  } catch {
+    // not saved: the choice holds until restart
+  }
+}
 s.iconSet = 'solid';
 
 const island = document.getElementById('island') as HTMLCanvasElement,
@@ -248,10 +266,7 @@ function debug(id: string): void {
   // tray events demo the prototype's stub data; the next real hook brings live data back
   if (kind === 'ev') s.agent = null;
   if (kind === 'ev' && isEvent(v)) m.trigger(v);
-  else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) {
-    S.nstate = v;
-    if (s.host) s.host.nstate = v as HostPrefs['nstate'];
-  }
+  else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) S.nstate = v;
 }
 
 if (inTauri) {
@@ -330,21 +345,15 @@ if (inTauri) {
   });
   applyModules(await invoke('modules_get'));
   // interface language (stage 8): the island translates itself through tr(s, ...)
-  const applyLang = (c: { lang: string; pick: string }): void => {
+  const applyLang = (c: { lang: string }): void => {
     s.lang = c.lang === 'en' ? 'en' : 'ru';
-    if (s.host && (c.pick === 'auto' || c.pick === 'ru' || c.pick === 'en')) s.host.lang = c.pick;
   };
-  await listen<{ lang: string; pick: string }>('island://lang', (e) => {
+  await listen<{ lang: string }>('island://lang', (e) => {
     wake();
     applyLang(e.payload);
   });
   applyLang(await invoke('lang_get'));
-  // the settings card: the island state (tray and settings window share it) and the version
-  if (s.host) {
-    const st = await invoke<{ state: string }>('island_status');
-    debug('nstate:' + st.state);
-    s.host.version = (await invoke<{ version: string }>('app_info')).version;
-  }
+  if (s.host) s.host.version = (await invoke<{ version: string }>('app_info')).version;
   const f = await invoke<Feeds>('feeds_state');
   if (f.github) github.onState(f.github);
   if (f.vercel) vercel.onState(f.vercel);
@@ -424,10 +433,10 @@ function tick(now: number, id: number): void {
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
     else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));
-    // the settings card: the tray's own actions, so the tray and the settings window agree
-    else if (r.startsWith('host:nstate:')) void invoke('island_action', { id: 'nstate:' + r.slice(12) });
-    else if (r.startsWith('host:lang:')) void invoke('lang_set', { pick: r.slice(10) });
+    // the settings card
     else if (r === 'host:quit') void invoke('island_action', { id: 'quit' });
+    else if (r.startsWith('host:')) saveCard();
+  if (s.tab === 'settings') cardStatus(now);
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();
@@ -435,6 +444,30 @@ function tick(now: number, id: number): void {
   updateInteractive();
   if (idle) setTimeout(() => tick(performance.now(), id), IDLE_PERIOD);
   else requestAnimationFrame((t) => tick(t, id));
+}
+
+/** The card's connection dots (stage 8g): Claude Code's hooks and every switched-on service. */
+let hooksOk: Dot = 'off',
+  hooksAsked = -1e9;
+function cardStatus(now: number): void {
+  if (!s.host) return;
+  // the hooks file can change from the settings window or by hand: ask again every 5 s
+  if (inTauri && now - hooksAsked > 5000) {
+    hooksAsked = now;
+    void invoke<{ hooks: boolean }>('island_status').then((st) => (hooksOk = st.hooks ? 'ok' : 'off'));
+  }
+  const on = (id: ModuleId): boolean => !s.off.includes(id);
+  const list: HostPrefs['status'] = [{ name: 'Claude Code', state: hooksOk }];
+  const add = (id: ModuleId, name: string, d: { dot(): Dot } | null | undefined): void => {
+    if (on(id) && d) list.push({ name, state: d.dot() });
+  };
+  add('cal', 'Календарь', cal);
+  add('github', 'GitHub', github);
+  add('vercel', 'Vercel', vercel);
+  add('notion', 'Notion', notion);
+  add('grafana', 'Grafana', grafana);
+  add('almanac', 'Almanac', almanac);
+  s.host.status = list;
 }
 
 /** Leave idle now (cursor, tray); a no-op while frames are running. */

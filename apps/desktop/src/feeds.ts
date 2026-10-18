@@ -98,8 +98,18 @@ export function calFeed(cal: Calendar | null, now: number, lang: Lang = 'ru'): C
   };
 }
 
+/** A service's state as a dot of the island's settings card (stage 8g). */
+export type Dot = 'ok' | 'bad' | 'off';
+export function authDot(auth: 'off' | 'ok' | 'bad' | 'net' | undefined): Dot {
+  return auth === 'ok' ? 'ok' : auth === 'bad' || auth === 'net' ? 'bad' : 'off';
+}
+
 export class CalDriver {
   private cal: Calendar | null = null;
+  dot(): Dot {
+    const a = this.cal?.access;
+    return a === 'ok' ? 'ok' : a === 'denied' ? 'bad' : 'off';
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   constructor(
@@ -470,6 +480,9 @@ const PROMPTS: readonly string[] = ['attention', 'question'];
 
 export class GithubDriver {
   private g: GhState | null = null;
+  dot(): Dot {
+    return authDot(this.g?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** last CI state per repository; a change to ok or fail is an event */
@@ -598,6 +611,9 @@ export function vercelFeed(v: VcState | null, now: number, lang: Lang = 'ru'): V
  */
 export class VercelDriver {
   private v: VcState | null = null;
+  dot(): Dot {
+    return authDot(this.v?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** deployment id -> last state; null until the first read */
@@ -722,6 +738,9 @@ export function notionFeed(n: NoState | null, now: number, lang: Lang = 'ru'): N
  */
 export class NotionDriver {
   private n: NoState | null = null;
+  dot(): Dot {
+    return authDot(this.n?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** page id -> last edit time; null until the first read */
@@ -912,6 +931,9 @@ export function grafanaFeed(g: GfState | null, now: number, lang: Lang = 'ru'): 
  */
 export class GrafanaDriver {
   private g: GfState | null = null;
+  dot(): Dot {
+    return authDot(this.g?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** rule id -> name while firing; null until the first read */
@@ -1093,6 +1115,9 @@ function setRemindedDay(day: string): void {
  */
 export class AlmanacDriver {
   private a: AlState | null = null;
+  dot(): Dot {
+    return authDot(this.a?.auth);
+  }
   private lang: Lang = 'ru';
   /** done habits of the last read day; null until the first read */
   private seen: Set<string> | null = null;

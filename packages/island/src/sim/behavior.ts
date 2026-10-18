@@ -27,6 +27,8 @@ export function update(s: IslandState, dt: number, now: number): void {
     }
   }
   const t = s.t;
+  // the app's auto-close ran out: the next visit starts from a peek again
+  if (s.host && s.clickOpen && !s.islandHover && t - s.hoverLeftAt >= s.host.autoClose) s.clickOpen = false;
   const grab = s.grab;
   const dragging = !!(grab && grab.active);
   if (s.event && t >= s.event.until) {
