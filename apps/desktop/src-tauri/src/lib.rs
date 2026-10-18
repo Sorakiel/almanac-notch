@@ -195,6 +195,19 @@ async fn almanac_verify(email: String, code: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// "Sign in with Almanac" in the browser; returns the account's email (waits up to 5 minutes).
+#[tauri::command]
+async fn almanac_browser_sign_in() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(almanac::sign_in_browser)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn almanac_browser_cancel() {
+    almanac::cancel_browser();
+}
+
 #[tauri::command]
 async fn almanac_sign_out() {
     let _ = tauri::async_runtime::spawn_blocking(almanac::sign_out).await;
@@ -694,6 +707,8 @@ pub fn run() {
             almanac_send_code,
             almanac_verify,
             almanac_sign_out,
+            almanac_browser_sign_in,
+            almanac_browser_cancel,
             almanac_available,
             almanac_toggle,
             calendar_config,

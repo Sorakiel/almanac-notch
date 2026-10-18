@@ -644,7 +644,20 @@
               В этой сборке нет адреса Almanac: остров показывает пример привычек. Адрес задаётся при сборке (файл
               .env.almanac).
             </p>
-            <div id="al-form">
+            <div class="al-browser" id="al-browser">
+              <button class="primary al-main" id="al-web">
+                <span class="ico almanac-ico" style="--c: #e8632a"
+                  ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.2 17.8 12 12 17.8 6.2 12Z" /></svg></span
+                >Войти через Almanac
+              </button>
+              <p class="plain al-wait" id="al-wait" hidden>
+                <span class="spinner" aria-hidden="true"></span>Подтвердите вход в браузере
+                <button class="link" id="al-cancel">Отмена</button>
+              </p>
+              <p class="note" id="al-web-error" role="alert"></p>
+              <button class="link al-more" id="al-more">Войти паролем или кодом из письма</button>
+            </div>
+            <div id="al-form" hidden>
               <div class="seg al-mode" role="radiogroup" aria-label="Способ входа">
                 <label><input type="radio" name="al-mode" value="pass" checked />Пароль</label>
                 <label><input type="radio" name="al-mode" value="code" />Код из письма</label>
@@ -687,10 +700,11 @@
           <section class="help">
             <h3>Как войти</h3>
             <ol>
-              <li>Почта и пароль от Almanac.</li>
               <li>
-                Если в Almanac вы входите по ссылке из письма: «Код из письма» → «Прислать код», введите код из письма.
+                «Войти через Almanac» открывает Almanac в браузере. Там нажмите «Разрешить» - нотч получит свой доступ
+                только к привычкам. Отключить его можно здесь или в Almanac: Профиль → Подключённые приложения.
               </li>
+              <li>Запасной путь - почта и пароль от Almanac или код из письма.</li>
             </ol>
             <h3>Что читается и куда уходит</h3>
             <p>

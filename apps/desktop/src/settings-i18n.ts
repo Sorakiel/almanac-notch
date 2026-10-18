@@ -68,6 +68,14 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   Подключено: 'Connected',
   'Доступ есть': 'Access granted',
   'Открыть приветствие': 'Open the welcome guide',
+  'Войти через Almanac': 'Sign in with Almanac',
+  'Подтвердите вход в браузере': 'Confirm the sign-in in your browser',
+  Отмена: 'Cancel',
+  'Войти паролем или кодом из письма': 'Sign in with a password or an email code',
+  '«Войти через Almanac» открывает Almanac в браузере. Там нажмите «Разрешить» - нотч получит свой доступ только к привычкам. Отключить его можно здесь или в Almanac: Профиль → Подключённые приложения.':
+    '"Sign in with Almanac" opens Almanac in your browser. Press "Allow" there - the notch gets its own access, to habits only. You can disconnect it here or in Almanac: Profile → Connected apps.',
+  'Запасной путь - почта и пароль от Almanac или код из письма.':
+    'The fallback is your Almanac email and password or a code from the email.',
   // tabs and the general page
   Общие: 'General',
   Модули: 'Modules',

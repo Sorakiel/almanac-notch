@@ -1,8 +1,9 @@
 //! Almanac (stage 8e): today's habits from the user's own Almanac account, and a tap on the
 //! island marks one done.
 //!
-//! The notch signs in to Almanac's Supabase project as the user (password, or a code from the
-//! sign-in email) and asks two functions of Almanac's integration API (for any client): `today_habits(p_date)` - today's
+//! The notch signs in to Almanac as the user - "Sign in with Almanac" in the browser (OAuth 2.1 with
+//! PKCE and a loopback redirect, client `almanac-notch`, scopes habits:read habits:write; Almanac's
+//! docs/API.md), or as a fallback with the password or a code from the sign-in email - and asks two functions of Almanac's integration API (for any client): `today_habits(p_date)` - today's
 //! habits counted the way Almanac counts them - and `toggle_habit(p_habit, p_date)` - one tap,
 //! as in Almanac. The refresh token lives only in the system keychain (service
 //! `dev.almanac.notch`), the access token only in memory; neither reaches the frontend or a log.
@@ -81,6 +82,23 @@ impl State {
 #[derive(Default, Serialize, Deserialize)]
 struct Config {
     email: Option<String>,
+    /// signed in through "Sign in with Almanac": the refresh token belongs to the OAuth server
+    #[serde(default)]
+    oauth: bool,
+}
+
+fn config() -> Config {
+    fs::read(cfg_path())
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Config>(&b).ok())
+        .unwrap_or_default()
+}
+
+fn save_config(c: &Config) {
+    let _ = fs::create_dir_all(almanac_hook::paths::app_dir());
+    if let Ok(s) = serde_json::to_string(c) {
+        let _ = fs::write(cfg_path(), s);
+    }
 }
 
 fn cfg_path() -> std::path::PathBuf {
@@ -88,17 +106,15 @@ fn cfg_path() -> std::path::PathBuf {
 }
 
 fn email() -> Option<String> {
-    fs::read(cfg_path())
-        .ok()
-        .and_then(|b| serde_json::from_slice::<Config>(&b).ok())
-        .and_then(|c| c.email)
+    config().email
 }
 
 fn set_email(email: Option<String>) {
-    let _ = fs::create_dir_all(almanac_hook::paths::app_dir());
-    if let Ok(s) = serde_json::to_string(&Config { email }) {
-        let _ = fs::write(cfg_path(), s);
-    }
+    save_config(&Config { email, ..config() });
+}
+
+fn set_oauth(oauth: bool) {
+    save_config(&Config { oauth, ..config() });
 }
 
 // ---------- keychain and session ----------
@@ -172,7 +188,10 @@ fn keep(v: &Value) -> Result<(), Failure> {
     entry()
         .and_then(|e| e.set_password(refresh))
         .map_err(|_| Failure::Bad(0))?;
-    if let Some(m) = v["user"]["email"].as_str() {
+    if let Some(m) = v["user"]["email"]
+        .as_str()
+        .or_else(|| v["account"]["email"].as_str())
+    {
         set_email(Some(m.to_owned()));
     }
     *SESSION.lock().unwrap() = Some(Session {
@@ -190,10 +209,22 @@ fn access() -> Result<String, Failure> {
         }
     }
     let refresh = refresh_token().ok_or(Failure::Unauthorized)?;
-    match auth_post(
-        "token?grant_type=refresh_token",
-        json!({ "refresh_token": refresh }),
-    ) {
+    let renewed = if config().oauth {
+        oauth_post(
+            "token",
+            &[
+                ("grant_type", "refresh_token"),
+                ("client_id", CLIENT_ID),
+                ("refresh_token", &refresh),
+            ],
+        )
+    } else {
+        auth_post(
+            "token?grant_type=refresh_token",
+            json!({ "refresh_token": refresh }),
+        )
+    };
+    match renewed {
         Ok(v) => keep(&v)?,
         // a refused (or reused) refresh token: signed out for good
         Err(Failure::Bad(_)) | Err(Failure::Unauthorized) => {
@@ -239,6 +270,11 @@ fn rpc(name: &str, body: Value) -> Result<Value, Failure> {
         Err(ureq::Error::StatusCode(401)) => {
             *SESSION.lock().unwrap() = None;
             call(&access()?).map_err(failure)?
+        }
+        // "Disconnect" in Almanac's connected apps: the app token is refused from now on
+        Err(ureq::Error::StatusCode(403)) if config().oauth => {
+            forget();
+            return Err(Failure::Unauthorized);
         }
         r => r.map_err(failure)?,
     };
@@ -457,6 +493,7 @@ pub fn verify_code(email: &str, code: &str) -> Result<String, String> {
 }
 
 fn signed_in(v: &Value) -> Result<String, String> {
+    set_oauth(false);
     keep(v).map_err(|_| {
         crate::lang::t(
             "Не удалось записать вход в Связку ключей",
@@ -478,7 +515,11 @@ fn no_build() -> String {
 
 /// Sign out: the session ends on the server too (best effort), the keychain forgets it.
 pub fn sign_out() {
-    if let (Some((url, key)), Ok(token)) = (project(), access()) {
+    if config().oauth {
+        if let Some(refresh) = refresh_token() {
+            let _ = oauth_post("revoke", &[("client_id", CLIENT_ID), ("token", &refresh)]);
+        }
+    } else if let (Some((url, key)), Ok(token)) = (project(), access()) {
         let _ = agent()
             .post(format!("{url}/auth/v1/logout"))
             .header("apikey", key)
@@ -486,8 +527,295 @@ pub fn sign_out() {
             .send_empty();
     }
     forget();
-    set_email(None);
+    save_config(&Config::default());
     poke();
+}
+
+// ---------- Sign in with Almanac (OAuth 2.1, PKCE, loopback redirect) ----------
+
+const CLIENT_ID: &str = "almanac-notch";
+const SCOPES: &str = "habits:read habits:write";
+/// how long the browser has to come back
+const BROWSER_WAIT: Duration = Duration::from_secs(300);
+/// a newer sign-in attempt ends the waiting one
+static ATTEMPT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// POST a form to Almanac's OAuth server (`<project>/functions/v1/oauth/<path>`).
+fn oauth_post(path: &str, form: &[(&str, &str)]) -> Result<Value, Failure> {
+    let (url, key) = project().ok_or(Failure::Net)?;
+    agent()
+        .post(format!("{url}/functions/v1/oauth/{path}"))
+        .header("apikey", key)
+        .header("User-Agent", "almanac-notch")
+        .send_form(form.iter().copied())
+        .map_err(failure)?
+        .body_mut()
+        .read_json::<Value>()
+        .map_err(|_| Failure::Net)
+}
+
+fn b64url(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn random_b64(n: usize) -> String {
+    let mut b = vec![0u8; n];
+    let _ = getrandom::fill(&mut b);
+    b64url(&b)
+}
+
+/// RFC 7636: code_challenge = base64url(sha256(verifier))
+fn challenge(verifier: &str) -> String {
+    use sha2::{Digest, Sha256};
+    b64url(&Sha256::digest(verifier.as_bytes()))
+}
+
+/// Percent-encode everything but RFC 3986 unreserved characters.
+fn enc(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+fn dec(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'+' => out.push(b' '),
+            b'%' if i + 2 < b.len() => match u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                Ok(v) => {
+                    out.push(v);
+                    i += 2;
+                }
+                Err(_) => out.push(b'%'),
+            },
+            c => out.push(c),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn authorize_url(base: &str, redirect: &str, state: &str, challenge: &str) -> String {
+    format!(
+        "{base}/functions/v1/oauth/authorize?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256&state={}",
+        enc(CLIENT_ID),
+        enc(redirect),
+        enc(SCOPES),
+        enc(challenge),
+        enc(state)
+    )
+}
+
+/// What came back to the loopback address.
+#[derive(Debug, PartialEq)]
+enum Callback {
+    Code(String),
+    Denied,
+    Failed(String),
+}
+
+/// The request line's target (`/oauth/callback?code=...&state=...`) -> the answer, if it is
+/// ours: the right path and our state.
+fn parse_callback(target: &str, state: &str) -> Option<Callback> {
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    if path != "/oauth/callback" {
+        return None;
+    }
+    let get = |k: &str| {
+        query
+            .split('&')
+            .filter_map(|kv| kv.split_once('='))
+            .find(|(key, _)| *key == k)
+            .map(|(_, v)| dec(v))
+    };
+    if get("state").as_deref() != Some(state) {
+        return None;
+    }
+    Some(match (get("code"), get("error")) {
+        (Some(code), None) if !code.is_empty() => Callback::Code(code),
+        (_, Some(e)) if e == "access_denied" => Callback::Denied,
+        (_, e) => Callback::Failed(
+            get("error_description")
+                .or(e)
+                .unwrap_or_else(|| "invalid_request".into()),
+        ),
+    })
+}
+
+/// The page the browser shows after coming back: the island's look, the app's language.
+fn callback_page(ok: bool) -> String {
+    let (title, text) = if ok {
+        (
+            crate::lang::t("Готово", "Done"),
+            crate::lang::t(
+                "Almanac Notch вошёл в Almanac. Эту вкладку можно закрыть.",
+                "Almanac Notch is signed in to Almanac. You can close this tab.",
+            ),
+        )
+    } else {
+        (
+            crate::lang::t("Вход не выполнен", "Not signed in"),
+            crate::lang::t(
+                "Вернитесь в Almanac Notch и попробуйте ещё раз.",
+                "Go back to Almanac Notch and try again.",
+            ),
+        )
+    };
+    format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>Almanac Notch</title>\
+<style>html,body{{height:100%;margin:0}}body{{display:grid;place-items:center;background:#070708;color:#f2f2f4;font:15px/1.5 -apple-system,system-ui,sans-serif}}\
+main{{text-align:center;padding:24px}}h1{{margin:18px 0 6px;font-size:22px;font-weight:600}}p{{margin:0;color:rgba(255,255,255,.55)}}\
+.m{{width:72px;height:66px;margin:auto;border-radius:46% 46% 44% 44%/52% 52% 48% 48%;background:#eeede8;position:relative}}\
+.m i{{position:absolute;top:24px;width:9px;height:19px;border-radius:5px;background:#16171a}}.m i:first-child{{left:24px}}.m i:last-child{{right:24px}}</style>\
+</head><body><main><div class=\"m\"><i></i><i></i></div><h1>{title}</h1><p>{text}</p></main></body></html>"
+    )
+}
+
+/// Wait on the loopback listener for our callback; answer every request so the browser never hangs.
+fn wait_callback(
+    listener: &std::net::TcpListener,
+    state: &str,
+    attempt: u64,
+) -> Result<Callback, String> {
+    use std::io::{Read, Write};
+    use std::sync::atomic::Ordering;
+    let _ = listener.set_nonblocking(true);
+    let deadline = Instant::now() + BROWSER_WAIT;
+    loop {
+        if ATTEMPT.load(Ordering::SeqCst) != attempt {
+            return Err(crate::lang::t("Вход отменён", "Sign-in cancelled").into());
+        }
+        if Instant::now() > deadline {
+            return Err(crate::lang::t(
+                "Браузер не вернулся за 5 минут - попробуйте ещё раз",
+                "The browser didn't come back in 5 minutes - try again",
+            )
+            .into());
+        }
+        let (mut conn, _) = match listener.accept() {
+            Ok(c) => c,
+            Err(_) => {
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+        };
+        let _ = conn.set_nonblocking(false);
+        let _ = conn.set_read_timeout(Some(Duration::from_secs(5)));
+        let mut buf = [0u8; 8192];
+        let n = conn.read(&mut buf).unwrap_or(0);
+        let head = String::from_utf8_lossy(&buf[..n]);
+        let target = head
+            .lines()
+            .next()
+            .and_then(|l| l.strip_prefix("GET "))
+            .and_then(|l| l.split(' ').next())
+            .unwrap_or("");
+        let got = parse_callback(target, state);
+        let (status, body) = match &got {
+            Some(Callback::Code(_)) => ("200 OK", callback_page(true)),
+            Some(_) => ("200 OK", callback_page(false)),
+            None => ("404 Not Found", String::new()),
+        };
+        let _ = conn.write_all(
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        );
+        if let Some(c) = got {
+            return Ok(c);
+        }
+    }
+}
+
+fn open_browser(url: &str) {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(windows)]
+    let _ = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+}
+
+/// "Sign in with Almanac": the browser shows Almanac's consent, the answer comes back to
+/// 127.0.0.1, the code becomes this app's own session. Blocks until done (up to 5 minutes).
+/// Returns the account's email.
+pub fn sign_in_browser() -> Result<String, String> {
+    let (base, _) = project().ok_or_else(no_build)?;
+    let attempt = ATTEMPT.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    let redirect = format!("http://127.0.0.1:{port}/oauth/callback");
+    let verifier = random_b64(32);
+    let state = random_b64(24);
+    open_browser(&authorize_url(
+        base,
+        &redirect,
+        &state,
+        &challenge(&verifier),
+    ));
+    let code = match wait_callback(&listener, &state, attempt)? {
+        Callback::Code(c) => c,
+        Callback::Denied => {
+            return Err(crate::lang::t(
+                "Доступ не разрешён в Almanac",
+                "Access wasn't allowed in Almanac",
+            )
+            .into())
+        }
+        Callback::Failed(e) => {
+            return Err(format!(
+                "{}: {e}",
+                crate::lang::t("Almanac отклонил вход", "Almanac refused the sign-in")
+            ))
+        }
+    };
+    drop(listener);
+    let v = oauth_post(
+        "token",
+        &[
+            ("grant_type", "authorization_code"),
+            ("client_id", CLIENT_ID),
+            ("code", &code),
+            ("redirect_uri", &redirect),
+            ("code_verifier", &verifier),
+        ],
+    )
+    .map_err(|e| match e {
+        Failure::Net => net_text(),
+        _ => crate::lang::t(
+            "Код входа не подошёл или устарел - попробуйте ещё раз",
+            "The sign-in code was refused or expired - try again",
+        )
+        .into(),
+    })?;
+    keep(&v).map_err(|_| {
+        crate::lang::t(
+            "Не удалось записать вход в Связку ключей",
+            "Cannot save the sign-in to the system keychain",
+        )
+        .to_owned()
+    })?;
+    set_oauth(true);
+    poke();
+    Ok(email().unwrap_or_default())
+}
+
+/// The settings window's "Cancel": stop waiting for the browser.
+pub fn cancel_browser() {
+    ATTEMPT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[cfg(test)]
@@ -574,5 +902,94 @@ mod tests {
         }
         let e = sign_in("nobody@example.invalid", "not-a-password").unwrap_err();
         assert_ne!(e, net_text());
+    }
+    #[test]
+    fn pkce_challenge_matches_rfc7636() {
+        // RFC 7636, appendix B
+        assert_eq!(
+            challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
+        let v = random_b64(32);
+        assert_eq!(v.len(), 43);
+        assert!(v
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+    }
+
+    #[test]
+    fn authorize_url_carries_pkce_and_loopback() {
+        let u = authorize_url(
+            "https://p.supabase.co",
+            "http://127.0.0.1:5123/oauth/callback",
+            "st",
+            "ch",
+        );
+        assert!(u.starts_with("https://p.supabase.co/functions/v1/oauth/authorize?response_type=code&client_id=almanac-notch&"));
+        assert!(u.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A5123%2Foauth%2Fcallback"));
+        assert!(u.contains("scope=habits%3Aread%20habits%3Awrite"));
+        assert!(u.contains("code_challenge=ch&code_challenge_method=S256&state=st"));
+    }
+
+    #[test]
+    fn callback_only_ours() {
+        assert_eq!(
+            parse_callback("/oauth/callback?code=abc&state=s1", "s1"),
+            Some(Callback::Code("abc".into()))
+        );
+        assert_eq!(
+            parse_callback("/oauth/callback?error=access_denied&state=s1", "s1"),
+            Some(Callback::Denied)
+        );
+        assert_eq!(
+            parse_callback(
+                "/oauth/callback?error=invalid_scope&error_description=bad%20scope&state=s1",
+                "s1"
+            ),
+            Some(Callback::Failed("bad scope".into()))
+        );
+        // someone else's state, another path, the favicon: not the answer
+        assert_eq!(
+            parse_callback("/oauth/callback?code=abc&state=zz", "s1"),
+            None
+        );
+        assert_eq!(parse_callback("/favicon.ico", "s1"), None);
+        assert_eq!(parse_callback("/oauth/callback?code=abc", "s1"), None);
+    }
+
+    /// Network, staging-built only: our client and redirect are accepted (no 400 page), a made-up
+    /// code is refused as invalid_grant. `ALMANAC_URL=<staging> ALMANAC_KEY=<key> cargo test -- --ignored oauth_staging`
+    #[test]
+    #[ignore]
+    fn oauth_staging() {
+        let (base, _) = project().expect("build with ALMANAC_URL/ALMANAC_KEY");
+        let r = agent()
+            .get(authorize_url(
+                base,
+                "http://127.0.0.1:5123/oauth/callback",
+                "teststate",
+                &challenge(&random_b64(32)),
+            ))
+            .config()
+            .max_redirects(0)
+            .build()
+            .call();
+        let status = match r {
+            Ok(r) => r.status().as_u16(),
+            Err(ureq::Error::StatusCode(c)) => c,
+            Err(e) => panic!("{e}"),
+        };
+        assert!((300..400).contains(&status), "authorize answered {status}");
+        let e = oauth_post(
+            "token",
+            &[
+                ("grant_type", "authorization_code"),
+                ("client_id", CLIENT_ID),
+                ("code", "made-up"),
+                ("redirect_uri", "http://127.0.0.1:5123/oauth/callback"),
+                ("code_verifier", &random_b64(32)),
+            ],
+        );
+        assert!(matches!(e, Err(Failure::Bad(400))), "{e:?}");
     }
 }

@@ -292,7 +292,9 @@ function renderAlmanac(a: AlState | null): void {
   $('al-connect').hidden = on;
   $('al-connected').hidden = !on;
   $('al-nobuild').hidden = alBuilt;
-  $('al-form').hidden = !alBuilt;
+  $('al-browser').hidden = !alBuilt;
+  $('al-form').hidden = !alBuilt || !alFallback;
+  $('al-more').hidden = alFallback;
   $('almanac-dot').className = 'dot' + (on ? ' ok' : a && a.auth === 'bad' ? ' bad' : '');
   $('almanac-status').textContent = !alBuilt
     ? t('Пример из прототипа')
@@ -361,6 +363,29 @@ alCode.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') void alVerifyCode();
 });
 $('al-off').addEventListener('click', () => void invoke('almanac_sign_out'));
+// "Sign in with Almanac": the browser shows Almanac's consent; Rust waits for the answer on 127.0.0.1
+let alFallback = false;
+async function alBrowser(): Promise<void> {
+  const btn = $<HTMLButtonElement>('al-web');
+  btn.disabled = true;
+  $('al-wait').hidden = false;
+  $('al-web-error').textContent = '';
+  try {
+    await invoke<string>('almanac_browser_sign_in');
+  } catch (e) {
+    $('al-web-error').textContent = String(e);
+  } finally {
+    btn.disabled = false;
+    $('al-wait').hidden = true;
+  }
+}
+$('al-web').addEventListener('click', () => void alBrowser());
+$('al-cancel').addEventListener('click', () => void invoke('almanac_browser_cancel'));
+$('al-more').addEventListener('click', () => {
+  alFallback = true;
+  renderAlmanac(lastAl);
+  alEmail.focus();
+});
 
 // ---------- tabs and the module list (Raycast-like) ----------
 const mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];

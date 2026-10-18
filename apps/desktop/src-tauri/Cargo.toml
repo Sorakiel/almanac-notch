@@ -17,6 +17,8 @@ tauri = { version = "2.12", features = ["macos-private-api", "tray-icon", "image
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 getrandom = "0.3"
+sha2 = "0.10"
+base64 = "0.22"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "system-proxy", "zip"] }
@@ -53,7 +55,6 @@ windows = { version = "0.61", features = [
     "Media_Control",
     "Storage_Streams",
 ] }
-base64 = "0.22"
 
 [profile.release]
 lto = true
