@@ -34,28 +34,38 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Скачиваю обновление… {0}%': 'Downloading the update… {0}%',
   'Обновить и перезапустить': 'Update and restart',
   // first-run guide (stage 8f)
-  'Остров у выреза камеры: что делает Claude Code, ближайшая встреча, музыка и другие модули. Несколько шагов - и всё готово. Любой шаг можно пропустить и вернуться к нему в настройках.':
-    'An island at the camera notch: what Claude Code is doing, your next meeting, music and other modules. A few steps and you are set. Any step can be skipped and done later in settings.',
-  'Остров показывает, что делает Claude Code, и отвечает на его вопросы и запросы разрешений. Для этого в файл ~/.claude/settings.json добавляются хуки. Перед записью приложение покажет, что изменится, и сохранит копию файла. Чужие хуки остаются на месте.':
-    "The island shows what Claude Code is doing and answers its questions and permission requests. For that, hooks are added to ~/.claude/settings.json. Before writing, the app shows what will change and keeps a copy of the file. Other apps' hooks stay in place.",
-  'Подключить Claude Code': 'Connect Claude Code',
-  'Ближайшая встреча в острове. macOS один раз спросит разрешение.':
-    'Your next meeting on the island. macOS will ask for permission once.',
-  'Ближайшая встреча в острове: классический Outlook на этом компьютере или секретная ссылка iCal (Google, iCloud, Яндекс и другие).':
-    'Your next meeting on the island: classic Outlook on this computer or a secret iCal link (Google, iCloud, Yandex and others).',
+  'Привет! Я живу у выреза камеры': 'Hi! I live at the camera notch',
+  'Покажу, что делает Claude Code, сколько осталось до созвона и что играет. Настроим за минуту.':
+    "I'll show what Claude Code is doing, how long until your next call and what's playing. Setup takes a minute.",
+  'Подключим Claude Code': "Let's connect Claude Code",
+  'Буду показывать шаги агента и отвечать на его вопросы и запросы разрешений прямо с острова.':
+    "I'll show the agent's steps and answer its questions and permission requests right from the island.",
+  '+ хуки Almanac Notch': '+ Almanac Notch hooks',
+  'Перед записью покажу дифф и сохраню копию файла. Чужие хуки останутся.':
+    "Before writing I'll show the diff and keep a copy of the file. Other hooks stay.",
+  'Ближайшая встреча': 'Your next meeting',
+  'Покажу, сколько осталось до созвона, и напомню заранее. macOS один раз спросит разрешение.':
+    "I'll show how long until your call and remind you ahead. macOS will ask for permission once.",
+  'Покажу, сколько осталось до созвона: из классического Outlook на этом компьютере или по секретной ссылке iCal.':
+    "I'll show how long until your call: from classic Outlook on this computer or a secret iCal link.",
   'Разрешить доступ': 'Allow access',
   'Выбрать источник': 'Pick a source',
-  'Claude Code включён всегда, кроме него - не больше 4 модулей. Токены и входы подключаются позже, во вкладке «Модули».':
-    'Claude Code is always on; up to 4 other modules. Tokens and sign-ins are added later, in the Modules tab.',
-  'Раз в день приложение смотрит на GitHub, вышла ли новая версия. Обновление скачивается, только когда вы нажмёте «Обновить». Больше приложение никуда не обращается, кроме модулей, которые вы подключили.':
-    'Once a day the app checks GitHub for a new version. An update is downloaded only when you press "Update". The app contacts nothing else except the modules you connect.',
-  'Остров - у верхнего края экрана, наведите на него курсор. Меню - значок Almanac Notch в трее.':
+  'Что ещё показывать?': 'What else should I show?',
+  'Claude Code всегда со мной. Выберите до четырёх модулей, подключить их можно потом.':
+    'Claude Code is always with me. Pick up to four modules - you can connect them later.',
+  'Выбрано {0} из 4': '{0} of 4 picked',
+  'Всё готово': 'All set',
+  'Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.':
+    'Once a day I check GitHub for a new version. It installs only when you press the button.',
+  'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.':
     'The island sits at the top edge of the screen - hover over it. The menu is the Almanac Notch icon in the tray.',
-  'Остров - у выреза камеры, наведите на него курсор. Меню - значок Almanac Notch в строке меню.':
+  'Остров - у выреза камеры: наведите на него курсор. Меню - значок Almanac Notch в строке меню.':
     'The island sits at the camera notch - hover over it. The menu is the Almanac Notch icon in the menu bar.',
   Назад: 'Back',
   Пропустить: 'Skip',
   Дальше: 'Next',
+  Начать: 'Start',
+  'Открыть приветствие': 'Open the welcome guide',
   // tabs and the general page
   Общие: 'General',
   Модули: 'Modules',

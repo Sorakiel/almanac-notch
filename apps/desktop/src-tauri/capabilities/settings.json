@@ -3,5 +3,5 @@
   "identifier": "settings",
   "description": "Settings window: state events and its own commands",
   "windows": ["settings"],
-  "permissions": ["core:event:default", "core:default"]
+  "permissions": ["core:event:default", "core:default", "core:window:allow-start-dragging"]
 }

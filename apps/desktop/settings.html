@@ -7,154 +7,147 @@
     <link rel="stylesheet" href="/src/settings.css" />
   </head>
   <body>
-    <header class="tabs" id="tabs" role="tablist">
-      <button class="tab on" data-tab="general" role="tab">Общие</button>
-      <button class="tab" data-tab="modules" role="tab">Модули</button>
-    </header>
-
-    <div class="pane" id="tab-general">
-      <main>
-        <h2>Остров</h2>
-        <h3>Состояние</h3>
-        <div class="seg" role="radiogroup" aria-label="Состояние острова">
-          <label><input type="radio" name="nstate" value="auto" />Авто</label>
-          <label><input type="radio" name="nstate" value="closed" />Закрыто</label>
-          <label><input type="radio" name="nstate" value="half" />Полуоткрыто</label>
-          <label><input type="radio" name="nstate" value="open" />Открыто</label>
-        </div>
-        <h3>Вкладки</h3>
-        <label class="switch-row"
-          ><span>Чат в острове</span><input type="checkbox" class="toggle" id="chat-on"
-        /></label>
-        <h3>Язык</h3>
-        <div class="seg" role="radiogroup" aria-label="Язык интерфейса">
-          <label><input type="radio" name="lang" value="auto" />Как в системе</label>
-          <label><input type="radio" name="lang" value="ru" />Русский</label>
-          <label><input type="radio" name="lang" value="en" />English</label>
-        </div>
-        <h3>Проверить события</h3>
-        <div class="events">
-          <button data-ev="attention">Внимание</button>
-          <button data-ev="working">Работает</button>
-          <button data-ev="thinking">Думает</button>
-          <button data-ev="searching">Ищет</button>
-          <button data-ev="question">Вопрос</button>
-          <button data-ev="ratelimit">Лимит</button>
-          <button data-ev="success">Успех</button>
-          <button data-ev="error">Ошибка</button>
-          <button data-ev="dance">Праздник</button>
-          <button data-ev="greeting">Привет</button>
-          <button data-ev="sleep">Сон</button>
-        </div>
-        <h3>Приложение</h3>
-        <p class="plain" id="app-version"></p>
-        <label class="switch-row"
-          ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="autostart"
-        /></label>
-        <label class="switch-row"
-          ><span>Проверять обновления</span><input type="checkbox" class="toggle" id="updates"
-        /></label>
-        <div class="row update-row">
-          <span class="plain" id="upd-status"></span>
-          <button id="upd-go">Проверить сейчас</button>
-        </div>
-        <p class="note" id="upd-error"></p>
-        <button id="quit">Выйти из Almanac Notch</button>
-      </main>
-    </div>
-
-    <div class="pane" id="tab-welcome" hidden>
-      <main class="wizard">
-        <section class="step" data-step="1">
-          <h2>Almanac Notch</h2>
-          <p class="plain">
-            Остров у выреза камеры: что делает Claude Code, ближайшая встреча, музыка и другие модули. Несколько шагов -
-            и всё готово. Любой шаг можно пропустить и вернуться к нему в настройках.
+    <div class="pane welcome" id="tab-welcome" hidden>
+      <div class="w-glow" aria-hidden="true"></div>
+      <div class="w-drag" data-tauri-drag-region></div>
+      <canvas class="w-stage" id="w-stage"></canvas>
+      <div class="w-steps">
+        <section class="step" data-step="1" data-glow="#6f86ff">
+          <h1>Привет! Я живу у выреза камеры</h1>
+          <p class="lead">
+            Покажу, что делает Claude Code, сколько осталось до созвона и что играет. Настроим за минуту.
           </p>
-          <h3>Язык</h3>
-          <div class="seg" role="radiogroup" aria-label="Язык интерфейса">
+          <div class="seg pill-seg" role="radiogroup" aria-label="Язык интерфейса">
             <label><input type="radio" name="lang-w" value="auto" />Как в системе</label>
             <label><input type="radio" name="lang-w" value="ru" />Русский</label>
             <label><input type="radio" name="lang-w" value="en" />English</label>
           </div>
         </section>
-        <section class="step" data-step="2" hidden>
-          <h2>Claude Code</h2>
-          <p class="plain">
-            Остров показывает, что делает Claude Code, и отвечает на его вопросы и запросы разрешений. Для этого в файл
-            ~/.claude/settings.json добавляются хуки. Перед записью приложение покажет, что изменится, и сохранит копию
-            файла. Чужие хуки остаются на месте.
+        <section class="step" data-step="2" data-glow="#d97757" hidden>
+          <h1>Подключим Claude Code</h1>
+          <p class="lead">
+            Буду показывать шаги агента и отвечать на его вопросы и запросы разрешений прямо с острова.
           </p>
-          <p class="status"><span class="dot" id="w-hooks-dot"></span><span id="w-hooks-status">…</span></p>
-          <button class="primary" id="w-hooks">Подключить Claude Code</button>
-        </section>
-        <section class="step" data-step="3" hidden>
-          <h2>Календарь</h2>
-          <p class="plain" id="w-cal-mac">Ближайшая встреча в острове. macOS один раз спросит разрешение.</p>
-          <p class="plain" id="w-cal-win">
-            Ближайшая встреча в острове: классический Outlook на этом компьютере или секретная ссылка iCal (Google,
-            iCloud, Яндекс и другие).
-          </p>
-          <p class="status"><span class="dot" id="w-cal-dot"></span><span id="w-cal-status">…</span></p>
-          <button class="primary" id="w-cal">Разрешить доступ</button>
-        </section>
-        <section class="step" data-step="4" hidden>
-          <h2>Модули</h2>
-          <p class="plain">
-            Claude Code включён всегда, кроме него - не больше 4 модулей. Токены и входы подключаются позже, во вкладке
-            «Модули».
-          </p>
-          <div class="w-mods">
-            <label class="switch-row"
-              ><span>Календарь</span><input type="checkbox" class="toggle" data-mod="cal"
-            /></label>
-            <label class="switch-row"
-              ><span>Музыка</span><input type="checkbox" class="toggle" data-mod="music"
-            /></label>
-            <label class="switch-row"
-              ><span>GitHub</span><input type="checkbox" class="toggle" data-mod="github"
-            /></label>
-            <label class="switch-row"
-              ><span>Vercel</span><input type="checkbox" class="toggle" data-mod="vercel"
-            /></label>
-            <label class="switch-row"
-              ><span>Notion</span><input type="checkbox" class="toggle" data-mod="notion"
-            /></label>
-            <label class="switch-row"
-              ><span>Grafana</span><input type="checkbox" class="toggle" data-mod="grafana"
-            /></label>
-            <label class="switch-row"
-              ><span>Almanac</span><input type="checkbox" class="toggle" data-mod="almanac"
-            /></label>
+          <div class="plaque">
+            <span class="plaque-file">~/.claude/settings.json</span>
+            <span class="plaque-add">+ хуки Almanac Notch</span>
+            <span class="plaque-note">Перед записью покажу дифф и сохраню копию файла. Чужие хуки останутся.</span>
+          </div>
+          <div class="w-actions">
+            <button class="pill primary" id="w-hooks">Подключить</button>
+            <span class="chip" id="w-hooks-chip"
+              ><span class="dot" id="w-hooks-dot"></span><span id="w-hooks-status">…</span></span
+            >
           </div>
         </section>
-        <section class="step" data-step="5" hidden>
-          <h2>Готово</h2>
-          <label class="switch-row"
-            ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="w-autostart" checked
-          /></label>
-          <label class="switch-row"
-            ><span>Проверять обновления</span><input type="checkbox" class="toggle" id="w-updates" checked
-          /></label>
-          <p class="plain">
-            Раз в день приложение смотрит на GitHub, вышла ли новая версия. Обновление скачивается, только когда вы
-            нажмёте «Обновить». Больше приложение никуда не обращается, кроме модулей, которые вы подключили.
+        <section class="step" data-step="3" data-glow="#f5a524" hidden>
+          <h1>Ближайшая встреча</h1>
+          <p class="lead" id="w-cal-mac">
+            Покажу, сколько осталось до созвона, и напомню заранее. macOS один раз спросит разрешение.
           </p>
-          <p class="plain" id="w-where"></p>
+          <p class="lead" id="w-cal-win">
+            Покажу, сколько осталось до созвона: из классического Outlook на этом компьютере или по секретной ссылке
+            iCal.
+          </p>
+          <div class="w-actions">
+            <button class="pill primary" id="w-cal">Разрешить доступ</button>
+            <span class="chip"><span class="dot" id="w-cal-dot"></span><span id="w-cal-status">…</span></span>
+          </div>
+        </section>
+        <section class="step" data-step="4" data-glow="#a78bfa" hidden>
+          <h1>Что ещё показывать?</h1>
+          <p class="lead">Claude Code всегда со мной. Выберите до четырёх модулей, подключить их можно потом.</p>
+          <div class="w-tiles">
+            <label class="w-tile" style="--c: #f5a524"
+              ><input type="checkbox" data-mod="cal" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="4" y="5" width="16" height="15" rx="3" />
+                  <path d="M4 10h16M9 3v4M15 3v4" /></svg></span
+              ><span class="w-tile-name">Календарь</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+            <label class="w-tile" style="--c: #ff5e8a"
+              ><input type="checkbox" data-mod="music" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 18V6l10-2v12" />
+                  <circle cx="6.5" cy="18" r="2.5" />
+                  <circle cx="16.5" cy="16" r="2.5" /></svg></span
+              ><span class="w-tile-name">Музыка</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+            <label class="w-tile" style="--c: #8e8e93"
+              ><input type="checkbox" data-mod="github" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="7" cy="6" r="2" />
+                  <circle cx="7" cy="18" r="2" />
+                  <circle cx="17" cy="8" r="2" />
+                  <path d="M7 8v8M17 10c0 4-10 2-10 6" /></svg></span
+              ><span class="w-tile-name">GitHub</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+            <label class="w-tile" style="--c: #9d97c9"
+              ><input type="checkbox" data-mod="vercel" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5 20 19H4z" /></svg></span
+              ><span class="w-tile-name">Vercel</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+            <label class="w-tile" style="--c: #a89f8a"
+              ><input type="checkbox" data-mod="notion" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h9l3 3v13H6zM9 12h6M9 16h6" /></svg></span
+              ><span class="w-tile-name">Notion</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+            <label class="w-tile" style="--c: #ff8c66"
+              ><input type="checkbox" data-mod="grafana" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" /></svg></span
+              ><span class="w-tile-name">Grafana</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+            <label class="w-tile" style="--c: #34c759"
+              ><input type="checkbox" data-mod="almanac" /><span class="ico"
+                ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" /></svg></span
+              ><span class="w-tile-name">Almanac</span><span class="w-check" aria-hidden="true"></span
+            ></label>
+          </div>
+          <p class="w-count-mods" id="w-mods-count"></p>
+        </section>
+        <section class="step" data-step="5" data-glow="#34c759" hidden>
+          <h1>Всё готово</h1>
+          <p class="lead" id="w-where"></p>
+          <div class="group">
+            <label class="g-row"
+              ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="w-autostart" checked
+            /></label>
+            <label class="g-row"
+              ><span
+                >Проверять обновления<small
+                  >Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.</small
+                ></span
+              ><input type="checkbox" class="toggle" id="w-updates" checked
+            /></label>
+          </div>
           <p class="note" id="w-error"></p>
         </section>
-        <footer class="w-nav">
-          <button id="w-back">Назад</button>
-          <span class="plain" id="w-count"></span>
-          <button id="w-skip">Пропустить</button>
-          <button class="primary" id="w-next">Дальше</button>
-        </footer>
-      </main>
+      </div>
+      <footer class="w-nav">
+        <button class="pill ghost" id="w-back">Назад</button>
+        <div class="w-dots" id="w-dots" aria-hidden="true"></div>
+        <div class="w-right">
+          <button class="link" id="w-skip">Пропустить</button>
+          <button class="pill primary" id="w-next">Дальше</button>
+        </div>
+      </footer>
     </div>
 
-    <div class="pane" id="tab-modules" hidden>
+    <div class="pane shell" id="tab-modules">
       <aside class="list">
-        <button class="mod on" data-module="claude">
+        <div class="side-drag" data-tauri-drag-region></div>
+        <button class="mod" data-module="general">
+          <span class="ico" style="--c: #636366"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"
+              /></svg
+          ></span>
+          <span class="name">Общие</span>
+        </button>
+        <p class="side-label">Модули</p>
+        <button class="mod" data-module="claude">
           <span class="ico" style="--c: #d97757"
             ><svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" /></svg
@@ -223,15 +216,85 @@
         <p class="list-note">Кроме Claude Code включено не больше 4 модулей</p>
       </aside>
       <div class="detail">
-        <main id="claude">
-          <h2>Claude Code</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="claude"
-          /></label>
-          <p class="status"><span class="dot" id="hooks-dot"></span><span id="hooks-status">…</span></p>
+        <main id="general" hidden>
+          <header class="page-head">
+            <div class="head-text"><h2>Общие</h2></div>
+          </header>
+          <h3>Остров</h3>
+          <div class="group">
+            <div class="g-row">
+              <span>Состояние</span>
+              <div class="seg" role="radiogroup" aria-label="Состояние острова">
+                <label><input type="radio" name="nstate" value="auto" />Авто</label>
+                <label><input type="radio" name="nstate" value="closed" />Закрыто</label>
+                <label><input type="radio" name="nstate" value="half" />Полуоткрыто</label>
+                <label><input type="radio" name="nstate" value="open" />Открыто</label>
+              </div>
+            </div>
+            <label class="g-row"><span>Чат в острове</span><input type="checkbox" class="toggle" id="chat-on" /></label>
+            <div class="g-row">
+              <span>Язык</span>
+              <div class="seg" role="radiogroup" aria-label="Язык интерфейса">
+                <label><input type="radio" name="lang" value="auto" />Как в системе</label>
+                <label><input type="radio" name="lang" value="ru" />Русский</label>
+                <label><input type="radio" name="lang" value="en" />English</label>
+              </div>
+            </div>
+          </div>
+          <h3>Приложение</h3>
+          <div class="group">
+            <label class="g-row"
+              ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="autostart"
+            /></label>
+            <label class="g-row"
+              ><span
+                >Проверять обновления<small
+                  >Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.</small
+                ></span
+              ><input type="checkbox" class="toggle" id="updates"
+            /></label>
+            <div class="g-row">
+              <span><span id="app-version"></span><small id="upd-status"></small></span>
+              <button class="pill ghost" id="upd-go">Проверить сейчас</button>
+            </div>
+          </div>
+          <p class="note" id="upd-error"></p>
+          <h3>Проверить события</h3>
+          <div class="events">
+            <button data-ev="attention">Внимание</button>
+            <button data-ev="working">Работает</button>
+            <button data-ev="thinking">Думает</button>
+            <button data-ev="searching">Ищет</button>
+            <button data-ev="question">Вопрос</button>
+            <button data-ev="ratelimit">Лимит</button>
+            <button data-ev="success">Успех</button>
+            <button data-ev="error">Ошибка</button>
+            <button data-ev="dance">Праздник</button>
+            <button data-ev="greeting">Привет</button>
+            <button data-ev="sleep">Сон</button>
+          </div>
+          <div class="page-foot">
+            <button class="pill ghost" id="welcome-again">Открыть приветствие</button>
+            <button class="pill ghost danger" id="quit">Выйти из Almanac Notch</button>
+          </div>
+        </main>
+        <main id="claude" hidden>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Claude Code</h2>
+              <p class="status"><span class="dot" id="hooks-dot"></span><span id="hooks-status">…</span></p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle"
+              data-mod="claude"
+              aria-label="Модуль включён"
+              title="Модуль включён"
+            />
+          </header>
           <div class="row">
-            <button id="hooks-install" class="primary">Установить хуки…</button>
-            <button id="hooks-uninstall">Удалить хуки…</button>
+            <button id="hooks-install" class="pill primary">Установить хуки…</button>
+            <button id="hooks-uninstall" class="pill ghost">Удалить хуки…</button>
           </div>
           <section class="help">
             <h3>Что это</h3>
@@ -243,11 +306,13 @@
           </section>
         </main>
         <main id="calendar" hidden>
-          <h2>Календарь</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="cal"
-          /></label>
-          <p class="status"><span class="dot" id="cal-dot"></span><span id="cal-status">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Календарь</h2>
+              <p class="status"><span class="dot" id="cal-dot"></span><span id="cal-status">…</span></p>
+            </div>
+            <input type="checkbox" class="toggle" data-mod="cal" aria-label="Модуль включён" title="Модуль включён" />
+          </header>
 
           <section id="cal-pick" hidden>
             <div class="seg" role="radiogroup" aria-label="Источник календаря">
@@ -303,11 +368,13 @@
           </section>
         </main>
         <main id="music" hidden>
-          <h2>Музыка</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="music"
-          /></label>
-          <p class="status"><span class="dot" id="music-dot"></span><span id="music-status">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Музыка</h2>
+              <p class="status"><span class="dot" id="music-dot"></span><span id="music-status">…</span></p>
+            </div>
+            <input type="checkbox" class="toggle" data-mod="music" aria-label="Модуль включён" title="Модуль включён" />
+          </header>
           <p class="plain" id="music-src"></p>
           <section class="help">
             <h3>Что читается и куда уходит</h3>
@@ -318,11 +385,19 @@
           </section>
         </main>
         <main id="github" hidden>
-          <h2>GitHub</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="github"
-          /></label>
-          <p class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>GitHub</h2>
+              <p class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">…</span></p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle"
+              data-mod="github"
+              aria-label="Модуль включён"
+              title="Модуль включён"
+            />
+          </header>
 
           <section id="connect">
             <label for="token">Токен доступа</label>
@@ -362,11 +437,19 @@
           </section>
         </main>
         <main id="vercel" hidden>
-          <h2>Vercel</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="vercel"
-          /></label>
-          <p class="status"><span class="dot" id="vc-dot"></span><span id="vc-status">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Vercel</h2>
+              <p class="status"><span class="dot" id="vc-dot"></span><span id="vc-status">…</span></p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle"
+              data-mod="vercel"
+              aria-label="Модуль включён"
+              title="Модуль включён"
+            />
+          </header>
 
           <section id="vc-connect">
             <label for="vc-token">Токен доступа</label>
@@ -404,11 +487,19 @@
           </section>
         </main>
         <main id="notion" hidden>
-          <h2>Notion</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="notion"
-          /></label>
-          <p class="status"><span class="dot" id="no-dot"></span><span id="no-status">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Notion</h2>
+              <p class="status"><span class="dot" id="no-dot"></span><span id="no-status">…</span></p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle"
+              data-mod="notion"
+              aria-label="Модуль включён"
+              title="Модуль включён"
+            />
+          </header>
 
           <section id="no-connect">
             <label for="no-token">Токен интеграции</label>
@@ -462,11 +553,19 @@
           </section>
         </main>
         <main id="grafana" hidden>
-          <h2>Grafana</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="grafana"
-          /></label>
-          <p class="status"><span class="dot" id="gf-dot"></span><span id="gf-status">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Grafana</h2>
+              <p class="status"><span class="dot" id="gf-dot"></span><span id="gf-status">…</span></p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle"
+              data-mod="grafana"
+              aria-label="Модуль включён"
+              title="Модуль включён"
+            />
+          </header>
 
           <section id="gf-connect">
             <label for="gf-url">Адрес Grafana</label>
@@ -526,11 +625,19 @@
           </section>
         </main>
         <main id="almanac" hidden>
-          <h2>Almanac</h2>
-          <label class="switch-row"
-            ><span>Модуль включён</span><input type="checkbox" class="toggle" data-mod="almanac"
-          /></label>
-          <p class="status"><span class="dot" id="almanac-dot"></span><span id="almanac-status">…</span></p>
+          <header class="page-head">
+            <div class="head-text">
+              <h2>Almanac</h2>
+              <p class="status"><span class="dot" id="almanac-dot"></span><span id="almanac-status">…</span></p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle"
+              data-mod="almanac"
+              aria-label="Модуль включён"
+              title="Модуль включён"
+            />
+          </header>
 
           <section id="al-connect">
             <p class="plain" id="al-nobuild" hidden>

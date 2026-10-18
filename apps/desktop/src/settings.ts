@@ -9,6 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { AlState, Calendar, GfState, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
+import { welcomeMascot, type WelcomeMascot } from './welcome-mascot';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const input = $<HTMLInputElement>('token'),
@@ -21,6 +22,8 @@ const input = $<HTMLInputElement>('token'),
   connected = $('connected');
 
 const inTauri = '__TAURI_INTERNALS__' in window;
+/** the first-run guide's live mascot, made when the guide first opens */
+let mascot: WelcomeMascot | null = null;
 
 // the last data of each section: a language switch draws them again
 let lastG: GhState | null = null,
@@ -358,26 +361,46 @@ alCode.addEventListener('keydown', (e) => {
 $('al-off').addEventListener('click', () => void invoke('almanac_sign_out'));
 
 // ---------- tabs and the module list (Raycast-like) ----------
-const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tab')],
-  mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
+const mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
+/** "welcome" covers the window with the first-run guide; anything else is a page of the sidebar */
 function showTab(name: string): void {
-  // the guide hides the tab bar; any other page brings it back
-  $('tabs').hidden = name === 'welcome';
-  for (const t of tabs) t.classList.toggle('on', t.dataset.tab === name);
-  for (const p of document.querySelectorAll<HTMLElement>('.pane')) p.hidden = p.id !== 'tab-' + name;
+  const welcome = name === 'welcome';
+  $('tab-welcome').hidden = !welcome;
+  $('tab-modules').hidden = welcome;
+  if (!welcome) {
+    mascot?.setRunning(false);
+    if (name === 'general' || !document.querySelector('.detail > main:not([hidden])')) showModule('general');
+  }
 }
 function showModule(name: string): void {
-  showTab('modules');
+  $('tab-welcome').hidden = true;
+  $('tab-modules').hidden = false;
+  mascot?.setRunning(false);
   for (const m of mods) m.classList.toggle('on', m.dataset.module === name);
-  for (const m of document.querySelectorAll<HTMLElement>('.detail > main')) m.hidden = m.id !== name;
+  for (const m of document.querySelectorAll<HTMLElement>('.detail > main')) {
+    const show = m.id === name;
+    if (show && m.hidden) {
+      // a short fade-in, like a native settings pane
+      m.style.animation = 'none';
+      void m.offsetWidth;
+      m.style.animation = '';
+    }
+    m.hidden = !show;
+  }
 }
-for (const t of tabs) t.addEventListener('click', () => showTab(t.dataset.tab ?? 'general'));
-for (const m of mods) m.addEventListener('click', () => showModule(m.dataset.module ?? 'claude'));
+for (const m of mods) m.addEventListener('click', () => showModule(m.dataset.module ?? 'general'));
+// each module page's header shows the module's icon from the sidebar
+for (const main of document.querySelectorAll<HTMLElement>('.detail > main')) {
+  const ico = document.querySelector(`.mod[data-module="${main.id}"] .ico`);
+  const headEl = main.querySelector('.page-head');
+  if (ico && headEl) headEl.prepend(ico.cloneNode(true));
+}
+showModule('general');
 /** "island" and "general" open the general tab, module names open their page */
 function showSection(sec: string): void {
   if (sec === 'welcome') showWelcome();
   else if (mods.some((m) => m.dataset.module === sec)) showModule(sec);
-  else showTab('general');
+  else showModule('general');
 }
 
 // each module's status line and dot, repeated in the list
@@ -421,7 +444,8 @@ const MOD_OF: Record<string, string> = {
   notion: 'notion',
   grafana: 'grafana',
 };
-let modCfg: Modules = { off: [], chat: true };
+// until Rust answers: the shipped defaults (modules.rs - new modules start off)
+let modCfg: Modules = { off: ['vercel', 'notion', 'grafana'], chat: true };
 let toastTimer = 0;
 function say(text: string): void {
   toast.textContent = text;
@@ -432,6 +456,7 @@ function say(text: string): void {
 function renderModules(c: Modules): void {
   modCfg = c;
   for (const t of toggles) t.checked = !c.off.includes(t.dataset.mod ?? '');
+  renderModCount();
   chatOn.checked = c.chat;
   for (const m of mods) m.classList.toggle('off', c.off.includes(MOD_OF[m.dataset.module ?? ''] ?? ''));
 }
@@ -608,6 +633,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-ev]'))
 $('hooks-install').addEventListener('click', () => act('hooks:install'));
 $('hooks-uninstall').addEventListener('click', () => act('hooks:uninstall'));
 $('quit').addEventListener('click', () => act('quit'));
+$('welcome-again').addEventListener('click', () => showWelcome());
 // the hook dialogs finish outside this window; read the status again when it is back in front
 window.addEventListener('focus', () => void refreshIsland());
 
@@ -675,28 +701,58 @@ $<HTMLInputElement>('updates').addEventListener('change', (e) => {
 });
 
 // ---------- first-run guide (stage 8f): language, Claude Code, calendar, modules, launch at login ----------
-const steps = [...document.querySelectorAll<HTMLElement>('.step')];
+const steps = [...document.querySelectorAll<HTMLElement>('.step')],
+  welcomePane = $('tab-welcome'),
+  dots = $('w-dots');
+dots.replaceChildren(...steps.map(() => document.createElement('i')));
 let step = 0;
-function renderStep(): void {
-  steps.forEach((el, i) => (el.hidden = i !== step));
+function renderStep(back = false): void {
+  steps.forEach((el, i) => {
+    el.hidden = i !== step;
+    // replay the entrance animation in the direction of travel
+    if (i === step) {
+      el.classList.toggle('back', back);
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = '';
+    }
+  });
+  [...dots.children].forEach((d, i) => d.classList.toggle('on', i === step));
+  welcomePane.style.setProperty('--glow', steps[step]?.dataset.glow ?? '#6f86ff');
   const last = step === steps.length - 1;
   $('w-back').style.visibility = step === 0 ? 'hidden' : '';
-  $('w-skip').hidden = last;
-  $('w-next').textContent = t(last ? 'Готово' : 'Дальше');
-  $('w-count').textContent = step + 1 + ' / ' + steps.length;
+  // skipping means something only where a step asks for an action (Claude Code, calendar)
+  $('w-skip').hidden = !steps[step]?.querySelector('.w-actions');
+  $('w-next').textContent = t(last ? 'Начать' : 'Дальше');
   $('w-cal-mac').hidden = isWin;
   $('w-cal-win').hidden = !isWin;
   $('w-cal').textContent = t(isWin ? 'Выбрать источник' : 'Разрешить доступ');
   $('w-where').textContent = t(
     isWin
-      ? 'Остров - у верхнего края экрана, наведите на него курсор. Меню - значок Almanac Notch в трее.'
-      : 'Остров - у выреза камеры, наведите на него курсор. Меню - значок Almanac Notch в строке меню.',
+      ? 'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.'
+      : 'Остров - у выреза камеры: наведите на него курсор. Меню - значок Almanac Notch в строке меню.',
   );
+  renderModCount();
+}
+function renderModCount(): void {
+  const n = toggles.filter((x) => x.closest('.w-tiles') && x.checked).length;
+  $('w-mods-count').textContent = t('Выбрано {0} из 4', n);
+}
+function goStep(to: number): void {
+  const back = to < step;
+  step = Math.max(0, Math.min(steps.length - 1, to));
+  renderStep(back);
+  // the mascot follows the guide: hello, a nod on each step, a celebration at the end
+  if (step === steps.length - 1) mascot?.react('dance');
+  else if (!back && step > 0) mascot?.poke();
 }
 function showWelcome(): void {
-  step = 0;
   showTab('welcome');
+  mascot ??= welcomeMascot($<HTMLCanvasElement>('w-stage'));
+  mascot.setRunning(true);
+  step = 0;
   renderStep();
+  setTimeout(() => mascot?.react('greeting'), 350);
 }
 async function finishWelcome(): Promise<void> {
   $('w-error').textContent = '';
@@ -709,37 +765,39 @@ async function finishWelcome(): Promise<void> {
       $('w-error').textContent = String(e);
       return;
     }
+  mascot?.setRunning(false);
   showTab('general');
 }
 $('w-next').addEventListener('click', () => {
   if (step === steps.length - 1) void finishWelcome();
-  else {
-    step++;
-    renderStep();
-  }
+  else goStep(step + 1);
 });
-$('w-skip').addEventListener('click', () => {
-  step++;
-  renderStep();
-});
-$('w-back').addEventListener('click', () => {
-  step = Math.max(0, step - 1);
-  renderStep();
-});
+$('w-skip').addEventListener('click', () => goStep(step + 1));
+$('w-back').addEventListener('click', () => goStep(step - 1));
 $('w-hooks').addEventListener('click', () => act('hooks:install'));
 $('w-cal').addEventListener('click', () => {
   // Windows: the source is picked on the calendar page; the guide comes back from the tray
-  if (isWin) showModule('calendar');
-  else void invoke('calendar_access');
+  if (isWin) {
+    mascot?.setRunning(false);
+    showModule('calendar');
+  } else void invoke('calendar_access');
 });
-// the guide repeats the Claude Code and calendar status lines
+for (const x of toggles)
+  if (x.closest('.w-tiles'))
+    x.addEventListener('change', () => {
+      renderModCount();
+      if (x.checked) mascot?.poke();
+    });
+// the guide repeats the Claude Code and calendar status lines; hooks going in is worth a cheer
 for (const [from, to] of [
   ['hooks', 'w-hooks'],
   ['cal', 'w-cal'],
 ] as const) {
   const copy = (): void => {
+    const was = $(to + '-dot').className;
     $(to + '-status').textContent = $(from + '-status').textContent;
     $(to + '-dot').className = $(from + '-dot').className;
+    if (!was.includes('ok') && $(to + '-dot').className.includes('ok') && !welcomePane.hidden) mascot?.react('success');
   };
   const o = new MutationObserver(copy);
   o.observe($(from + '-status'), { childList: true, characterData: true, subtree: true });

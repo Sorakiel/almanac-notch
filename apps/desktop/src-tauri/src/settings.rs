@@ -22,7 +22,7 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
             let _ = w.set_focus();
             return;
         }
-        match WebviewWindowBuilder::new(
+        let builder = WebviewWindowBuilder::new(
             &app2,
             "settings",
             WebviewUrl::App(
@@ -38,8 +38,13 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
         .resizable(false)
         .maximizable(false)
         .center()
-        .build()
-        {
+        .background_color(tauri::window::Color(17, 17, 19, 255));
+        // macOS: the traffic lights sit over the sidebar, no title bar strip (like System Settings)
+        #[cfg(target_os = "macos")]
+        let builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+        match builder.build() {
             Ok(w) => {
                 let _ = w.set_focus();
             }
