@@ -217,8 +217,19 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, e| action(app, e.id().as_ref()));
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
+    // the mascot (scripts/icon.mjs): a template image on macOS, so the menu bar tints it for
+    // light and dark; the light one elsewhere (dark taskbar)
+    #[cfg(target_os = "macos")]
+    let png: &[u8] = include_bytes!("../icons/tray-template.png");
+    #[cfg(not(target_os = "macos"))]
+    let png: &[u8] = include_bytes!("../icons/tray-light.png");
+    match tauri::image::Image::from_bytes(png) {
+        Ok(icon) => tray = tray.icon(icon).icon_as_template(cfg!(target_os = "macos")),
+        Err(_) => {
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+        }
     }
     tray.build(app)?;
     Ok(())
