@@ -23,6 +23,7 @@ const input = $<HTMLInputElement>('token'),
   connected = $('connected');
 
 const inTauri = '__TAURI_INTERNALS__' in window;
+const isWin = navigator.userAgent.includes('Windows');
 if (import.meta.env.DEV) document.body.classList.add('dev');
 /** the first-run guide's live mascot, made when the guide first opens */
 let mascot: WelcomeMascot | null = null;
@@ -390,8 +391,18 @@ $('al-more').addEventListener('click', () => {
 // ---------- tabs and the module list (Raycast-like) ----------
 const mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
 /** "welcome" covers the window with the first-run guide; anything else is a page of the sidebar */
+// Windows: step 3 of the guide shows the calendar page's own source picker (one set of controls,
+// and the guide never leaves for the calendar page with no way back)
+const calPickEl = $('cal-pick'),
+  calPickHome = calPickEl.parentElement as HTMLElement,
+  calPickNext = calPickEl.nextSibling;
+function calPickInGuide(on: boolean): void {
+  if (on) $('w-cal-slot').append(calPickEl);
+  else calPickHome.insertBefore(calPickEl, calPickNext);
+}
 function showTab(name: string): void {
   const welcome = name === 'welcome';
+  if (isWin) calPickInGuide(welcome);
   $('tab-welcome').hidden = !welcome;
   $('tab-modules').hidden = welcome;
   if (!welcome) {
@@ -678,7 +689,6 @@ interface AppInfo {
   autostart: boolean;
   update: UpdateState;
 }
-const isWin = navigator.userAgent.includes('Windows');
 let appInfo: AppInfo | null = null,
   lastUpd: UpdateState = { state: 'idle', version: null, progress: null, error: null };
 function renderApp(a: AppInfo | null): void {
@@ -757,6 +767,8 @@ function renderStep(back = false): void {
   $('w-next').textContent = t(last ? 'Начать' : 'Дальше');
   $('w-cal-mac').hidden = isWin;
   $('w-cal-win').hidden = !isWin;
+  // Windows picks the source right in the step; the button is the Mac permission prompt
+  $('w-cal').hidden = isWin;
   $('w-where').textContent = t(
     isWin
       ? 'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.'
@@ -808,12 +820,6 @@ $('w-skip').addEventListener('click', () => goStep(step + 1));
 $('w-back').addEventListener('click', () => goStep(step - 1));
 $('w-hooks').addEventListener('click', () => act('hooks:install'));
 $('w-cal').addEventListener('click', () => {
-  // Windows: the source is picked on the calendar page; the guide comes back from the tray
-  if (isWin) {
-    mascot?.setRunning(false);
-    showModule('calendar');
-    return;
-  }
   // asking for access means the calendar is wanted: switch the module on too
   if (modCfg.off.includes('cal')) void saveModules({ ...modCfg, off: modCfg.off.filter((x) => x !== 'cal') });
   void invoke('calendar_access');

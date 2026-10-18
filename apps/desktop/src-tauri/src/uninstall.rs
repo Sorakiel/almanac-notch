@@ -145,7 +145,7 @@ fn hooks_step(warnings: &mut Vec<String>) {
 /// The confirmation window: inside the running app on Mac, the temp copy's only window on Windows.
 pub fn open_window(app: &AppHandle) {
     let app2 = app.clone();
-    let _ = app.run_on_main_thread(move || {
+    crate::settings::on_ui(app, move || {
         if let Some(w) = app2.get_webview_window("bye") {
             let _ = w.show();
             let _ = w.set_focus();

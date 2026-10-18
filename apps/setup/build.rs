@@ -26,7 +26,10 @@ fn main() {
         format!("/// bytes of the installed app files\npub const INSTALL_BYTES: u64 = {bytes};\n"),
     )
     .unwrap();
-    let windows = tauri_build::WindowsAttributes::new().app_manifest(include_str!("setup.manifest"));
+    // the exe's own icon (Explorer, taskbar): the app's mascot, not tauri-build's default path
+    let windows = tauri_build::WindowsAttributes::new()
+        .app_manifest(include_str!("setup.manifest"))
+        .window_icon_path("../desktop/src-tauri/icons/icon.ico");
     tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
         .expect("tauri-build failed");
 }

@@ -868,3 +868,12 @@ body:not(.dev) .dev-only {
     transform: rotate(360deg);
   }
 }
+/* Windows: the calendar source picker inside the guide's step 3 (the link help stays on the page) */
+.w-cal-slot {
+  width: 100%;
+  max-width: 440px;
+  text-align: left;
+}
+.w-cal-slot .help {
+  display: none;
+}

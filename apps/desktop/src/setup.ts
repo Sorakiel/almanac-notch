@@ -36,7 +36,11 @@ let info: Info = { version: '0.1.1', dir: '', installed: null, desktop: false };
 let dir = '';
 function setDir(d: string): void {
   dir = d;
-  $('dir').textContent = d;
+  // line breaks only after a backslash, so a folder name never splits in two
+  const parts = d.split('\\');
+  $('dir').replaceChildren(
+    ...parts.flatMap((part, i) => (i < parts.length - 1 ? [part + '\\', document.createElement('wbr')] : [part])),
+  );
   $('pick').title = d;
 }
 

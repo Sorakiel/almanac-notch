@@ -57,19 +57,17 @@
   background: rgba(255, 255, 255, 0.09);
   color: var(--text);
 }
-/* the install folder: the path in mono, cut in the middle by the browser's ellipsis at the end */
+/* the install folder: the whole path in mono, wrapping anywhere (a long path stays readable) */
 .path {
   min-width: 0;
-  overflow: hidden;
+  margin-top: 2px;
   color: var(--muted);
   font:
-    11.5px/1.4 'JetBrains Mono',
+    11.5px/1.45 'JetBrains Mono',
     ui-monospace,
     monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
+  overflow-wrap: break-word;
+  user-select: text;
 }
 .g-row > .grow {
   min-width: 0;
