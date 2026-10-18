@@ -16,6 +16,14 @@ const win = process.platform === 'win32';
 const mac = process.platform === 'darwin';
 if (!win && !mac) throw new Error('installer: only Windows and macOS');
 
+// Mac: the self-signed "Almanac Notch" certificate gives every build the same signature, so the
+// keychain and calendar permissions survive rebuilds and updates. Tauri signs only with a trusted
+// identity in the keychain (README, "Релиз" - one-time setup); without it the build is ad-hoc.
+if (mac && !process.env.APPLE_SIGNING_IDENTITY) {
+  const ids = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], { encoding: 'utf8' }).stdout ?? '';
+  if (ids.includes('"Almanac Notch"')) process.env.APPLE_SIGNING_IDENTITY = 'Almanac Notch';
+  else console.log('[installer] no "Almanac Notch" signing certificate: ad-hoc signature');
+}
 const args = ['tauri', 'build', '--bundles', win ? 'nsis' : 'app,dmg'];
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY)
   args.push('-c', JSON.stringify({ bundle: { createUpdaterArtifacts: false } }));

@@ -57,11 +57,21 @@
 - `TAURI_SIGNING_PRIVATE_KEY` - содержимое `~/.tauri/almanac-notch.key` (закрытый ключ подписи обновлений; открытый уже в `tauri.conf.json`). Ключ не терять и не публиковать: без него установленные приложения не примут обновление.
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` - пароль ключа (у текущего - пустой, секрет можно не создавать).
 - `ALMANAC_URL`, `ALMANAC_KEY` - адрес и публичный ключ Almanac (без них модуль показывает пример привычек).
+- `MAC_CERT_P12` - `base64 -i ~/.tauri/almanac-notch-sign.p12`, `MAC_CERT_PASSWORD` - содержимое `~/.tauri/almanac-notch-sign.pass`. Это самоподписанный сертификат «Almanac Notch»: все сборки Mac подписаны одинаково, и macOS не спрашивает заново пароль связки ключей и доступ к календарю после каждого обновления. Без него сборка подписана ad-hoc. Сертификат не терять.
 
 Каждый релиз:
 1. `npm run release:version 0.1.1` - версия во всех файлах, закоммитить.
 2. `git tag v0.1.1 && git push origin v0.1.1` - через 15-25 минут в Releases появится черновик.
 3. Проверить файлы черновика и нажать «Publish release». Только после публикации установленные приложения увидят новую версию. Тег с дефисом (`v0.2.0-rc.1`) создаёт пре-релиз - его автообновление не предлагает.
+
+Локальная сборка на Mac подписывается тем же сертификатом, если один раз добавить его в связку «Вход» как доверенный для подписи кода (спросит пароль):
+
+```bash
+security import ~/.tauri/almanac-notch-sign.p12 -k ~/Library/Keychains/login.keychain-db -P "$(cat ~/.tauri/almanac-notch-sign.pass)" -T /usr/bin/codesign
+security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db ~/.tauri/almanac-notch-sign.pem
+```
+
+Без этого `npm run installer` подписывает ad-hoc и пишет об этом.
 
 Иконки (маскот) пересобираются `node apps/desktop/scripts/icon.mjs`.
 

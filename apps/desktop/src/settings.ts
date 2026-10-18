@@ -7,6 +7,7 @@ import '@fontsource/onest/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { AlState, Calendar, GfState, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
 import { welcomeMascot, type WelcomeMascot } from './welcome-mascot';
@@ -22,6 +23,7 @@ const input = $<HTMLInputElement>('token'),
   connected = $('connected');
 
 const inTauri = '__TAURI_INTERNALS__' in window;
+if (import.meta.env.DEV) document.body.classList.add('dev');
 /** the first-run guide's live mascot, made when the guide first opens */
 let mascot: WelcomeMascot | null = null;
 
@@ -726,7 +728,6 @@ function renderStep(back = false): void {
   $('w-next').textContent = t(last ? 'Начать' : 'Дальше');
   $('w-cal-mac').hidden = isWin;
   $('w-cal-win').hidden = !isWin;
-  $('w-cal').textContent = t(isWin ? 'Выбрать источник' : 'Разрешить доступ');
   $('w-where').textContent = t(
     isWin
       ? 'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.'
@@ -766,7 +767,9 @@ async function finishWelcome(): Promise<void> {
       return;
     }
   mascot?.setRunning(false);
-  showTab('general');
+  showModule('general');
+  // the island is what comes next, not settings; reopening the window starts on General
+  if (inTauri) void getCurrentWindow().close();
 }
 $('w-next').addEventListener('click', () => {
   if (step === steps.length - 1) void finishWelcome();
@@ -780,7 +783,11 @@ $('w-cal').addEventListener('click', () => {
   if (isWin) {
     mascot?.setRunning(false);
     showModule('calendar');
-  } else void invoke('calendar_access');
+    return;
+  }
+  // asking for access means the calendar is wanted: switch the module on too
+  if (modCfg.off.includes('cal')) void saveModules({ ...modCfg, off: modCfg.off.filter((x) => x !== 'cal') });
+  void invoke('calendar_access');
 });
 for (const x of toggles)
   if (x.closest('.w-tiles'))
@@ -797,7 +804,22 @@ for (const [from, to] of [
     const was = $(to + '-dot').className;
     $(to + '-status').textContent = $(from + '-status').textContent;
     $(to + '-dot').className = $(from + '-dot').className;
-    if (!was.includes('ok') && $(to + '-dot').className.includes('ok') && !welcomePane.hidden) mascot?.react('success');
+    const ok = $(to + '-dot').className.includes('ok');
+    if (!was.includes('ok') && ok && !welcomePane.hidden) mascot?.react('success');
+    // done: the step's button says so instead of offering the same action again
+    const btn = $<HTMLButtonElement>(to);
+    btn.disabled = ok;
+    btn.textContent = t(
+      to === 'w-hooks'
+        ? ok
+          ? 'Подключено'
+          : 'Подключить'
+        : ok
+          ? 'Доступ есть'
+          : isWin
+            ? 'Выбрать источник'
+            : 'Разрешить доступ',
+    );
   };
   const o = new MutationObserver(copy);
   o.observe($(from + '-status'), { childList: true, characterData: true, subtree: true });

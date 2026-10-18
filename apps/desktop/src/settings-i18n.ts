@@ -65,6 +65,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   Пропустить: 'Skip',
   Дальше: 'Next',
   Начать: 'Start',
+  Подключено: 'Connected',
+  'Доступ есть': 'Access granted',
   'Открыть приветствие': 'Open the welcome guide',
   // tabs and the general page
   Общие: 'General',

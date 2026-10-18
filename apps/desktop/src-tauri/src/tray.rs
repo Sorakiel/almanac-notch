@@ -103,7 +103,8 @@ use crate::lang::t;
 
 fn menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, Vec<CheckMenuItem<Wry>>)> {
     let menu = Menu::new(app)?;
-    for (key, ev, (ru, en)) in EVENTS {
+    // test events: development builds only, a release menu is for people
+    for (key, ev, (ru, en)) in EVENTS.into_iter().filter(|_| cfg!(debug_assertions)) {
         let label = t(ru, en);
         // The key works while the menu is open, like the prototype's keyboard shortcuts.
         let item =
@@ -118,7 +119,9 @@ fn menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, Vec<CheckMenuItem<Wry>>)> 
             })?;
         menu.append(&item)?;
     }
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    if cfg!(debug_assertions) {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+    }
 
     let mut checks: Vec<CheckMenuItem<Wry>> = Vec::new();
     let states = Submenu::new(app, t("Состояние", "State"), true)?;

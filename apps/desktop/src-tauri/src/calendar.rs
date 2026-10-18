@@ -465,8 +465,12 @@ mod mac {
 
     /// Tray: ask if never asked; once refused, only System Settings can change it.
     pub fn open_access() {
-        if status() == EKAuthorizationStatus::NotDetermined {
+        let st = status();
+        if st == EKAuthorizationStatus::NotDetermined {
             request_access();
+        } else if st == EKAuthorizationStatus::FullAccess {
+            // already granted: just read again (the guide's button may be pressed twice)
+            poke();
         } else {
             let _ = std::process::Command::new("/usr/bin/open")
                 .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")

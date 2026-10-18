@@ -5,6 +5,8 @@
 # Repository secrets:
 #   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD - updater key (README, "Релиз")
 #   ALMANAC_URL, ALMANAC_KEY - Almanac project address and public key (optional)
+#   MAC_CERT_P12 (base64), MAC_CERT_PASSWORD - the self-signed "Almanac Notch" code signing
+#     certificate (~/.tauri/almanac-notch-sign.*); without them the Mac build is ad-hoc signed
 # Apple signing and notarization are off (owner, 2026-10-18); to turn them on add APPLE_CERTIFICATE,
 # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID to
 # the secrets and to the env below.
@@ -30,6 +32,9 @@ jobs:
             args: ''
             targets: ''
     runs-on: ${{ matrix.os }}
+    env:
+      # secrets can't be read in `if:`; this flag can
+      HAS_CERT: ${{ secrets.MAC_CERT_P12 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +54,28 @@ jobs:
             apps/desktop/hook -> target
 
       - run: npm ci
+
+      # Mac: the self-signed "Almanac Notch" certificate, trusted on this throwaway runner only,
+      # so every release has the same signature (keychain and calendar permissions survive updates)
+      - name: Signing certificate
+        if: runner.os == 'macOS' && env.HAS_CERT == 'true'
+        env:
+          CERT: ${{ secrets.MAC_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          echo "$CERT" | base64 --decode > cert.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security set-keychain-settings -t 3600 build.keychain
+          security import cert.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k ci build.keychain
+          security list-keychains -d user -s build.keychain login.keychain
+          openssl pkcs12 -in cert.p12 -passin env:CERT_PASSWORD -nokeys -legacy -out cert.pem 2>/dev/null || openssl pkcs12 -in cert.p12 -passin env:CERT_PASSWORD -nokeys -out cert.pem
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain cert.pem
+          rm cert.p12 cert.pem
+          security find-identity -v -p codesigning
+          echo "APPLE_SIGNING_IDENTITY=Almanac Notch" >> "$GITHUB_ENV"
 
       - uses: tauri-apps/tauri-action@v0
         env:

@@ -806,3 +806,15 @@ button:disabled {
   background: rgba(255, 255, 255, 0.04);
   text-align: left;
 }
+/* Almanac's own mark: orange with a dark diamond (almanac-app/public/favicon.svg) */
+.almanac-ico {
+  background: linear-gradient(135deg, #f59e5c, #e8632a);
+}
+.almanac-ico svg {
+  stroke: #1a1206;
+  stroke-width: 2.4;
+}
+/* test buttons for island events: development builds only */
+body:not(.dev) .dev-only {
+  display: none !important;
+}
