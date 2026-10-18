@@ -18,6 +18,7 @@ export {
   type AgentFeed,
   type CalFeed,
   type MediaFeed,
+  type HostPrefs,
   type GithubFeed,
   type VercelFeed,
   type NotionFeed,

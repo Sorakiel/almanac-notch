@@ -1,7 +1,7 @@
 // The non-home tabs of the open island: chat, add a module, settings (docs/SPEC.md 2.6).
 import { tr } from '../i18n';
 import { rrect, textAt, type Ctx } from '../util/draw';
-import type { IslandState } from '../sim/state';
+import type { HostPrefs, IslandState } from '../sim/state';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { card, cardMascot } from './card';
@@ -69,6 +69,7 @@ export function drawAdd(s: IslandState, c: Ctx, X0: number, X1: number, y0: numb
 
 /** proto: drawSettings */
 export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
+  if (s.host) return drawHostSettings(s, c, X0, X1, y0, y1, s.host);
   // in the app: a row that opens the settings window with every module (not in the prototype, docs/CHANGES.md)
   const rows: [string, boolean | null][] = [...s.prefs, ['Язык · Русский', null]];
   if (s.settingsLink) rows.push(['Все настройки', null]);
@@ -99,4 +100,123 @@ export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0:
       addHit(s, c, { x: X0, y, w: X1 - X0, h, act: 'pref:' + i });
     }
   });
+}
+
+const SEG_FONT = '500 11.5px Onest, system-ui, sans-serif';
+
+/** A segmented control ending at `right`; the picked item is a lighter pill. */
+function segment(
+  s: IslandState,
+  c: Ctx,
+  right: number,
+  y: number,
+  items: [string, string][],
+  cur: string,
+  act: string,
+): void {
+  const H = 22,
+    pad = 9;
+  c.save();
+  c.font = SEG_FONT;
+  const widths = items.map(([label]) => c.measureText(tr(s, label)).width + pad * 2);
+  c.restore();
+  let x = right - widths.reduce((a, b) => a + b, 0) - 4;
+  c.fillStyle = 'rgba(255,255,255,0.06)';
+  rrect(c, x, y - H / 2 - 2, right - x, H + 4, (H + 4) / 2);
+  c.fill();
+  x += 2;
+  items.forEach(([label, value], i) => {
+    const w = widths[i] as number,
+      on = value === cur,
+      hov = !on && hovering(s, x, y - H / 2, w, H);
+    if (on || hov) {
+      c.fillStyle = on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.07)';
+      rrect(c, x, y - H / 2, w, H, H / 2);
+      c.fill();
+    }
+    textAt(c, tr(s, label), x + w / 2, y + 0.5, {
+      size: 11.5,
+      align: 'center',
+      color: on ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)',
+    });
+    if (!on) addHit(s, c, { x, y: y - H / 2, w, h: H, act: act + ':' + value });
+    x += w;
+  });
+}
+
+/** A text button (a pill shows on hover), ending at `right`; returns its left edge. */
+function linkButton(s: IslandState, c: Ctx, right: number, y: number, label: string, act: string): number {
+  c.save();
+  c.font = SEG_FONT;
+  const w = c.measureText(tr(s, label)).width + 18;
+  c.restore();
+  const x = right - w,
+    hov = hovering(s, x, y - 11, w, 22);
+  if (hov) {
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    rrect(c, x, y - 11, w, 22, 11);
+    c.fill();
+  }
+  textAt(c, tr(s, label), x + w / 2, y + 0.5, {
+    size: 11.5,
+    align: 'center',
+    color: hov ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.6)',
+  });
+  addHit(s, c, { x, y: y - 11, w, h: 22, act });
+  return x;
+}
+
+/** The app's settings card (stage 8g, docs/CHANGES.md; the reference is coucou's): the mascot,
+ *  the island state and the language, the version, "Settings…" and "Quit". Every control is
+ *  real; the prototype's switches for sounds, launch at login and open on hover are gone (sounds
+ *  come back in stage 9, launch at login lives in the settings window). */
+function drawHostSettings(
+  s: IslandState,
+  c: Ctx,
+  X0: number,
+  X1: number,
+  y0: number,
+  y1: number,
+  host: HostPrefs,
+): void {
+  card(c, X0, y0, X1 - X0, y1 - y0, false);
+  cardMascot(s, c, X0, y0, y1, null, null);
+  const L = X0 + 92,
+    R = X1 - 14,
+    h = y1 - y0,
+    r1 = y0 + h * 0.24,
+    r2 = y0 + h * 0.52,
+    r3 = y0 + h * 0.82;
+  textAt(c, tr(s, 'Остров'), L, r1 + 0.5, { size: 12.5 });
+  segment(
+    s,
+    c,
+    R,
+    r1,
+    [
+      ['Авто', 'auto'],
+      ['Закрыто', 'closed'],
+      ['Полуоткрыто', 'half'],
+      ['Открыто', 'open'],
+    ],
+    host.nstate,
+    'host:nstate',
+  );
+  textAt(c, tr(s, 'Язык'), L, r2 + 0.5, { size: 12.5 });
+  segment(
+    s,
+    c,
+    R,
+    r2,
+    [
+      ['Как в системе', 'auto'],
+      ['Русский', 'ru'],
+      ['English', 'en'],
+    ],
+    host.lang,
+    'host:lang',
+  );
+  textAt(c, 'Almanac Notch ' + host.version, L, r3 + 0.5, { size: 11, color: T_MUTED });
+  const quitX = linkButton(s, c, R, r3, 'Выйти', 'host:quit');
+  linkButton(s, c, quitX - 4, r3, 'Настройки…', 'open:settings');
 }

@@ -106,6 +106,18 @@ export const EN: Readonly<Record<string, string>> = {
   Почта: 'Mail',
   'Язык · Русский': 'Language · English',
   'Все настройки': 'All settings',
+  // the app's settings card (stage 8g)
+  Остров: 'Island',
+  Авто: 'Auto',
+  Закрыто: 'Closed',
+  Полуоткрыто: 'Half-open',
+  Открыто: 'Open',
+  Язык: 'Language',
+  'Как в системе': 'System',
+  // a language's name stays in its own language
+  Русский: 'Русский',
+  Выйти: 'Quit',
+  'Настройки…': 'Settings…',
   Звуки: 'Sounds',
   'Запуск при входе': 'Launch at login',
   'Открывать при наведении': 'Open on hover',

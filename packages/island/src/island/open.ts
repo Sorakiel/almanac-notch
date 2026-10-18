@@ -193,10 +193,13 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
     icon(s, c, k, x, y, on);
     addHit(s, c, { x: x - 13, y: y - 11, w: 26, h: 22, act });
   });
-  const right: [IconKind, string, number][] = [
-    ['gear', 'tab:settings', x1 - 50],
-    ['sound', 'mute', x1 - 22],
-  ];
+  // the app has no sounds yet (stage 9): no speaker, the gear takes its place (docs/CHANGES.md)
+  const right: [IconKind, string, number][] = s.host
+    ? [['gear', 'tab:settings', x1 - 22]]
+    : [
+        ['gear', 'tab:settings', x1 - 50],
+        ['sound', 'mute', x1 - 22],
+      ];
   right.forEach(([k, act, x]) => {
     const on = k === 'gear' && s.tab === 'settings',
       hov = hovering(s, x - 13, y - 11, 26, 22);

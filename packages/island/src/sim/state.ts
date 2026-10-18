@@ -320,6 +320,9 @@ export interface IslandState {
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
   settingsLink: boolean;
+  /** the app's own settings card (stage 8g, docs/CHANGES.md): its real settings; null = the
+   *  prototype's card (harness) */
+  host: HostPrefs | null;
   /** modules the user switched off in the app: no chip, rail item, card or mini mascot */
   off: ModuleId[];
   /** the chat tab is switched off: no chat icon in the top bar */
@@ -381,6 +384,13 @@ export interface IslandState {
 }
 
 /** a clickable zone of the island, rebuilt every frame (proto: hits) */
+/** What the app's settings card shows and changes (the island state, the language, quit). */
+export interface HostPrefs {
+  nstate: 'auto' | 'closed' | 'half' | 'open';
+  lang: 'auto' | 'ru' | 'en';
+  version: string;
+}
+
 export interface Hit {
   x: number;
   y: number;
@@ -434,6 +444,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     almanac: null,
     requests: [],
     settingsLink: false,
+    host: null,
     off: [],
     chatOff: false,
     iconSet: 'proto',

@@ -1,6 +1,6 @@
 // Pointer input on the island canvas, without DOM listeners. Points are in island CSS px (proto: islandPoint).
 import { clamp } from '../util/math';
-import type { Hit, IslandState, MediaFeed } from '../sim/state';
+import type { Hit, HostPrefs, IslandState, MediaFeed } from '../sim/state';
 import { hop, poke, wake } from '../sim/actions';
 import { answer, trigger, type Answer } from '../sim/events';
 import { nextTrack } from '../sim/music';
@@ -73,6 +73,13 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
     hb[1] = !hb[1];
     habitTicked(s, hb[1]);
   } else if (act === 'open:settings') s.requests.push('settings:');
+  // the app's settings card: shown at once, carried out by the host
+  else if (act.startsWith('host:') && s.host) {
+    const [, key, v] = act.split(':');
+    if (key === 'nstate') s.host.nstate = v as HostPrefs['nstate'];
+    else if (key === 'lang') s.host.lang = v as HostPrefs['lang'];
+    s.requests.push(act);
+  }
   // not in the prototype: the Vercel card's arrow opens the deployment on vercel.com (the app)
   else if (act.startsWith('vercel:')) s.requests.push(act);
   // not in the prototype: a Notion card row opens the page (the app)

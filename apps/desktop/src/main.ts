@@ -22,6 +22,7 @@ import {
   islandRect,
   notchState,
   type EventType,
+  type HostPrefs,
   type IslandPoint,
   type ModuleId,
 } from '@almanac-notch/island';
@@ -78,6 +79,8 @@ const s = m.state;
 }
 s.bare = true;
 s.settingsLink = true;
+// the settings tab is the app's own card with real controls (stage 8g, docs/CHANGES.md)
+s.host = { nstate: 'auto', lang: 'auto', version: '' };
 s.iconSet = 'solid';
 
 const island = document.getElementById('island') as HTMLCanvasElement,
@@ -245,7 +248,10 @@ function debug(id: string): void {
   // tray events demo the prototype's stub data; the next real hook brings live data back
   if (kind === 'ev') s.agent = null;
   if (kind === 'ev' && isEvent(v)) m.trigger(v);
-  else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) S.nstate = v;
+  else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) {
+    S.nstate = v;
+    if (s.host) s.host.nstate = v as HostPrefs['nstate'];
+  }
 }
 
 if (inTauri) {
@@ -324,14 +330,21 @@ if (inTauri) {
   });
   applyModules(await invoke('modules_get'));
   // interface language (stage 8): the island translates itself through tr(s, ...)
-  const applyLang = (c: { lang: string }): void => {
+  const applyLang = (c: { lang: string; pick: string }): void => {
     s.lang = c.lang === 'en' ? 'en' : 'ru';
+    if (s.host && (c.pick === 'auto' || c.pick === 'ru' || c.pick === 'en')) s.host.lang = c.pick;
   };
-  await listen<{ lang: string }>('island://lang', (e) => {
+  await listen<{ lang: string; pick: string }>('island://lang', (e) => {
     wake();
     applyLang(e.payload);
   });
   applyLang(await invoke('lang_get'));
+  // the settings card: the island state (tray and settings window share it) and the version
+  if (s.host) {
+    const st = await invoke<{ state: string }>('island_status');
+    debug('nstate:' + st.state);
+    s.host.version = (await invoke<{ version: string }>('app_info')).version;
+  }
   const f = await invoke<Feeds>('feeds_state');
   if (f.github) github.onState(f.github);
   if (f.vercel) vercel.onState(f.vercel);
@@ -411,6 +424,10 @@ function tick(now: number, id: number): void {
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
     else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));
+    // the settings card: the tray's own actions, so the tray and the settings window agree
+    else if (r.startsWith('host:nstate:')) void invoke('island_action', { id: 'nstate:' + r.slice(12) });
+    else if (r.startsWith('host:lang:')) void invoke('lang_set', { pick: r.slice(10) });
+    else if (r === 'host:quit') void invoke('island_action', { id: 'quit' });
   if (inTauri) void syncHotkeys();
   idle = isIdle();
   if (!idle || S.screen !== 'mac') draw();
