@@ -31,84 +31,157 @@ export const TOOL_TAG: Readonly<Record<ToolKind, readonly [string, string]>> = {
   grep: ['/', '#5FD6F0'],
 };
 
-/** a tool as a small line icon (2026-10-19, instead of the prototype's letter tags): terminal,
- * page, pencil, magnifier - read at a glance, as Grok Bot's step icons */
-function toolIcon(c: Ctx, kind: ToolKind, x: number, y: number, col: string): void {
+/** a tool as a line glyph in a rounded square - one family, as Grok Bot's step icons (2026-10-19):
+ * terminal prompt, page lines, pencil, magnifier */
+function toolIcon(c: Ctx, kind: ToolKind, x: number, y: number, col: string, z = 1): void {
   c.save();
+  c.translate(x, y);
+  c.scale(z, z);
   c.strokeStyle = col;
-  c.lineWidth = 1.3;
+  c.lineWidth = 1.15;
   c.lineCap = 'round';
   c.lineJoin = 'round';
   c.beginPath();
+  rrect(c, -5.5, -5.5, 11, 11, 2.6);
+  c.stroke();
+  c.beginPath();
   if (kind === 'bash') {
-    rrect(c, x - 5.5, y - 4.5, 11, 9, 2.2);
-    c.moveTo(x - 3, y - 1.6);
-    c.lineTo(x - 1, y + 0.2);
-    c.lineTo(x - 3, y + 2);
-    c.moveTo(x + 0.4, y + 2.2);
-    c.lineTo(x + 3, y + 2.2);
+    c.moveTo(-3, -1.8);
+    c.lineTo(-1.2, 0);
+    c.lineTo(-3, 1.8);
+    c.moveTo(0.2, 2.2);
+    c.lineTo(2.8, 2.2);
   } else if (kind === 'read') {
-    rrect(c, x - 4, y - 5.5, 8, 11, 1.8);
-    c.moveTo(x - 1.8, y - 1.8);
-    c.lineTo(x + 1.8, y - 1.8);
-    c.moveTo(x - 1.8, y + 1.2);
-    c.lineTo(x + 1.8, y + 1.2);
+    c.moveTo(-2.6, -2);
+    c.lineTo(2.6, -2);
+    c.moveTo(-2.6, 0.2);
+    c.lineTo(2.6, 0.2);
+    c.moveTo(-2.6, 2.4);
+    c.lineTo(0.6, 2.4);
   } else if (kind === 'edit') {
-    c.moveTo(x - 4.2, y + 4.2);
-    c.lineTo(x - 3.6, y + 1.6);
-    c.lineTo(x + 2.4, y - 4.4);
-    c.lineTo(x + 4.4, y - 2.4);
-    c.lineTo(x - 1.6, y + 3.6);
+    c.moveTo(-2.6, 2.6);
+    c.lineTo(-2.2, 1);
+    c.lineTo(1.6, -2.8);
+    c.lineTo(2.8, -1.6);
+    c.lineTo(-1, 2.2);
     c.closePath();
   } else {
-    c.arc(x - 1, y - 1, 3.6, 0, Math.PI * 2);
-    c.moveTo(x + 1.7, y + 1.7);
-    c.lineTo(x + 4.4, y + 4.4);
+    c.arc(-0.6, -0.6, 2.2, 0, Math.PI * 2);
+    c.moveTo(1.1, 1.1);
+    c.lineTo(2.8, 2.8);
   }
   c.stroke();
   c.restore();
 }
 
-/** proto: drawSteps - the agent's last three steps, oldest on top (2026-10-19, after Grok Bot):
- * the current one at the bottom, bigger and bright - verb muted, target bright, its diff on the
- * right; the older ones above, smaller and fading. A new step rises in from below and pushes the
- * others up, so the list reads as one moving line of work */
+function ruCount(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10,
+    m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+}
+
+/** the session so far, for the line under the current step: steps taken, files changed */
+function sessionLine(s: IslandState, cur: number): string {
+  // the demo cycles through its steps, so it counts the ones on screen and a few before
+  const n = s.agent ? s.agent.steps.length : cur + 3,
+    files = new Set<string>();
+  for (let i = s.agent ? Math.max(0, cur - 60) : cur - 6; i <= cur; i++) {
+    const st = stepAt(s, i);
+    if (st && st[0] === 'edit') files.add(st[2]);
+  }
+  const f = files.size;
+  if (s.lang === 'en') return `${n} ${plural(n, 'step', 'steps')} · ${f} ${plural(f, 'file', 'files')} changed`;
+  return `${n} ${ruCount(n, 'шаг', 'шага', 'шагов')} · ${f} ${ruCount(f, 'файл изменён', 'файла изменено', 'файлов изменено')}`;
+}
+
+/** proto: drawSteps - Grok Bot's step list (2026-10-19): the previous step above, small and dim;
+ * the current one in the middle, bigger, a little to the right, with a slow light sweeping over
+ * it; under it the session so far (Claude Code's hooks only tell what was done, there is no "next
+ * step" to show). A new step rises from below into the middle, the old one shrinks up and away */
 export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: number): void {
   const ev = s.event;
   if (!ev) return;
   const cur = stepIndex(s),
     frac = stepFrac(s),
-    k = ss(0, 1, frac / 0.18),
-    lift = (1 - k) * 20;
-  for (let j = 2; j >= 0; j--) {
-    const st = stepAt(s, cur - j);
-    if (!st) continue;
-    const now = j === 0,
-      y = y0 + (now ? 86 : j === 1 ? 62 : 42) + lift,
-      a = now ? k : j === 1 ? 0.55 : 0.3 * k + 0.1;
-    if (y > y0 + 104) continue;
+    k = ss(0, 1, frac / 0.22);
+  const Y_PREV = y0 + 44,
+    Y_CUR = y0 + 68,
+    Y_SUM = y0 + 92,
+    S_PREV = 11.5,
+    S_CUR = 14;
+  const row = (
+    st: NonNullable<ReturnType<typeof stepAt>>,
+    y: number,
+    size: number,
+    a: number,
+    dx: number,
+    now: boolean,
+  ) => {
     c.save();
     c.globalAlpha *= a;
-    const size = now ? 13 : 11.5,
-      col = now ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.75)';
-    toolIcon(c, st[0], tx + 6, y, now ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.6)');
-    c.font = `400 ${size}px Onest, system-ui, sans-serif`;
-    const verb = st[1] + ' ',
-      vw = c.measureText(verb).width,
-      diffW = now && st[3] ? 56 : 0;
-    textAt(c, verb, tx + 18, y + 0.5, { size, weight: 400, color: 'rgba(255,255,255,0.45)' });
-    textAt(c, st[2], tx + 18 + vw, y + 0.5, {
-      size,
-      weight: now ? 500 : 400,
-      color: col,
-      max: Math.max(20, tmax - 18 - vw - diffW),
-    });
-    if (now && st[3]) {
-      textAt(c, st[3], tx + tmax - 28, y + 0.5, { size: 11.5, weight: 500, color: '#5FD27D', align: 'right' });
-      textAt(c, st[4] as string, tx + tmax, y + 0.5, { size: 11.5, weight: 500, color: '#FF6B61', align: 'right' });
-    }
+    const z = size / S_CUR;
+    toolIcon(c, st[0], tx + 6 + dx, y, 'rgba(255,255,255,0.75)', 0.82 + 0.3 * z);
+    c.font = `${now ? 500 : 400} ${size}px Onest, system-ui, sans-serif`;
+    const x = tx + 18 + dx * 1.6,
+      label = st[1] + ' ' + st[2],
+      diffW = now && st[3] ? 58 : 0;
+    const max = Math.max(20, tmax - (x - tx) - diffW);
+    if (now) {
+      // the light sweep: a brighter band crossing the line every 2.4 s, as Grok Bot's working step
+      const w = Math.min(max, c.measureText(label).width),
+        ph = (s.t % 2.4) / 1.6,
+        bx = x - 40 + (w + 80) * Math.min(1, ph);
+      const g = c.createLinearGradient(bx - 40, 0, bx + 40, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.72)');
+      g.addColorStop(0.5, 'rgba(255,255,255,1)');
+      g.addColorStop(1, 'rgba(255,255,255,0.72)');
+      textAt(c, label, x, y + 0.5, { size, weight: 500, color: 'rgba(255,255,255,0.72)', max });
+      if (ph < 1) {
+        c.save();
+        c.beginPath();
+        c.rect(bx - 40, y - size, 80, size * 2);
+        c.clip();
+        c.fillStyle = g;
+        c.textBaseline = 'middle';
+        let t = label;
+        if (c.measureText(t).width > max) {
+          while (t.length > 1 && c.measureText(t + '…').width > max) t = t.slice(0, -1);
+          t = t.trimEnd() + '…';
+        }
+        c.fillText(t, x, y + 0.5);
+        c.restore();
+      }
+      if (st[3]) {
+        textAt(c, st[3], tx + tmax - 30, y + 0.5, { size: 12, weight: 500, color: '#5FD27D', align: 'right' });
+        textAt(c, st[4] as string, tx + tmax, y + 0.5, { size: 12, weight: 500, color: '#FF6B61', align: 'right' });
+      }
+    } else textAt(c, label, x, y + 0.5, { size, weight: 400, color: 'rgba(255,255,255,0.8)', max });
     c.restore();
-  }
+  };
+  const prev2 = stepAt(s, cur - 2),
+    prev = stepAt(s, cur - 1),
+    now = stepAt(s, cur);
+  // the one leaving: up and out
+  if (prev2 && k < 1) row(prev2, Y_PREV - 18 * k, S_PREV, 0.45 * (1 - k), 0, false);
+  // the previous: from the middle up to the top row, shrinking and dimming
+  if (prev)
+    row(
+      prev,
+      Y_CUR + (Y_PREV - Y_CUR) * k,
+      S_CUR + (S_PREV - S_CUR) * k,
+      0.92 + (0.45 - 0.92) * k,
+      4 * (1 - k),
+      k > 0.99 ? false : k < 0.5,
+    );
+  // the current: rises from below into the middle
+  if (now) row(now, Y_CUR + 12 * (1 - k), S_PREV + (S_CUR - S_PREV) * k, k, 4 * k, true);
+  // the summary steps back while the new step passes over it
+  textAt(c, sessionLine(s, cur), tx + 18, Y_SUM + 0.5, {
+    size: 11,
+    weight: 400,
+    color: 'rgba(255,255,255,0.38)',
+    max: tmax - 18,
+  });
 }
 
 /** "последняя сессия N мин назад" from the newest hook */

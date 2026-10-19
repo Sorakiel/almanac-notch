@@ -11,7 +11,7 @@ import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
 import { drawAdd, drawChat, drawSettings } from './tabs';
 import { drawLeaving, layer, shared, springK, tabOutA } from './reveal';
-import { focusTint, isHot, miniFor, modules, type ModuleItem } from './modules';
+import { deepCol, focusTint, isHot, miniFor, modules, type ModuleItem } from './modules';
 import { MODULE_COL } from './focus';
 import { drawMini } from './crew';
 import { hexA } from '../util/math';
@@ -478,13 +478,15 @@ function modulePill(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number
     hot = isHot(it),
     r = h / 2;
   rrect(c, x, y, w, h, r);
-  c.fillStyle = hexA(col, hov ? 0.13 : 0.06);
+  c.fillStyle = '#0B0B0C';
+  c.fill();
+  c.fillStyle = hexA(deepCol(col), hov ? 0.2 : 0.1);
   c.fill();
   c.lineWidth = 1;
   c.strokeStyle = hexA(col, hov ? 0.45 : hot ? 0.34 : 0.16);
   rrect(c, x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5);
   c.stroke();
-  drawMini(s, c, x + r, y + h / 2 + 0.5, h * 0.3, miniFor(it));
+  drawMini(s, c, x + r, y + h / 2 + 0.5, h * 0.3, { ...miniFor(it), body: deepCol(col) });
   const tx = x + h + 1;
   textAt(c, it.name, tx, y + h / 2 + 0.5, { size: 12, color: mixWhite(col, 0.45), max: w - (tx - x) - 10 });
   addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });

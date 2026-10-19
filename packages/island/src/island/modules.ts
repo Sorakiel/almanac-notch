@@ -413,22 +413,59 @@ export function miniFor(it: ModuleItem): MiniItem {
   return { body: MODULE_COL[it.id].body, shade: MODULE_COL[it.id].shade, seed, state };
 }
 
-/** a mascot in a dark round tile with a thin ring of its colour - a "slime" of the module rail.
- * Kept dim on purpose: the event card is the light source, the rail only says who else is there */
+/** a module colour made deeper for small mascots on dark: more saturated, a little darker. Measured
+ * on Grok Bot's rail (2026-10-19): their faces are saturated mid tones (217,59,62), ours pastel
+ * (214,153,118) - pastel on black has little colour contrast and reads flat */
+export function deepCol(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  let r = ((n >> 16) & 255) / 255,
+    g = ((n >> 8) & 255) / 255,
+    b = (n & 255) / 255;
+  const mx = Math.max(r, g, b),
+    mn = Math.min(r, g, b),
+    l = (mx + mn) / 2,
+    d = mx - mn;
+  let h = 0,
+    sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h *= 60;
+  sat = Math.min(1, sat * 1.22);
+  const L = l * 0.82,
+    C = (1 - Math.abs(2 * L - 1)) * sat,
+    X = C * (1 - Math.abs(((h / 60) % 2) - 1)),
+    m = L - C / 2;
+  [r, g, b] =
+    h < 60
+      ? [C, X, 0]
+      : h < 120
+        ? [X, C, 0]
+        : h < 180
+          ? [0, C, X]
+          : h < 240
+            ? [0, X, C]
+            : h < 300
+              ? [X, 0, C]
+              : [C, 0, X];
+  const to = (v: number) => Math.round((v + m) * 255);
+  return `#${((1 << 24) | (to(r) << 16) | (to(g) << 8) | to(b)).toString(16).slice(1)}`;
+}
+
+/** a mascot sunk in a round well with a thin ring of its colour - a "slime" of the module rail.
+ * The well is darker than the rail card (Grok Bot: (30,6,15) on (20,20,20)): the face sits in it
+ * instead of on it, which is where the depth comes from */
 export function slime(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number, d: number, k = 0): void {
   const col = MODULE_COL[it.id].body,
     r = d / 2;
   c.save();
   c.beginPath();
   c.arc(x, y, r, 0, Math.PI * 2);
-  c.fillStyle = '#121214';
+  c.fillStyle = '#070708';
   c.fill();
-  c.fillStyle = hexA(col, 0.08 + 0.08 * k);
+  c.fillStyle = hexA(deepCol(col), 0.13 + 0.07 * k);
   c.fill();
   c.lineWidth = 1.2;
-  c.strokeStyle = hexA(col, 0.28 + 0.4 * k);
+  c.strokeStyle = hexA(col, 0.2 + 0.4 * k);
   c.stroke();
-  c.globalAlpha *= 0.86 + 0.14 * k;
-  drawMini(s, c, x, y + r * 0.06, r * 0.56, miniFor(it));
+  drawMini(s, c, x, y + r * 0.06, r * 0.62, { ...miniFor(it), body: deepCol(col) });
   c.restore();
 }
