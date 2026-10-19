@@ -1,4 +1,5 @@
 // Pointer input on the island canvas, without DOM listeners. Points are in island CSS px (proto: islandPoint).
+import { switchTab } from './reveal';
 import { clamp } from '../util/math';
 import type { Hit, IslandState, MediaFeed } from '../sim/state';
 import { hop, poke, wake } from '../sim/actions';
@@ -71,7 +72,7 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   } else if (act.startsWith('focus:')) s.focusId = act.slice(6) as ModuleId;
   else if (act === 'approve' || act === 'deny' || act.startsWith('opt:')) answer(s, act as Answer);
   else if (act.startsWith('tab:'))
-    s.tab = act.slice(4) === s.tab && s.tab === 'settings' ? 'home' : (act.slice(4) as Tab);
+    switchTab(s, act.slice(4) === s.tab && s.tab === 'settings' ? 'home' : (act.slice(4) as Tab));
   else if (act === 'mute') {
     s.muted = !s.muted;
     // the app keeps the choice and lets it be heard (apps/desktop/src/main.ts)

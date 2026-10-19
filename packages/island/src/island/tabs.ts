@@ -5,18 +5,32 @@ import type { HostPrefs, IslandState } from '../sim/state';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { card, cardMascot } from './card';
+import { inLayer, layer, shared } from './reveal';
 
 /** proto: drawChat */
 export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
   const lw = 112;
-  card(c, X0, y0, lw, y1 - y0, false);
-  cardMascot(s, c, X0 + 14, y0, y1, null, null);
+  inLayer(s, c, 0, () => {
+    if (!shared.card) card(c, X0, y0, lw, y1 - y0, false);
+    cardMascot(s, c, X0 + 14, y0, y1, null, null);
+  });
   const cx0 = X0 + lw + 8;
-  c.fillStyle = 'rgba(255,255,255,0.08)';
-  rrect(c, cx0, y0 + 6, Math.min(220, X1 - cx0), 26, 13);
-  c.fill();
-  textAt(c, tr(s, 'Привет! Чем помочь?'), cx0 + 12, y0 + 19.5, { size: 12, weight: 400, max: X1 - cx0 - 24 });
-  textAt(c, tr(s, 'qwen3.5:4b · локально'), X1 - 6, y1 - 42, { size: 11, weight: 400, color: T_MUTED, align: 'right' });
+  inLayer(s, c, 1, () => {
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    rrect(c, cx0, y0 + 6, Math.min(220, X1 - cx0), 26, 13);
+    c.fill();
+    textAt(c, tr(s, 'Привет! Чем помочь?'), cx0 + 12, y0 + 19.5, { size: 12, weight: 400, max: X1 - cx0 - 24 });
+  });
+  inLayer(s, c, 2, () =>
+    textAt(c, tr(s, 'qwen3.5:4b · локально'), X1 - 6, y1 - 42, {
+      size: 11,
+      weight: 400,
+      color: T_MUTED,
+      align: 'right',
+    }),
+  );
+  c.save();
+  layer(s, c, 3);
   c.fillStyle = 'rgba(255,255,255,0.08)';
   rrect(c, cx0, y1 - 32, X1 - cx0, 32, 16);
   c.fill();
@@ -39,6 +53,7 @@ export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: num
   c.lineTo(X1 - 16, y1 - 21);
   c.lineTo(X1 - 12, y1 - 17);
   c.stroke();
+  c.restore();
 }
 
 /** proto: drawAdd */
@@ -77,6 +92,8 @@ export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0:
     gap = 6,
     h = (y1 - y0 - gap * (rows.length - 1)) / rows.length;
   rows.forEach((r, i) => {
+    c.save();
+    layer(s, c, i);
     const y = y0 + i * (h + gap),
       hov = (r[1] !== null || i === linkRow) && hovering(s, X0, y, X1 - X0, h);
     c.fillStyle = hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
@@ -99,6 +116,7 @@ export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0:
       c.fill();
       addHit(s, c, { x: X0, y, w: X1 - X0, h, act: 'pref:' + i });
     }
+    c.restore();
   });
 }
 
@@ -190,7 +208,7 @@ const DOT: Readonly<Record<'ok' | 'bad' | 'off', string>> = {
 function slider(s: IslandState, c: Ctx, x0: number, x1: number, y: number, v: number, on: boolean): void {
   const kx = x0 + (x1 - x0) * v;
   c.save();
-  c.globalAlpha = on ? 1 : 0.4;
+  c.globalAlpha *= on ? 1 : 0.4; // multiply: the slider fades with its tab
   c.fillStyle = 'rgba(255,255,255,0.18)';
   rrect(c, x0, y - 2, x1 - x0, 4, 2);
   c.fill();
@@ -218,8 +236,10 @@ function drawHostSettings(
   y1: number,
   host: HostPrefs,
 ): void {
-  card(c, X0, y0, X1 - X0, y1 - y0, false);
-  cardMascot(s, c, X0, y0, y1, null, null);
+  inLayer(s, c, 0, () => {
+    if (!shared.card) card(c, X0, y0, X1 - X0, y1 - y0, false);
+    cardMascot(s, c, X0, y0, y1, null, null);
+  });
   const L = X0 + 92,
     R = X1 - 14,
     h = y1 - y0,
@@ -230,6 +250,8 @@ function drawHostSettings(
   // sound, as coucou's first row: the switch, the word, the volume; the switch is the speaker's
   // state in the top bar
   const on = !s.muted;
+  c.save();
+  layer(s, c, 1);
   toggle(c, L + 30, r0, on);
   c.save();
   c.font = '500 12.5px Onest, system-ui, sans-serif';
@@ -238,6 +260,9 @@ function drawHostSettings(
   textAt(c, tr(s, 'Звук'), L + 40, r0 + 0.5, { size: 12.5 });
   addHit(s, c, { x: L - 4, y: r0 - 10, w: 48 + soundW, h: 20, act: 'host:sound' });
   slider(s, c, L + 40 + soundW + 18, R - 6, r0, host.volume, on);
+  c.restore();
+  c.save();
+  layer(s, c, 2);
   // auto-close: a clock, the delay, the choices
   c.save();
   c.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -265,6 +290,9 @@ function drawHostSettings(
     String(host.autoClose),
     'host:close',
   );
+  c.restore();
+  c.save();
+  layer(s, c, 3);
   // open on hover: the whole row toggles
   const hov = hovering(s, L - 6, r2 - 11, R - L + 12, 22);
   if (hov) {
@@ -275,6 +303,9 @@ function drawHostSettings(
   textAt(c, tr(s, 'Открывать при наведении'), L, r2 + 0.5, { size: 12.5 });
   toggle(c, R - 4, r2, host.openOnHover);
   addHit(s, c, { x: L - 6, y: r2 - 11, w: R - L + 12, h: 22, act: 'host:hover' });
+  c.restore();
+  c.save();
+  layer(s, c, 4);
   // footer: links on the right, the connection dots as far as they fit on the left
   const quitX = linkButton(s, c, R, r3, 'Выйти', 'host:quit');
   const linksX = linkButton(s, c, quitX - 4, r3, 'Настройки…', 'open:settings');
@@ -292,5 +323,6 @@ function drawHostSettings(
     textAt(c, label, x + 10, r3 + 0.5, { size: 11.5, color: T_MUTED });
     x += w + 12;
   }
+  c.restore();
   c.restore();
 }

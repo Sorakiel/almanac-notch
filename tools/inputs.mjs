@@ -26,9 +26,10 @@ mkdirSync(outDir, { recursive: true });
 const open = [{ leave: true }, { wait: 6500 }, { nstate: 'open' }, { wait: 900 }];
 const shot = (n, w = 300) => [{ wait: w }, { shot: n }];
 export const FLOWS = [
+  // tab switches animate (docs/CHANGES.md 2026-10-19): shots wait until the new tab has settled
   { name: 'tabs', steps: [...open,
-    { click: 'tab:chat' }, ...shot('chat'), { click: 'tab:add' }, ...shot('add'), { click: 'tab:settings' }, ...shot('settings'),
-    { click: 'tab:settings' }, ...shot('settings-again'), { click: 'tab:settings' }, ...shot('settings-3'), { click: 'tab:home' }, ...shot('home', 600)] },
+    { click: 'tab:chat' }, ...shot('chat', 600), { click: 'tab:add' }, ...shot('add', 600), { click: 'tab:settings' }, ...shot('settings', 600),
+    { click: 'tab:settings' }, ...shot('settings-again', 600), { click: 'tab:settings' }, ...shot('settings-3', 600), { click: 'tab:home' }, ...shot('home', 600)] },
   { name: 'focus', steps: [...open,
     ...['github', 'cal', 'almanac', 'music', 'claude'].flatMap((f) => [{ click: 'focus:' + f }, ...shot(f + '-150', 150), ...shot(f, 600)])] },
   { name: 'rail', steps: [...open, { focus: 'music' }, { wait: 600 },

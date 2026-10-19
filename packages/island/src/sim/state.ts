@@ -359,6 +359,13 @@ export interface IslandState {
   shownFocus: ModuleId | null;
   focusStart: number;
   tab: Tab;
+  /** tab transition (docs/CHANGES.md 2026-10-19): the tab we leave and when the switch began */
+  prevTab: Tab;
+  tabStart: number;
+  /** when the open island's content began to reveal (layered, island/reveal.ts) */
+  revealStart: number;
+  /** the open island was drawn on the previous frame */
+  drawnOpen: boolean;
   musicPlaying: boolean;
   trackIdx: number;
   musicPos: number;
@@ -498,6 +505,10 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     shownFocus: null,
     focusStart: -10,
     tab: 'home',
+    prevTab: 'home',
+    tabStart: -10,
+    revealStart: -10,
+    drawnOpen: false,
     musicPlaying: true,
     trackIdx: 0,
     musicPos: 42,

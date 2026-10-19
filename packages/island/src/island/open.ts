@@ -11,6 +11,7 @@ import { card, cardTint } from './card';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
 import { drawAdd, drawChat, drawSettings } from './tabs';
+import { drawLeaving, layer, shared, springK, tabOutA } from './reveal';
 import { drawGlyph, focusTint, idleShort, isHot, modules } from './modules';
 
 type IconKind = 'home' | 'chat' | 'add' | 'gear' | 'sound';
@@ -181,27 +182,55 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
     ['chat', 'tab:chat'],
     ['add', 'tab:add'],
   ].filter(([k]) => !(s.chatOff && k === 'chat')) as [Tab & IconKind, string][];
+  const right: [IconKind, string, number][] = [
+    ['gear', 'tab:settings', x1 - 50],
+    ['sound', 'mute', x1 - 22],
+  ];
+  // the active capsule travels from the tab we left to the new one (docs/CHANGES.md 2026-10-19):
+  // the eye follows one object instead of two capsules blinking; across the notch to the gear it
+  // cross-fades, a slide that long under the camera would read as lag
+  const tabX = (t: Tab): number | null => {
+    if (t === 'settings') return x1 - 50;
+    const i = tabs.findIndex(([k]) => k === t);
+    return i < 0 ? null : x0 + 22 + i * 30;
+  };
+  const dt = s.t - s.tabStart,
+    xNew = tabX(s.tab),
+    xOld = s.prevTab !== s.tab ? tabX(s.prevTab) : null;
+  const pill = (x: number, a: number) => {
+    c.save();
+    c.globalAlpha *= a;
+    c.fillStyle = 'rgba(255,255,255,0.16)';
+    rrect(c, x - 13, y - 11, 26, 22, 11);
+    c.fill();
+    c.restore();
+  };
+  if (xNew !== null) {
+    if (xOld === null || dt >= 0.9) pill(xNew, 1);
+    else if (s.tab !== 'settings' && s.prevTab !== 'settings') pill(xOld + (xNew - xOld) * springK(dt, 0.3, 0.78), 1);
+    else {
+      const k = clamp(dt / 0.16, 0, 1);
+      pill(xOld, 1 - k);
+      pill(xNew, k);
+    }
+  }
   tabs.forEach(([k, act], i) => {
     const x = x0 + 22 + i * 30,
       on = s.tab === k,
       hov = hovering(s, x - 13, y - 11, 26, 22);
-    if (on || hov) {
-      c.fillStyle = on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
+    if (!on && hov) {
+      c.fillStyle = 'rgba(255,255,255,0.08)';
       rrect(c, x - 13, y - 11, 26, 22, 11);
       c.fill();
     }
     icon(s, c, k, x, y, on);
     addHit(s, c, { x: x - 13, y: y - 11, w: 26, h: 22, act });
   });
-  const right: [IconKind, string, number][] = [
-    ['gear', 'tab:settings', x1 - 50],
-    ['sound', 'mute', x1 - 22],
-  ];
   right.forEach(([k, act, x]) => {
     const on = k === 'gear' && s.tab === 'settings',
       hov = hovering(s, x - 13, y - 11, 26, 22);
-    if (on || hov) {
-      c.fillStyle = on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
+    if (!on && hov) {
+      c.fillStyle = 'rgba(255,255,255,0.08)';
       rrect(c, x - 13, y - 11, 26, 22, 11);
       c.fill();
     }
@@ -244,9 +273,48 @@ export function drawOpen(
     c.save();
     c.globalAlpha *= 1 - aA;
     c.translate(0, aA * 6);
+    // a left card both tabs have (home's focus card, chat, the app's settings) stays and changes
+    // width with a spring instead of blinking out and in, as Grok Bot and coucou keep their card
+    const dt = s.t - s.tabStart,
+      wOld = leftCardW(s, s.prevTab, X0, X1),
+      wNew = leftCardW(s, s.tab, X0, X1);
+    shared.card = s.prevTab !== s.tab && dt < 0.6 && wOld !== null && wNew !== null;
+    if (shared.card && wOld !== null && wNew !== null)
+      card(c, X0, cy0, wOld + (wNew - wOld) * springK(dt, 0.35, 0.86), cy1 - cy0, false);
+    const outA = tabOutA(s);
+    if (outA > 0) {
+      // the tab we leave: fades and sinks a little, takes no clicks
+      const tab = s.tab,
+        n = s.hits.length;
+      s.tab = s.prevTab;
+      c.save();
+      c.globalAlpha *= outA;
+      if (!shared.card) {
+        const mx = (X0 + X1) / 2,
+          my = (cy0 + cy1) / 2,
+          sc = 0.985 + 0.015 * outA;
+        c.translate(mx, my);
+        c.scale(sc, sc);
+        c.translate(-mx, -my);
+      }
+      drawLeaving(() => drawOpenBody(s, c, X0, X1, cy0, cy1, fx));
+      c.restore();
+      s.tab = tab;
+      s.hits.length = n;
+    }
     drawOpenBody(s, c, X0, X1, cy0, cy1, fx);
+    shared.card = false;
     c.restore();
   }
+}
+
+/** width of the tab's left card when it has one (the card the tabs share in a switch) */
+function leftCardW(s: IslandState, tab: Tab, X0: number, X1: number): number | null {
+  if (tab === 'chat' && !s.chatOff) return 112;
+  if (tab === 'settings') return s.host ? X1 - X0 : null;
+  if (tab !== 'home' || (s.event && (s.event.type === 'attention' || s.event.type === 'question'))) return null;
+  if (effectiveFocus(s) === 'music') return null;
+  return X0 + (X1 - X0) * 0.52 - X0 - 4;
 }
 
 /** proto: drawOpenBody - the active tab; on home the focus card plus the other modules */
@@ -259,9 +327,16 @@ export function drawOpenBody(
   cy1: number,
   fx: WorkFx | null,
 ): void {
-  if (s.tab === 'chat' && !s.chatOff) return drawChat(s, c, X0, X1, cy0, cy1);
-  if (s.tab === 'add') return drawAdd(s, c, X0, X1, cy0, cy1);
-  if (s.tab === 'settings') return drawSettings(s, c, X0, X1, cy0, cy1);
+  if (s.tab !== 'home') {
+    c.save();
+    // chat and settings layer their own rows; the add tab is one layer until the shelf replaces it
+    if (s.tab === 'add') layer(s, c, 0);
+    if (s.tab === 'chat' && !s.chatOff) drawChat(s, c, X0, X1, cy0, cy1);
+    else if (s.tab === 'add') drawAdd(s, c, X0, X1, cy0, cy1);
+    else if (s.tab === 'settings') drawSettings(s, c, X0, X1, cy0, cy1);
+    c.restore();
+    if (s.tab !== 'chat' || !s.chatOff) return;
+  }
   const split = X0 + (X1 - X0) * 0.52,
     gap = 8;
   if (s.event && (s.event.type === 'attention' || s.event.type === 'question'))
@@ -270,10 +345,13 @@ export function drawOpenBody(
   const k = ss(0, 1, (s.t - s.focusStart) / 0.28);
   if (f === 'music') {
     c.save();
+    layer(s, c, 0);
     c.globalAlpha *= k;
     c.translate((1 - k) * 8, 0);
     drawMusicWide(s, c, X0, X1 - 44, cy0, cy1);
     c.restore();
+    c.save();
+    layer(s, c, 1);
     drawRail(
       s,
       c,
@@ -283,15 +361,19 @@ export function drawOpenBody(
       cy1,
       modules(s).filter((m) => m.id !== 'music'),
     );
+    c.restore();
     return;
   }
-  card(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, false);
+  c.save();
+  layer(s, c, 0);
+  if (!shared.card) card(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, false);
   const tintC = focusTint(s, f);
   if (tintC) cardTint(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, tintC.c, tintC.a);
   c.save();
   c.globalAlpha *= k;
   c.translate((1 - k) * 8, 0);
   drawFocusCard(s, c, f, X0, cy0, split - gap / 2, cy1, fx);
+  c.restore();
   c.restore();
   // the other four modules as a 2 × 2 grid of chips
   const items = modules(s).filter((m) => m.id !== f);
@@ -301,6 +383,8 @@ export function drawOpenBody(
   items.slice(0, 4).forEach((it, i) => {
     const x = gx0 + (i % 2) * (gw + gap),
       y = cy0 + Math.floor(i / 2) * (gh + gap);
+    c.save();
+    layer(s, c, 1 + i);
     const hov = hovering(s, x, y, gw, gh);
     c.fillStyle = hov ? 'rgba(255,255,255,0.13)' : isHot(it) ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.05)';
     rrect(c, x, y, gw, gh, 12);
@@ -314,5 +398,6 @@ export function drawOpenBody(
       max: gw - 38,
     });
     addHit(s, c, { x, y, w: gw, h: gh, act: 'focus:' + it.id });
+    c.restore();
   });
 }

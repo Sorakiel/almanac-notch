@@ -53,6 +53,9 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
   const dotsW = fx && S.workfx === 'dots' ? 26 : 0;
   sp.halfA.t = state === 'half' ? 1 : 0;
   sp.openA.t = state === 'open' ? 1 : 0;
+  // the open content reveals layer by layer from the moment the island starts to open
+  if (state === 'open' && !s.drawnOpen) s.revealStart = s.t;
+  s.drawnOpen = state === 'open';
   const halfA = clamp(sp.halfA.x, 0, 1),
     openA = clamp(sp.openA.x, 0, 1);
   const cx = IW / 2;
