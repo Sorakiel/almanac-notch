@@ -36,8 +36,10 @@ async function clickTab(i, right = false) {
   await p.mouse.down();
   await p.mouse.up();
 }
+let frame = 0;
 async function shoot() {
-  for (let i = 0; i < N; i++) {
+  for (let n = 0; n < N; n++) {
+    const i = frame++;
     // fixed frame: the island grows inside it, as on screen
     await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png`, clip: { x: 30, y: 0, width: 620, height: 190 } });
     if (process.env.DEBUG) console.log(i, await p.evaluate(() => [window.__state.t - window.__state.tabStart, window.__state.t - window.__state.revealStart].map((v) => v.toFixed(3)).join(' ')));
@@ -45,7 +47,18 @@ async function shoot() {
   }
 }
 
-if (scene === 'hover-pill') {
+if (scene === 'hover-mascot') {
+  // the agent working, the pointer onto the card's mascot, then off it
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(800);
+  await p.evaluate(() => window.__debug('ev:working'));
+  await p.clock.runFor(1500);
+  const m = await p.evaluate(() => window.__state.islandMascot);
+  await p.mouse.move(m.x, m.y);
+  await shoot();
+  await p.mouse.move(m.x + 140, m.y);
+  await shoot();
+} else if (scene === 'hover-pill') {
   // hover the first module pill, then leave it
   await p.mouse.move(340, 12);
   await p.clock.runFor(1500);
@@ -70,9 +83,10 @@ if (scene === 'hover-pill') {
 }
 await b.close();
 const cols = 6;
+const total = frame;
 execFileSync('ffmpeg', [
   '-v', 'error', '-y', '-framerate', '60', '-i', `${dir}/%03d.png`,
-  '-vf', `scale=480:-1,pad=iw+4:ih+4:2:2:white,tile=${cols}x${Math.ceil(N / cols)}`,
+  '-vf', `scale=480:-1,pad=iw+4:ih+4:2:2:white,tile=${cols}x${Math.ceil(total / cols)}`,
   '-frames:v', '1', `${out}/${scene}.png`,
 ]);
 execFileSync('ffmpeg', ['-v', 'error', '-y', '-framerate', '60', '-i', `${dir}/%03d.png`, '-pix_fmt', 'yuv420p', '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', `${out}/${scene}.mp4`]);

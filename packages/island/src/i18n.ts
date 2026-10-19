@@ -43,9 +43,7 @@ export const EN: Readonly<Record<string, string>> = {
   // module items (island/modules.ts)
   работает: 'working',
   думает: 'thinking',
-  ищет: 'searching',
   'ждёт ответа': 'awaiting reply',
-  спрашивает: 'asking',
   'лимит {0}': 'limit {0}',
   свободен: 'idle',
   'CI идёт': 'CI running',
@@ -90,6 +88,14 @@ export const EN: Readonly<Record<string, string>> = {
   'через {0} мин': 'in {0} min',
   Лекция: 'Lecture',
   'на паузе': 'paused',
+  // the mascot's state word on hover
+  ищет: 'searching',
+  ждёт: 'waiting',
+  спрашивает: 'asking',
+  готово: 'done',
+  ошибка: 'error',
+  танцует: 'dancing',
+  спит: 'asleep',
   // the agent's session line under its current step (plural forms; English builds its own)
   шаг: 'step',
   шага: 'steps',
