@@ -26,10 +26,11 @@ pub struct Placement {
     pub scale: f64,
 }
 
-/// Window size in points = the prototype's island canvas (#island 560x200), so the ear and
-/// open-width limits that depend on IW match the reference frames exactly.
-pub const WIN_W: f64 = 560.0;
-pub const WIN_H: f64 = 200.0;
+/// Window size in points. The prototype's canvas was 560x200; since 2026-10-19 (docs/CHANGES.md)
+/// the open island is bigger (600x180, as coucou and Grok Bot) and the window holds it with room
+/// for the rail's hover labels and the glow.
+pub const WIN_W: f64 = 680.0;
+pub const WIN_H: f64 = 230.0;
 
 #[cfg(target_os = "macos")]
 mod macos;

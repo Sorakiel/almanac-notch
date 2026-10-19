@@ -14,7 +14,8 @@ import {
   minsText,
   type ClaudeState,
 } from './focus';
-import { STATE_COL, drawMini } from './crew';
+import { STATE_COL, drawMini, type MiniItem } from './crew';
+import { hexA } from '../util/math';
 
 export type ModuleItem =
   | { id: 'claude'; kind: 'agent'; name: string; body: string; seed: number; state: ClaudeState; short: string }
@@ -398,5 +399,36 @@ export function alertMark(c: Ctx, x: number, y: number, r: number, st: CiState, 
   c.lineTo(x + r * 0.45, y);
   c.lineTo(x + r, y);
   c.stroke();
+  c.restore();
+}
+
+/** a module as a small mascot in its own colour (coucou's pills, Grok Bot's rail): the mood shows its state */
+export function miniFor(it: ModuleItem): MiniItem {
+  const seed = ['claude', 'github', 'cal', 'music', 'almanac', 'vercel', 'notion', 'grafana'].indexOf(it.id);
+  let state: string = 'idle';
+  if (it.kind === 'agent') state = it.state;
+  else if ((it.kind === 'ci' || it.kind === 'deploy' || it.kind === 'alerts') && it.state === 'fail') state = 'fail';
+  else if ((it.kind === 'ci' || it.kind === 'deploy') && it.state === 'run') state = 'work';
+  else if (it.kind === 'cal' && it.mins <= 5) state = 'ask';
+  return { body: MODULE_COL[it.id].body, shade: MODULE_COL[it.id].shade, seed, state };
+}
+
+/** a mascot in a dark round tile with a thin ring of its colour - a "slime" of the module rail.
+ * Kept dim on purpose: the event card is the light source, the rail only says who else is there */
+export function slime(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number, d: number, k = 0): void {
+  const col = MODULE_COL[it.id].body,
+    r = d / 2;
+  c.save();
+  c.beginPath();
+  c.arc(x, y, r, 0, Math.PI * 2);
+  c.fillStyle = '#121214';
+  c.fill();
+  c.fillStyle = hexA(col, 0.08 + 0.08 * k);
+  c.fill();
+  c.lineWidth = 1.2;
+  c.strokeStyle = hexA(col, 0.28 + 0.4 * k);
+  c.stroke();
+  c.globalAlpha *= 0.86 + 0.14 * k;
+  drawMini(s, c, x, y + r * 0.06, r * 0.56, miniFor(it));
   c.restore();
 }

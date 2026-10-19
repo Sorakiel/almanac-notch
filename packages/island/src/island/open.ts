@@ -6,13 +6,15 @@ import type { Status } from '../sim/events';
 import type { WorkFx } from './fx';
 import { effectiveFocus } from './focus';
 import { addHit, hovering } from './hits';
-import { T_MUTED } from './half';
 import { card, cardTint } from './card';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
 import { drawAdd, drawChat, drawSettings } from './tabs';
 import { drawLeaving, layer, shared, springK, tabOutA } from './reveal';
-import { drawGlyph, focusTint, idleShort, isHot, modules } from './modules';
+import { focusTint, isHot, miniFor, modules, type ModuleItem } from './modules';
+import { MODULE_COL } from './focus';
+import { drawMini } from './crew';
+import { hexA } from '../util/math';
 
 type IconKind = 'home' | 'chat' | 'add' | 'gear' | 'sound';
 
@@ -94,7 +96,8 @@ export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: numbe
 
 // Filled top-bar icons for the app (docs/CHANGES.md 2026-10-17): drawn on a 24-unit grid,
 // scaled to the prototype's ~13 px glyph box. Paths are our own, not a system symbol set.
-const SOLID_SCALE = 0.62;
+// 2026-10-19: a size smaller and softer, as Grok Bot's bar: the icons are the frame, not the content
+const SOLID_SCALE = 0.56;
 const P_HOME =
   'M12 3.3c.4 0 .8.1 1.1.4l8.2 7.1c.7.6.3 1.7-.6 1.7H19.5v7.4c0 .9-.7 1.6-1.6 1.6h-3.4v-5.2c0-.6-.4-1-1-1h-3c-.6 0-1 .4-1 1v5.2H6.1c-.9 0-1.6-.7-1.6-1.6v-7.4H3.3c-.9 0-1.3-1.1-.6-1.7l8.2-7.1c.3-.3.7-.4 1.1-.4Z';
 const P_CHAT =
@@ -112,10 +115,10 @@ function gearPath(): Path2D {
   let p = pathCache.get('gear');
   if (p) return p;
   p = new Path2D();
-  const teeth = 8,
-    rIn = 7.4,
-    rOut = 10.2,
-    half = (Math.PI / teeth) * 0.42;
+  const teeth = 7,
+    rIn = 8,
+    rOut = 10,
+    half = (Math.PI / teeth) * 0.5;
   for (let i = 0; i < teeth * 2; i++) {
     const a = (i / (teeth * 2)) * Math.PI * 2 - Math.PI / 2,
       r = i % 2 === 0 ? rOut : rIn,
@@ -127,15 +130,15 @@ function gearPath(): Path2D {
     p.lineTo(12 + Math.cos(a + w) * r, 12 + Math.sin(a + w) * r);
   }
   p.closePath();
-  p.moveTo(12 + 3.1, 12);
-  p.arc(12, 12, 3.1, 0, Math.PI * 2);
+  p.moveTo(12 + 3.4, 12);
+  p.arc(12, 12, 3.4, 0, Math.PI * 2);
   pathCache.set('gear', p);
   return p;
 }
 
 function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
   c.save();
-  const col = active ? '#FFFFFF' : 'rgba(255,255,255,0.55)';
+  const col = active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.42)';
   c.fillStyle = c.strokeStyle = col;
   c.lineCap = 'round';
   c.lineJoin = 'round';
@@ -144,21 +147,26 @@ function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number,
   if (kind === 'home') c.fill(path(P_HOME));
   else if (kind === 'chat') c.fill(path(P_CHAT));
   else if (kind === 'add') {
-    c.lineWidth = 2.6;
+    // a plus cut out of a filled circle, like the other filled glyphs (a bare thick cross read heavy)
     c.beginPath();
-    c.moveTo(12, 4.5);
-    c.lineTo(12, 19.5);
-    c.moveTo(4.5, 12);
-    c.lineTo(19.5, 12);
+    c.arc(12, 12, 9.5, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = '#0B0B0D';
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.moveTo(12, 7.6);
+    c.lineTo(12, 16.4);
+    c.moveTo(7.6, 12);
+    c.lineTo(16.4, 12);
     c.stroke();
   } else if (kind === 'gear') {
-    // stroke-join softens the teeth corners
-    c.lineWidth = 1.4;
+    // a wide round stroke rounds the teeth: square teeth read hard
+    c.lineWidth = 2.4;
     c.fill(gearPath(), 'evenodd');
     c.stroke(gearPath());
   } else {
     c.fill(path(P_SPEAKER));
-    c.lineWidth = 2;
+    c.lineWidth = 1.8;
     c.beginPath();
     if (s.muted) {
       c.moveTo(16, 9.5);
@@ -308,13 +316,27 @@ export function drawOpen(
   }
 }
 
+/** the focus card takes this share of home: the active module says more than the others together */
+const SPLIT = 0.58;
+/** the module rail beside a big event card, as Grok Bot's */
+const RAIL_W = 46;
+/** the card text keeps the prototype's block height and sits in the middle of the taller card */
+const INSET = 14;
+
+/** an event that takes the big card, the other modules wait in the rail */
+function railEvent(s: IslandState): boolean {
+  const ev = s.event && s.event.type;
+  return ev === 'attention' || ev === 'question' || ev === 'success' || ev === 'error';
+}
+
 /** width of the tab's left card when it has one (the card the tabs share in a switch) */
 function leftCardW(s: IslandState, tab: Tab, X0: number, X1: number): number | null {
   if (tab === 'chat' && !s.chatOff) return 112;
   if (tab === 'settings') return s.host ? X1 - X0 : null;
-  if (tab !== 'home' || (s.event && (s.event.type === 'attention' || s.event.type === 'question'))) return null;
+  if (tab !== 'home') return null;
+  if (railEvent(s)) return X1 - X0 - RAIL_W - 8;
   if (effectiveFocus(s) === 'music') return null;
-  return X0 + (X1 - X0) * 0.52 - X0 - 4;
+  return (X1 - X0) * SPLIT - 4;
 }
 
 /** proto: drawOpenBody - the active tab; on home the focus card plus the other modules */
@@ -337,25 +359,49 @@ export function drawOpenBody(
     c.restore();
     if (s.tab !== 'chat' || !s.chatOff) return;
   }
-  const split = X0 + (X1 - X0) * 0.52,
-    gap = 8;
-  if (s.event && (s.event.type === 'attention' || s.event.type === 'question'))
-    return drawAsk(s, c, X0, X1, cy0, cy1, fx);
+  const gap = 8;
   const f = effectiveFocus(s);
   const k = ss(0, 1, (s.t - s.focusStart) / 0.28);
-  if (f === 'music') {
+  // permission, question, done, error: one big card, the other modules as a rail of mascots
+  if (railEvent(s)) {
+    const bx1 = X1 - RAIL_W - gap;
     c.save();
     layer(s, c, 0);
-    c.globalAlpha *= k;
-    c.translate((1 - k) * 8, 0);
-    drawMusicWide(s, c, X0, X1 - 44, cy0, cy1);
+    if (s.event && (s.event.type === 'attention' || s.event.type === 'question')) drawAsk(s, c, X0, bx1, cy0, cy1, fx);
+    else {
+      if (!shared.card) card(c, X0, cy0, bx1 - X0, cy1 - cy0, false);
+      const tintC = focusTint(s, f);
+      if (tintC) cardTint(c, X0, cy0, bx1 - X0, cy1 - cy0, tintC.c, tintC.a);
+      drawFocusCard(s, c, f, X0, cy0 + INSET, bx1, cy1 - INSET, fx);
+    }
     c.restore();
     c.save();
     layer(s, c, 1);
     drawRail(
       s,
       c,
-      X1 - 36,
+      X1 - RAIL_W,
+      X1,
+      cy0,
+      cy1,
+      modules(s).filter((m) => m.id !== f),
+    );
+    c.restore();
+    return;
+  }
+  if (f === 'music') {
+    c.save();
+    layer(s, c, 0);
+    c.globalAlpha *= k;
+    c.translate((1 - k) * 8, 0);
+    drawMusicWide(s, c, X0, X1 - RAIL_W - gap, cy0, cy1);
+    c.restore();
+    c.save();
+    layer(s, c, 1);
+    drawRail(
+      s,
+      c,
+      X1 - RAIL_W,
       X1,
       cy0,
       cy1,
@@ -364,6 +410,7 @@ export function drawOpenBody(
     c.restore();
     return;
   }
+  const split = X0 + (X1 - X0) * SPLIT;
   c.save();
   layer(s, c, 0);
   if (!shared.card) card(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, false);
@@ -372,32 +419,57 @@ export function drawOpenBody(
   c.save();
   c.globalAlpha *= k;
   c.translate((1 - k) * 8, 0);
-  drawFocusCard(s, c, f, X0, cy0, split - gap / 2, cy1, fx);
+  drawFocusCard(s, c, f, X0, cy0 + INSET, split - gap / 2, cy1 - INSET, fx);
   c.restore();
   c.restore();
-  // the other four modules as a 2 × 2 grid of chips
-  const items = modules(s).filter((m) => m.id !== f);
+  // the other modules: Grok Bot's grid - one card, a 2 × 2 of pills, each a small mascot in its
+  // colour and the name. The state is the mascot's mood and the pill's rim, not words: the focus
+  // card on the left is where the reading happens
+  const items = modules(s)
+    .filter((m) => m.id !== f)
+    .slice(0, 4);
   const gx0 = split + gap / 2,
-    gw = (X1 - gx0 - gap) / 2,
-    gh = (cy1 - cy0 - gap) / 2;
-  items.slice(0, 4).forEach((it, i) => {
-    const x = gx0 + (i % 2) * (gw + gap),
-      y = cy0 + Math.floor(i / 2) * (gh + gap);
+    gw = X1 - gx0,
+    pad = 10,
+    pg = 8,
+    pw = (gw - pad * 2 - pg) / 2,
+    ph = 34,
+    rows = Math.ceil(items.length / 2),
+    py0 = cy0 + (cy1 - cy0 - (rows * ph + (rows - 1) * pg)) / 2;
+  c.save();
+  layer(s, c, 1);
+  card(c, gx0, cy0, gw, cy1 - cy0, false);
+  c.restore();
+  items.forEach((it, i) => {
     c.save();
     layer(s, c, 1 + i);
-    const hov = hovering(s, x, y, gw, gh);
-    c.fillStyle = hov ? 'rgba(255,255,255,0.13)' : isHot(it) ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.05)';
-    rrect(c, x, y, gw, gh, 12);
-    c.fill();
-    drawGlyph(s, c, it, x + 17, y + gh / 2, it.kind === 'agent' ? 8 : 7.5);
-    textAt(c, it.name, x + 32, y + gh / 2 - 7, { size: 12, max: gw - 38 });
-    textAt(c, idleShort(s, it), x + 32, y + gh / 2 + 8, {
-      size: 11,
-      weight: 400,
-      color: isHot(it) ? 'rgba(255,255,255,0.85)' : T_MUTED,
-      max: gw - 38,
-    });
-    addHit(s, c, { x, y, w: gw, h: gh, act: 'focus:' + it.id });
+    modulePill(s, c, it, gx0 + pad + (i % 2) * (pw + pg), py0 + Math.floor(i / 2) * (ph + pg), pw, ph);
     c.restore();
   });
+}
+
+/** a module as a pill: a dark fill tinted with its colour, a rim of it, its mascot and the name */
+function modulePill(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number, w: number, h: number): void {
+  const col = MODULE_COL[it.id].body,
+    hov = hovering(s, x, y, w, h),
+    hot = isHot(it),
+    r = h / 2;
+  rrect(c, x, y, w, h, r);
+  c.fillStyle = hexA(col, hov ? 0.13 : 0.06);
+  c.fill();
+  c.lineWidth = 1;
+  c.strokeStyle = hexA(col, hov ? 0.45 : hot ? 0.34 : 0.16);
+  rrect(c, x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5);
+  c.stroke();
+  drawMini(s, c, x + r, y + h / 2 + 0.5, h * 0.3, miniFor(it));
+  const tx = x + h + 1;
+  textAt(c, it.name, tx, y + h / 2 + 0.5, { size: 12, color: mixWhite(col, 0.45), max: w - (tx - x) - 10 });
+  addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });
+}
+
+/** a module colour lifted toward white, for text on its own tint */
+function mixWhite(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1), 16),
+    m = (v: number) => Math.round(v + (255 - v) * k);
+  return `rgb(${m((n >> 16) & 255)},${m((n >> 8) & 255)},${m(n & 255)})`;
 }

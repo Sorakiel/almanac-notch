@@ -11,7 +11,8 @@ import { addHit, hovering } from './hits';
 
 /** proto: card */
 export function card(c: Ctx, x: number, y: number, w: number, h: number, hot: boolean): void {
-  c.fillStyle = hot ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.06)';
+  // 2026-10-19: a step lighter, as Grok Bot's - the cards read as surfaces on the island, not holes
+  c.fillStyle = hot ? 'rgba(255,255,255,0.11)' : 'rgba(255,255,255,0.075)';
   rrect(c, x, y, w, h, 14);
   c.fill();
 }
@@ -27,10 +28,22 @@ export function cardMascot(
   fx: WorkFx | null,
   prop?: PropKind | null,
 ): void {
-  const R = 23,
-    mx = x0 + 42,
+  // 2026-10-19: a little bigger (23 before): the mascot is the card's face, as in Grok Bot
+  const R = 26,
+    mx = x0 + 43,
     mcy = (y0 + y1) / 2 + 2,
     gy = mcy + R * 0.92;
+  // a soft halo of the module's colour behind the mascot (Grok Bot, coucou): the card's light source
+  // (Almanac's own mascot has no module colour: a cool blue, as Grok Bot's white mascot)
+  {
+    const hc = colKey ? MODULE_COL[colKey].body : '#8FA8FF',
+      hr = R * 2.3,
+      g = c.createRadialGradient(mx, mcy, R * 0.4, mx, mcy, hr);
+    g.addColorStop(0, hexA(hc, colKey ? 0.26 : 0.2));
+    g.addColorStop(1, hexA(hc, 0));
+    c.fillStyle = g;
+    c.fillRect(mx - hr, mcy - hr, hr * 2, hr * 2);
+  }
   mascotMarks(s, c, fx, mx, mcy, R, false);
   const P = drawMascot(s, c, mx, gy, R, 'card', '#141415', colKey ? MODULE_COL[colKey] : null);
   if (prop) drawProp(s, c, prop, P, (colKey && MODULE_COL[colKey]) || null);
@@ -40,16 +53,28 @@ export function cardMascot(
   addHit(s, c, { x: mx - R * 1.1, y: gy - R * 2, w: R * 2.2, h: R * 2, act: 'mascot', cx: mx, cy: mcy, R });
 }
 
-/** proto: cardTint - a soft wash of the state's colour from the card's lower left corner */
+/** proto: cardTint - the state's colour as light at the card's edges (docs/CHANGES.md 2026-10-19).
+ * Grok Bot's cards stay dark and glow at their rim, most at the bottom edge and its corners; the
+ * prototype's wash over the whole card read loud and flattened the text on it. Drawn as the shadow
+ * of shapes just outside the card, clipped to it, so the light bleeds in from the border. */
 export function cardTint(c: Ctx, x: number, y: number, w: number, h: number, color: string, strength: number): void {
-  const g = c.createRadialGradient(x + w * 0.18, y + h * 1.05, 0, x + w * 0.18, y + h * 1.05, Math.max(w, h) * 0.95);
-  g.addColorStop(0, hexA(color, strength));
-  g.addColorStop(1, hexA(color, 0));
+  const a = Math.min(0.85, strength * 1.9),
+    px = c.getTransform().a; // shadowBlur ignores the transform
   c.save();
   rrect(c, x, y, w, h, 14);
   c.clip();
-  c.fillStyle = g;
-  c.fillRect(x, y, w, h);
+  c.fillStyle = '#000';
+  // the whole rim, faint
+  c.shadowColor = hexA(color, a * 0.45);
+  c.shadowBlur = 16 * px;
+  c.beginPath();
+  c.rect(x - 60, y - 60, w + 120, h + 120);
+  rrect(c, x, y, w, h, 14);
+  c.fill('evenodd');
+  // the bottom edge, stronger and taller
+  c.shadowColor = hexA(color, a);
+  c.shadowBlur = h * 0.55 * px;
+  c.fillRect(x - 10, y + h + 1, w + 20, 40);
   c.restore();
 }
 

@@ -53,7 +53,7 @@ export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: 
       mono: true,
       size: 11,
       weight: 400,
-      color: j === 0 ? '#FFFFFF' : 'rgba(255,255,255,0.7)',
+      color: j === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.7)',
       max: tmax - 19 - (st[3] ? 50 : 0),
     });
     if (st[3]) {
@@ -204,7 +204,7 @@ function boardBlock(
   // the title takes the whole width; the graph sits under it, right of the value
   const title = fit(c, b.title, '400 10.5px Onest, system-ui, sans-serif', tx + tmax - 6 - lx);
   textAt(c, title, lx, y + 10.5, { size: 10.5, weight: 400, color: T_MUTED });
-  textAt(c, b.value, tx, y + 25.5, { size: 14, weight: 600, color: '#FFFFFF', max: gx0 - tx - 6 });
+  textAt(c, b.value, tx, y + 25.5, { size: 14, weight: 600, color: 'rgba(255,255,255,0.92)', max: gx0 - tx - 6 });
   const pts = b.points;
   if (pts.length > 1) {
     const lo = Math.min(...pts),
@@ -289,7 +289,7 @@ export function drawFocusCard(
     }
   } else if (it.kind === 'ci' && s.github && s.github.auth !== 'ok') {
     // live GitHub with nothing to show: say why and where to connect
-    L(0, s.github.hint[0], '#FFFFFF');
+    L(0, s.github.hint[0], 'rgba(255,255,255,0.92)');
     L(1, s.github.hint[1], T_MUTED);
   } else if (it.kind === 'ci') {
     const gh = s.github,
@@ -344,7 +344,7 @@ export function drawFocusCard(
     // not in the prototype (docs/CHANGES.md): the newest deployments, as coucou's card
     const vc = s.vercel;
     if (vc.auth !== 'ok' || !vc.rows.length) {
-      L(0, vc.hint[0], '#FFFFFF');
+      L(0, vc.hint[0], 'rgba(255,255,255,0.92)');
       if (vc.hint[1]) L(1, vc.hint[1], T_MUTED);
     } else
       vc.rows.forEach((r, i) => {
@@ -362,7 +362,7 @@ export function drawFocusCard(
         textAt(c, r.name, tx + 12, y + 0.5, {
           size: 11.5,
           weight: 600,
-          color: i === 0 ? '#FFFFFF' : 'rgba(255,255,255,0.75)',
+          color: i === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.75)',
           max: tmax - 60,
         });
         textAt(c, r.ago, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED, max: tmax - 18 - nw });
@@ -371,7 +371,7 @@ export function drawFocusCard(
     // not in the prototype (docs/CHANGES.md): the pages edited last, as coucou's card; a row opens the page
     const no = s.notion;
     if (no.auth !== 'ok' || !no.rows.length) {
-      L(0, no.hint[0], '#FFFFFF');
+      L(0, no.hint[0], 'rgba(255,255,255,0.92)');
       if (no.hint[1]) L(1, no.hint[1], T_MUTED);
     } else
       no.rows.forEach((r, i) => {
@@ -427,7 +427,7 @@ export function drawFocusCard(
       textAt(c, when, tx + 18 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED });
     };
     if (gf.auth !== 'ok') {
-      L(0, gf.hint[0], '#FFFFFF');
+      L(0, gf.hint[0], 'rgba(255,255,255,0.92)');
       if (gf.hint[1]) L(1, gf.hint[1], T_MUTED);
     } else {
       if (gf.rows.length)
@@ -439,7 +439,7 @@ export function drawFocusCard(
         row(0, 'ok', gf.hint[0], '');
         if (!gf.board) L(1, gf.hint[1], T_MUTED);
       } else {
-        L(0, gf.hint[0], '#FFFFFF');
+        L(0, gf.hint[0], 'rgba(255,255,255,0.92)');
         if (!gf.board && gf.hint[1]) L(1, gf.hint[1], T_MUTED);
       }
       if (gf.board) boardBlock(s, c, gf.board, tx, y0 + 51, tmax);
@@ -447,7 +447,7 @@ export function drawFocusCard(
   } else if (it.kind === 'cal' && s.cal) {
     const cal = s.cal;
     if (cal.mins === null) {
-      L(0, cal.title, '#FFFFFF');
+      L(0, cal.title, 'rgba(255,255,255,0.92)');
       L(1, cal.after, T_MUTED);
     } else {
       L(
@@ -465,7 +465,7 @@ export function drawFocusCard(
   } else if (it.kind === 'music') {
     const trk = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
     // live track names pass through; the stub and the "nothing playing" lines are keys
-    L(0, s.media && !s.media.idle ? trk[0] : tr(s, trk[0]), '#FFFFFF');
+    L(0, s.media && !s.media.idle ? trk[0] : tr(s, trk[0]), 'rgba(255,255,255,0.92)');
     L(1, s.media && !s.media.idle ? trk[1] : tr(s, trk[1]), T_MUTED);
     const by = y1 - 16,
       cx = tx + tmax / 2;
@@ -517,7 +517,7 @@ export function drawFocusCard(
     // a row marks the habit in Almanac (one tap more for "8 glasses"), like the stub's checkbox
     const al = s.almanac;
     if (al.auth !== 'ok' || !al.rows.length) {
-      L(0, al.hint[0], '#FFFFFF');
+      L(0, al.hint[0], 'rgba(255,255,255,0.92)');
       if (al.hint[1]) L(1, al.hint[1], T_MUTED);
     } else
       al.rows.slice(0, 3).forEach((h, i) => {

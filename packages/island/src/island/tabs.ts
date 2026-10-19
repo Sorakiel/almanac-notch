@@ -39,7 +39,7 @@ export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: num
     weight: 400,
     color: 'rgba(255,255,255,0.4)',
   });
-  c.fillStyle = '#FFFFFF';
+  c.fillStyle = 'rgba(255,255,255,0.86)';
   c.beginPath();
   c.arc(X1 - 16, y1 - 16, 11, 0, Math.PI * 2);
   c.fill();

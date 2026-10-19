@@ -55,8 +55,9 @@ export function islandTargets(i: IslandInputs): IslandTargets {
   const { IW, state, win } = i;
   const MBH = i.mb ?? MB;
   const NW = Math.min(i.notchW ?? NOTCH_W, IW * 0.36);
-  const OPEN_W = Math.min(IW - 24, 480),
-    OPEN_H = 150;
+  // 2026-10-19: bigger, as coucou and Grok Bot: room for the focus card and a 2 × 2 of named modules
+  const OPEN_W = Math.min(IW - 24, 600),
+    OPEN_H = 180;
   let eL = 0,
     eR = 0,
     hh = MBH,

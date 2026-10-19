@@ -192,7 +192,7 @@ const island = document.getElementById('island') as HTMLCanvasElement,
 const off = document.createElement('canvas'),
   oc = off.getContext('2d') as CanvasRenderingContext2D;
 
-let geo: Geometry = { hasNotch: true, notchW: 190, notchH: 32, winW: 560, winH: 200 };
+let geo: Geometry = { hasNotch: true, notchW: 190, notchH: 32, winW: 680, winH: 230 };
 let dpr = 1;
 
 // proto: resize (island part)

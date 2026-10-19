@@ -30,9 +30,15 @@ export function textAt(c: Ctx, s: string, x: number, y: number, opts: TextOpts):
     (opts.size || 12) +
     'px ' +
     (opts.mono ? '"JetBrains Mono", monospace' : 'Onest, system-ui, sans-serif');
-  c.fillStyle = opts.color || 'rgba(255,255,255,0.92)';
+  c.fillStyle = opts.color || 'rgba(255,255,255,0.88)'; // 2026-10-19: off-white, pure white on black read harsh
   c.textAlign = opts.align || 'left';
   c.textBaseline = 'middle';
-  c.fillText(s, x, y, opts.max || 9999);
+  // too long: cut with an ellipsis (2026-10-19) - fillText's maxWidth squeezes the letters instead
+  let text = s;
+  if (opts.max && c.measureText(text).width > opts.max) {
+    while (text.length > 1 && c.measureText(text + '…').width > opts.max) text = text.slice(0, -1);
+    text = text.trimEnd() + '…';
+  }
+  c.fillText(text, x, y);
   c.restore();
 }

@@ -13,7 +13,7 @@ rmSync(dir, { recursive: true, force: true });
 mkdirSync(dir, { recursive: true });
 
 const b = await chromium.launch();
-const p = await b.newPage({ viewport: { width: 560, height: 200 }, deviceScaleFactor: 2 });
+const p = await b.newPage({ viewport: { width: 680, height: 230 }, deviceScaleFactor: 2 });
 // paused clock: only runFor moves time, so a slow screenshot does not skip frames
 await p.clock.install({ time: 0 });
 await p.clock.pauseAt(1000);
@@ -25,7 +25,7 @@ await p.evaluate(() => {
   s.postLaunchUntil = 0;
   s.host.openOnHover = true;
 });
-await p.mouse.move(5, 195);
+await p.mouse.move(5, 225);
 await p.clock.runFor(1500);
 
 const box = () => p.evaluate(() => window.__state.islandBox);
@@ -39,7 +39,7 @@ async function clickTab(i, right = false) {
 async function shoot() {
   for (let i = 0; i < N; i++) {
     // fixed frame: the island grows inside it, as on screen
-    await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png`, clip: { x: 50, y: 0, width: 460, height: 142 } });
+    await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png`, clip: { x: 30, y: 0, width: 620, height: 190 } });
     if (process.env.DEBUG) console.log(i, await p.evaluate(() => [window.__state.t - window.__state.tabStart, window.__state.t - window.__state.revealStart].map((v) => v.toFixed(3)).join(' ')));
     await p.clock.runFor(1000 / 60);
   }
@@ -48,10 +48,10 @@ async function shoot() {
 if (scene === 'open') {
   await p.evaluate(() => window.dispatchEvent(new Event('blur')));
   await p.clock.runFor(1500);
-  await p.mouse.move(280, 12);
+  await p.mouse.move(340, 12);
   await shoot();
 } else {
-  await p.mouse.move(280, 12);
+  await p.mouse.move(340, 12);
   await p.clock.runFor(1500);
   if (scene === 'tab-home') {
     await clickTab(1);

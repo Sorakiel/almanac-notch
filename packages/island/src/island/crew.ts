@@ -1,4 +1,5 @@
 // The idle "crew": tiny mascots of the modules in the right ear (docs/SPEC.md 2.3).
+import { hexA } from '../util/math';
 import { rrect, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { bodyPath } from '../mascot/shape';
@@ -10,6 +11,8 @@ export interface MiniItem {
   body: string;
   seed: number;
   state: MiniState | string;
+  /** when set, the body is shaded light to dark like the big mascot: depth instead of a flat disc */
+  shade?: string;
 }
 
 /** proto: STATE_COL */
@@ -102,6 +105,18 @@ export function drawMini(s: IslandState, c: Ctx, x: number, cy: number, R: numbe
   bodyPath(c, R, b);
   c.fillStyle = it.body;
   c.fill();
+  if (it.shade) {
+    c.save();
+    bodyPath(c, R, b);
+    c.clip();
+    const g = c.createLinearGradient(0, -b, 0, b);
+    g.addColorStop(0, 'rgba(255,255,255,0.22)');
+    g.addColorStop(0.42, hexA(it.shade, 0));
+    g.addColorStop(1, hexA(it.shade, 0.85));
+    c.fillStyle = g;
+    c.fillRect(-R * 1.3, -b * 1.3, R * 2.6, b * 2.6);
+    c.restore();
+  }
   const ew = R * 0.24,
     eh = Math.max(R * 0.07, R * 0.5 * open);
   c.fillStyle = '#16171A';

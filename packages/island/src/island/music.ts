@@ -8,7 +8,7 @@ import { TRACKS, TRACK_LEN } from '../stub';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { card, cardMascot, cardTint } from './card';
-import { drawGlyph, isHot, type ModuleItem } from './modules';
+import { slime, type ModuleItem } from './modules';
 
 /** proto: TRACK_ART - gradient pairs of the generated covers */
 export const TRACK_ART: readonly (readonly [string, string])[] = [
@@ -280,43 +280,43 @@ export function drawRail(
   cy1: number,
   items: ModuleItem[],
 ): void {
+  // Grok Bot's rail (docs/CHANGES.md 2026-10-19): a narrow card, the modules as a stack of round
+  // mascots in their colours, overlapping when they do not fit; hover pulls the name out to the left
   const t = s.t;
-  const n = items.length,
-    gap = 6,
-    h = (cy1 - cy0 - gap * (n - 1)) / n,
-    rw = rx1 - rx0;
-  items.forEach((it, i) => {
-    const y = cy0 + i * (h + gap),
+  const rw = rx1 - rx0,
+    n = items.length,
+    d = Math.min(rw - 12, 30),
+    pad = 7,
+    span = cy1 - cy0 - pad * 2 - d,
+    step = n > 1 ? Math.min(d + 4, span / (n - 1)) : 0,
+    top = cy0 + pad + d / 2 + (span - step * (n - 1)) / 2,
+    cx = rx0 + rw / 2;
+  card(c, rx0, cy0, rw, cy1 - cy0, false);
+  const rows = items.map((it, i) => {
+    const y = top + i * step,
       st = s.railK[it.id] || (s.railK[it.id] = { k: 0, last: t });
-    c.save();
-    c.font = '500 12px Onest, system-ui, sans-serif';
-    const ext = c.measureText(it.name).width + 16;
-    c.restore();
-    const wNow = rw + ext * st.k;
-    const hov = hovering(s, rx1 - Math.max(rw, wNow), y, Math.max(rw, wNow), h);
+    const hy0 = i === 0 ? cy0 : y - step / 2,
+      hy1 = i === n - 1 ? cy1 : y + step / 2;
+    const hov = hovering(s, rx0, hy0, rw, hy1 - hy0);
     st.k += ((hov ? 1 : 0) - st.k) * Math.min(1, (t - st.last) * 16);
     st.last = t;
-    const k = ss(0, 1, st.k),
-      w = rw + ext * k,
-      x = rx1 - w;
-    c.fillStyle = k > 0.02 ? 'rgba(48,48,52,0.97)' : isHot(it) ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.05)';
-    rrect(c, x, y, w, h, 9);
-    c.fill();
-    if (k > 0.02) {
-      c.fillStyle = 'rgba(255,255,255,' + (0.08 * k).toFixed(3) + ')';
-      rrect(c, x, y, w, h, 9);
-      c.fill();
-    }
-    drawGlyph(s, c, it, rx1 - rw / 2, y + h / 2, it.kind === 'agent' ? 7 : 6.5);
+    return { it, y, k: ss(0, 1, st.k), hy0, hy1 };
+  });
+  // bottom first: the upper one sits in front, as in a stack
+  for (const { it, y, k } of [...rows].reverse()) slime(s, c, it, cx, y, d * (1 + 0.08 * k), k);
+  for (const { it, y, k, hy0, hy1 } of rows) {
     if (k > 0.05) {
       c.save();
-      c.beginPath();
-      c.rect(x, y, w - rw + 2, h);
-      c.clip();
       c.globalAlpha *= k;
-      textAt(c, it.name, x + 10, y + h / 2 + 0.5, { size: 12 });
+      c.font = '500 12px Onest, system-ui, sans-serif';
+      const w = c.measureText(it.name).width + 20,
+        x = rx0 - 6 - w * (0.85 + 0.15 * k);
+      c.fillStyle = 'rgba(40,40,44,0.97)';
+      rrect(c, x, y - 12, w, 24, 12);
+      c.fill();
+      textAt(c, it.name, x + 10, y + 0.5, { size: 12 });
       c.restore();
     }
-    addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });
-  });
+    addHit(s, c, { x: rx0, y: hy0, w: rw, h: hy1 - hy0, act: 'focus:' + it.id });
+  }
 }

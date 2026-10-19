@@ -53,11 +53,14 @@ describe('islandTargets (SPEC 2.2)', () => {
     });
   });
 
-  it('open: min(IW - 24, 480) wide, 150 high, symmetric', () => {
-    const t = islandTargets({ ...base, state: 'open' });
+  // 2026-10-19 (docs/CHANGES.md): 600 x 180 instead of the prototype's 480 x 150
+  it('open: min(IW - 24, 600) wide, 180 high, symmetric', () => {
+    const t = islandTargets({ ...base, IW: 680, state: 'open' });
     expect(t.eL).toBe(t.eR);
-    expect(NW + t.eL + t.eR).toBeCloseTo(480);
-    expect(t.hh).toBe(150);
+    expect(NW + t.eL + t.eR).toBeCloseTo(600);
+    expect(t.hh).toBe(180);
+    const m = islandTargets({ ...base, state: 'open' });
+    expect(NW + m.eL + m.eR).toBeCloseTo(Math.min(IW - 24, 600));
     const n = islandTargets({ ...base, IW: 400, state: 'open' });
     expect(Math.min(NOTCH_W, 400 * 0.36) + n.eL + n.eR).toBeCloseTo(376);
   });
