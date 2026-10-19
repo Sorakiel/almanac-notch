@@ -46,3 +46,47 @@ export function button(
   });
   addHit(s, c, { x, y, w, h, act });
 }
+
+/** Draw at scale k around (ox, oy), keeping clicks, hover and the mascot's spots in island
+ * coordinates: the hits and spots drawn inside are mapped back, the pointer is mapped in. */
+export function withScale(s: IslandState, c: Ctx, ox: number, oy: number, k: number, draw: () => void): void {
+  if (k === 1) return draw();
+  const fx = (x: number) => ox + (x - ox) * k,
+    fy = (y: number) => oy + (y - oy) * k;
+  const ptr = s.islandPtr,
+    nh = s.hits.length,
+    ns = s.mascotSpots.length,
+    im = s.islandMascot;
+  if (ptr) s.islandPtr = { x: ox + (ptr.x - ox) / k, y: oy + (ptr.y - oy) / k };
+  c.save();
+  c.translate(ox, oy);
+  c.scale(k, k);
+  c.translate(-ox, -oy);
+  try {
+    draw();
+  } finally {
+    c.restore();
+    s.islandPtr = ptr;
+  }
+  for (let i = nh; i < s.hits.length; i++) {
+    const h = s.hits[i] as Hit;
+    s.hits[i] = {
+      ...h,
+      x: fx(h.x),
+      y: fy(h.y),
+      w: h.w * k,
+      h: h.h * k,
+      ...(h.cx !== undefined ? { cx: fx(h.cx) } : {}),
+      ...(h.cy !== undefined ? { cy: fy(h.cy) } : {}),
+      ...(h.R !== undefined ? { R: h.R * k } : {}),
+    };
+  }
+  for (let i = ns; i < s.mascotSpots.length; i++) {
+    const p = s.mascotSpots[i];
+    if (p) s.mascotSpots[i] = { ...p, x: fx(p.x), y: fy(p.y) };
+  }
+  if (s.islandMascot && s.islandMascot !== im) {
+    const m = s.islandMascot;
+    s.islandMascot = { x: fx(m.x), y: fy(m.y), R: m.R * k };
+  }
+}

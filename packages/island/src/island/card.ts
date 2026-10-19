@@ -28,9 +28,8 @@ export function cardMascot(
   fx: WorkFx | null,
   prop?: PropKind | null,
 ): void {
-  // 2026-10-19: a little bigger (23 before): the mascot is the card's face, as in Grok Bot
-  const R = 26,
-    mx = x0 + 43,
+  const R = 23,
+    mx = x0 + 42,
     mcy = (y0 + y1) / 2 + 2,
     gy = mcy + R * 0.92;
   // a soft halo of the module's colour behind the mascot (Grok Bot, coucou): the card's light source

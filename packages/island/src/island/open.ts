@@ -1,11 +1,11 @@
 // Open state: top bar with tabs and settings, then the active tab (docs/SPEC.md 2.4-2.9).
 import { clamp, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
-import type { IslandState, Tab } from '../sim/state';
+import type { IslandState, ModuleId, Tab } from '../sim/state';
 import type { Status } from '../sim/events';
 import type { WorkFx } from './fx';
 import { effectiveFocus } from './focus';
-import { addHit, hovering } from './hits';
+import { addHit, hovering, withScale } from './hits';
 import { card, cardTint } from './card';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
@@ -319,9 +319,29 @@ export function drawOpen(
 /** the focus card takes this share of home: the active module says more than the others together */
 const SPLIT = 0.58;
 /** the module rail beside a big event card, as Grok Bot's */
-const RAIL_W = 46;
-/** the card text keeps the prototype's block height and sits in the middle of the taller card */
-const INSET = 14;
+const RAIL_W = 52;
+/** the card's content (mascot, text, buttons) is drawn this much bigger than the prototype's,
+ * as Grok Bot's - the island grew, its content grows with it instead of floating in space */
+const CARD_K = 1.18;
+/** the prototype's content block height; it sits in the middle of the card */
+const BLOCK_H = 104;
+
+/** draw a card's content scaled by CARD_K, centred in the card's height */
+function bigFocus(
+  s: IslandState,
+  c: Ctx,
+  f: ModuleId,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  fx: WorkFx | null,
+): void {
+  const k = CARD_K,
+    h = (y1 - y0) / k,
+    ins = Math.max(0, (h - BLOCK_H) / 2);
+  withScale(s, c, x0, y0, k, () => drawFocusCard(s, c, f, x0, y0 + ins, x0 + (x1 - x0) / k, y0 + h - ins, fx));
+}
 
 /** an event that takes the big card, the other modules wait in the rail */
 function railEvent(s: IslandState): boolean {
@@ -367,12 +387,15 @@ export function drawOpenBody(
     const bx1 = X1 - RAIL_W - gap;
     c.save();
     layer(s, c, 0);
-    if (s.event && (s.event.type === 'attention' || s.event.type === 'question')) drawAsk(s, c, X0, bx1, cy0, cy1, fx);
+    if (s.event && (s.event.type === 'attention' || s.event.type === 'question'))
+      withScale(s, c, X0, cy0, CARD_K, () =>
+        drawAsk(s, c, X0, X0 + (bx1 - X0) / CARD_K, cy0, cy0 + (cy1 - cy0) / CARD_K, fx),
+      );
     else {
       if (!shared.card) card(c, X0, cy0, bx1 - X0, cy1 - cy0, false);
       const tintC = focusTint(s, f);
       if (tintC) cardTint(c, X0, cy0, bx1 - X0, cy1 - cy0, tintC.c, tintC.a);
-      drawFocusCard(s, c, f, X0, cy0 + INSET, bx1, cy1 - INSET, fx);
+      bigFocus(s, c, f, X0, cy0, bx1, cy1, fx);
     }
     c.restore();
     c.save();
@@ -419,7 +442,7 @@ export function drawOpenBody(
   c.save();
   c.globalAlpha *= k;
   c.translate((1 - k) * 8, 0);
-  drawFocusCard(s, c, f, X0, cy0 + INSET, split - gap / 2, cy1 - INSET, fx);
+  bigFocus(s, c, f, X0, cy0, split - gap / 2, cy1, fx);
   c.restore();
   c.restore();
   // the other modules: Grok Bot's grid - one card, a 2 × 2 of pills, each a small mascot in its

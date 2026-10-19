@@ -285,10 +285,11 @@ export function drawRail(
   const t = s.t;
   const rw = rx1 - rx0,
     n = items.length,
-    d = Math.min(rw - 12, 30),
+    d = Math.min(rw - 12, 38),
     pad = 7,
     span = cy1 - cy0 - pad * 2 - d,
-    step = n > 1 ? Math.min(d + 4, span / (n - 1)) : 0,
+    // overlapping like a stack of coins, as Grok Bot's: the faces show, the rail stays compact
+    step = n > 1 ? Math.min(d * 0.62, span / (n - 1)) : 0,
     top = cy0 + pad + d / 2 + (span - step * (n - 1)) / 2,
     cx = rx0 + rw / 2;
   card(c, rx0, cy0, rw, cy1 - cy0, false);
@@ -303,7 +304,9 @@ export function drawRail(
     return { it, y, k: ss(0, 1, st.k), hy0, hy1 };
   });
   // bottom first: the upper one sits in front, as in a stack
-  for (const { it, y, k } of [...rows].reverse()) slime(s, c, it, cx, y, d * (1 + 0.08 * k), k);
+  // bottom first: the upper one sits in front; the hovered one comes to the very front
+  const order = [...rows].reverse().sort((a, b) => a.k - b.k);
+  for (const { it, y, k } of order) slime(s, c, it, cx, y, d * (1 + 0.1 * k), k);
   for (const { it, y, k, hy0, hy1 } of rows) {
     if (k > 0.05) {
       c.save();

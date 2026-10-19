@@ -31,34 +31,81 @@ export const TOOL_TAG: Readonly<Record<ToolKind, readonly [string, string]>> = {
   grep: ['/', '#5FD6F0'],
 };
 
-/** proto: drawSteps - the last three tool calls, the newest sliding in on top */
+/** a tool as a small line icon (2026-10-19, instead of the prototype's letter tags): terminal,
+ * page, pencil, magnifier - read at a glance, as Grok Bot's step icons */
+function toolIcon(c: Ctx, kind: ToolKind, x: number, y: number, col: string): void {
+  c.save();
+  c.strokeStyle = col;
+  c.lineWidth = 1.3;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  if (kind === 'bash') {
+    rrect(c, x - 5.5, y - 4.5, 11, 9, 2.2);
+    c.moveTo(x - 3, y - 1.6);
+    c.lineTo(x - 1, y + 0.2);
+    c.lineTo(x - 3, y + 2);
+    c.moveTo(x + 0.4, y + 2.2);
+    c.lineTo(x + 3, y + 2.2);
+  } else if (kind === 'read') {
+    rrect(c, x - 4, y - 5.5, 8, 11, 1.8);
+    c.moveTo(x - 1.8, y - 1.8);
+    c.lineTo(x + 1.8, y - 1.8);
+    c.moveTo(x - 1.8, y + 1.2);
+    c.lineTo(x + 1.8, y + 1.2);
+  } else if (kind === 'edit') {
+    c.moveTo(x - 4.2, y + 4.2);
+    c.lineTo(x - 3.6, y + 1.6);
+    c.lineTo(x + 2.4, y - 4.4);
+    c.lineTo(x + 4.4, y - 2.4);
+    c.lineTo(x - 1.6, y + 3.6);
+    c.closePath();
+  } else {
+    c.arc(x - 1, y - 1, 3.6, 0, Math.PI * 2);
+    c.moveTo(x + 1.7, y + 1.7);
+    c.lineTo(x + 4.4, y + 4.4);
+  }
+  c.stroke();
+  c.restore();
+}
+
+/** proto: drawSteps - the agent's last three steps, oldest on top (2026-10-19, after Grok Bot):
+ * the current one at the bottom, bigger and bright - verb muted, target bright, its diff on the
+ * right; the older ones above, smaller and fading. A new step rises in from below and pushes the
+ * others up, so the list reads as one moving line of work */
 export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: number): void {
   const ev = s.event;
   if (!ev) return;
   const cur = stepIndex(s),
     frac = stepFrac(s),
-    k = ss(0, 1, frac / 0.18);
-  for (let j = 0; j < 3; j++) {
+    k = ss(0, 1, frac / 0.18),
+    lift = (1 - k) * 20;
+  for (let j = 2; j >= 0; j--) {
     const st = stepAt(s, cur - j);
-    if (!st) break;
-    const y = y0 + 40 + j * 18 + (j === 0 ? (1 - k) * -6 : 0) + (j > 0 ? (1 - k) * -18 : 0);
+    if (!st) continue;
+    const now = j === 0,
+      y = y0 + (now ? 86 : j === 1 ? 62 : 42) + lift,
+      a = now ? k : j === 1 ? 0.55 : 0.3 * k + 0.1;
+    if (y > y0 + 104) continue;
     c.save();
-    c.globalAlpha *= j === 0 ? k : 1 - j * 0.25;
-    const tag = TOOL_TAG[st[0]];
-    c.fillStyle = 'rgba(255,255,255,0.08)';
-    rrect(c, tx, y - 7, 14, 14, 4);
-    c.fill();
-    textAt(c, tag[0], tx + 7, y + 0.5, { mono: true, size: 10, weight: 600, align: 'center', color: tag[1] });
-    textAt(c, st[2], tx + 19, y + 0.5, {
-      mono: true,
-      size: 11,
-      weight: 400,
-      color: j === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.7)',
-      max: tmax - 19 - (st[3] ? 50 : 0),
+    c.globalAlpha *= a;
+    const size = now ? 13 : 11.5,
+      col = now ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.75)';
+    toolIcon(c, st[0], tx + 6, y, now ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.6)');
+    c.font = `400 ${size}px Onest, system-ui, sans-serif`;
+    const verb = st[1] + ' ',
+      vw = c.measureText(verb).width,
+      diffW = now && st[3] ? 56 : 0;
+    textAt(c, verb, tx + 18, y + 0.5, { size, weight: 400, color: 'rgba(255,255,255,0.45)' });
+    textAt(c, st[2], tx + 18 + vw, y + 0.5, {
+      size,
+      weight: now ? 500 : 400,
+      color: col,
+      max: Math.max(20, tmax - 18 - vw - diffW),
     });
-    if (st[3]) {
-      textAt(c, st[3], tx + tmax - 26, y + 0.5, { mono: true, size: 10.5, color: '#5FD27D', align: 'right' });
-      textAt(c, st[4] as string, tx + tmax, y + 0.5, { mono: true, size: 10.5, color: '#FF6B61', align: 'right' });
+    if (now && st[3]) {
+      textAt(c, st[3], tx + tmax - 28, y + 0.5, { size: 11.5, weight: 500, color: '#5FD27D', align: 'right' });
+      textAt(c, st[4] as string, tx + tmax, y + 0.5, { size: 11.5, weight: 500, color: '#FF6B61', align: 'right' });
     }
     c.restore();
   }
@@ -585,29 +632,32 @@ export function drawAsk(
   card(c, X0, cy0, W, H, false);
   cardTint(c, X0, cy0, W, H, ev.answer === 'approve' ? '#34C759' : E.color, 0.42);
   cardMascot(s, c, X0, cy0, cy1, 'claude', fx);
+  // the text block sits in the middle of a card taller than the prototype's (2026-10-19); the
+  // timer line stays on the bottom edge
+  const top = cy0 + Math.max(0, (H - 100) / 2);
   const tx = X0 + 88,
     tw = X1 - tx - 14;
   c.fillStyle = E.color;
   c.beginPath();
-  c.arc(tx + 3, cy0 + 17, 3, 0, Math.PI * 2);
+  c.arc(tx + 3, top + 17, 3, 0, Math.PI * 2);
   c.fill();
-  textAt(c, 'Claude Code', tx + 12, cy0 + 17.5, { size: 12.5, weight: 600 });
+  textAt(c, 'Claude Code', tx + 12, top + 17.5, { size: 12.5, weight: 600 });
   c.save();
   c.font = '600 12.5px Onest, system-ui, sans-serif';
   const nw = c.measureText('Claude Code').width;
   c.restore();
-  textAt(c, tr(s, q ? 'спрашивает' : 'нужно разрешение'), tx + 18 + nw, cy0 + 17.5, {
+  textAt(c, tr(s, q ? 'спрашивает' : 'нужно разрешение'), tx + 18 + nw, top + 17.5, {
     size: 12,
     weight: 400,
     color: T_MUTED,
   });
   if (!q) {
     c.fillStyle = 'rgba(255,255,255,0.08)';
-    rrect(c, tx, cy0 + 28, tw, 26, 8);
+    rrect(c, tx, top + 28, tw, 26, 8);
     c.fill();
     const cmd = s.agent ? s.agent.cmd : 'git push origin main',
       n = clamp(Math.floor((el - 0.25) * 40), 0, cmd.length);
-    textAt(c, cmd.slice(0, n), tx + 10, cy0 + 41.5, {
+    textAt(c, cmd.slice(0, n), tx + 10, top + 41.5, {
       mono: true,
       size: 11.5,
       color: 'rgba(255,255,255,0.9)',
@@ -619,9 +669,9 @@ export function drawAsk(
       const cw = c.measureText(cmd.slice(0, n)).width;
       c.restore();
       c.fillStyle = 'rgba(255,255,255,0.75)';
-      c.fillRect(tx + 11 + cw, cy0 + 35, 1.5, 13);
+      c.fillRect(tx + 11 + cw, top + 35, 1.5, 13);
     }
-    const by = cy0 + 64;
+    const by = top + 64;
     if (ev.answer === 'approve') {
       const a = ss(0, 1, (t - (ev.answerAt ?? 0)) / 0.25);
       c.fillStyle = '#34C759';
@@ -637,7 +687,7 @@ export function drawAsk(
     }
   } else {
     const Q = (s.agent && s.agent.question) || QUESTION;
-    textAt(c, s.agent && s.agent.question ? Q[0] : tr(s, Q[0]), tx, cy0 + 38, { size: 12.5, weight: 600, max: tw });
+    textAt(c, s.agent && s.agent.question ? Q[0] : tr(s, Q[0]), tx, top + 38, { size: 12.5, weight: 600, max: tw });
     let ox = tx,
       full = false;
     Q[1].forEach((opt, i) => {
@@ -650,7 +700,7 @@ export function drawAsk(
         full = true;
         return;
       }
-      const y = cy0 + 54,
+      const y = top + 54,
         sel = ev.choice === i,
         hov = hovering(s, ox, y, w, 24);
       const appear = ss(0, 1, (el - 0.15 - i * 0.08) / 0.25);

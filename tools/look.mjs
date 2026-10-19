@@ -9,6 +9,7 @@ const out = process.argv[2] ?? '.parity/look';
 mkdirSync(out, { recursive: true });
 const STATES = [
   ['home', null],
+  ['working', 'ev:working'],
   ['chat', 'tab:chat'],
   ['attention', 'ev:attention'],
   ['question', 'ev:question'],
@@ -39,7 +40,7 @@ await b.close();
 execFileSync('ffmpeg', [
   '-v', 'error', '-y',
   ...STATES.flatMap(([n]) => ['-i', `${out}/${n}.png`]),
-  '-filter_complex', `${STATES.map((_, i) => `[${i}]pad=iw+8:ih+8:4:4:white[p${i}]`).join(';')};${STATES.map((_, i) => `[p${i}]`).join('')}xstack=inputs=${STATES.length}:layout=0_0|w0_0|0_h0|w0_h0|0_h0+h0|w0_h0+h0`,
+  '-filter_complex', `${STATES.map((_, i) => `[${i}]pad=iw+8:ih+8:4:4:white[p${i}]`).join(';')};${STATES.map((_, i) => `[p${i}]`).join('')}xstack=inputs=${STATES.length}:layout=0_0|w0_0|0_h0|w0_h0|0_h0+h0|w0_h0+h0|0_h0+h0+h0`,
   `${out}/sheet.png`,
 ]);
 console.log(`${out}/sheet.png`);
