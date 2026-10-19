@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMascot, defaultSettings, type EventType } from '@almanac-notch/island';
 import { ALL_TIERS, clickSound, gapOf, moodGain, SOUND_NAMES, SoundWatch, TIER, type SoundMood } from './sound';
-import { synth, varies } from './synth';
+import { GREETING_BEATS, greetingStrikes, synth, varies } from './synth';
 
 function make() {
   const s = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null }).state;
@@ -28,6 +28,14 @@ describe('which island moments sound (stage 9a)', () => {
     // events are recognized by ear: they never vary
     for (const n of SOUND_NAMES)
       if (TIER[n] === 'events' && n !== 'work' && n !== 'think' && n !== 'search') expect(varies(n)).toBe(false);
+  });
+
+  it('the greeting strikes only on what moves on screen (measured beats), nothing between', () => {
+    const beats = Object.values(GREETING_BEATS);
+    for (const kind of ['a', 'b', 'c'] as const)
+      for (const at of greetingStrikes(kind)) expect(beats.some((b) => Math.abs(at - b) <= 0.015)).toBe(true);
+    // nothing is struck after the last hop: the end is the pad letting go
+    expect(Math.max(...greetingStrikes('a'))).toBe(GREETING_BEATS.hop2);
   });
 
   it('events are louder than the mascot, the mascot than the buttons', () => {

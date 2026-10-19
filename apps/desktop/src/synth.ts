@@ -256,81 +256,131 @@ const d = (at: number, f: string, decay: number, gain = 1, more: Partial<Note> =
 
 // ---------------------------------------------------------------- the greeting
 //
-// A melody, scored to the launch animation (docs/SPEC.md, 3): the mascot appears 0.9, rises 1.35,
-// opens its eyes 1.95, looks left 2.3 and right 2.6, hops 2.95 and 3.40, the text types from
-// 3.45, everything fades by 4.6. A soft pad holds the harmony underneath (G - Em - C), the tune
-// peaks when the eyes open and comes down gently - nothing new is struck after the last hop,
-// the end is the pad letting go. Three versions of the tune to choose from.
+// Scored like coucou's (measured, docs/PROGRESS.md): every note is struck on something that moves
+// on screen, and nothing is struck where nothing happens. Four layers, as in coucou: the curtain
+// (the island opening), the mascot appearing, its hello, and a melody with a quiet pad under it.
+// The beats are measured from the app page frame by frame (.parity/greet-timeline.mjs), not taken
+// from SPEC: a hop crouches 0.11 s before it leaves the ground, so the hello sits on the takeoff.
 
-/** the pad: soft sines in pairs a few cents apart (a slow chorus), wide in the stereo */
-function pad(at: number, notes: string[], hold: number, gain: number): Note[] {
-  return notes.flatMap((n, i) =>
-    [-1, 1].map((side) => ({
-      at: at + i * 0.03,
-      f: hz(n) * 2 ** ((side * 4) / 1200),
-      decay: 0.35,
-      timbre: 'sine' as const,
-      attack: 0.45,
-      hold,
-      gain,
-      pan: side * 0.3,
-    })),
-  );
+/** What happens on screen during the greeting, seconds from its start (measured). */
+export const GREETING_BEATS = {
+  /** the outline runs round the island 0-0.75, the warp streaks fly out until 1.0 */
+  curtain: 0,
+  /** the glow blooms in the middle, 0.6-1.4 */
+  glow: 0.6,
+  /** the mascot's top pops up out of the ground, eyes shut (drawn from this frame, no fade) */
+  appear: 0.9,
+  /** the mascot starts rising out of the ground (hide drops), tallest stretch at 1.456 */
+  rise: 1.36,
+  /** it settles: the squash, deepest at 1.856 */
+  settle: 1.8,
+  /** its eyes switch on with a blue flash (lid 0.19 → 0.65 by 1.984) */
+  eyes: 1.952,
+  /** looks left (furthest at 2.32), then right (furthest at 2.61) */
+  lookLeft: 2.24,
+  lookRight: 2.51,
+  /** happy eyes and the waving hand from 2.91-2.96; the first hop crouches */
+  wave: 2.96,
+  /** the hops leave the ground (posY moves) - 3.056 and 3.504; land 3.344 and 3.68 */
+  hop1: 3.056,
+  hop2: 3.504,
+  land2: 3.68,
+  /** everything fades 3.8 → 4.6 */
+  fade: 3.8,
+  end: 4.6,
+} as const;
+const B = GREETING_BEATS;
+
+/** the pad: one soft sine per chord note, spread left and right, a bed ~30 dB under the tune as
+ *  in coucou; chords change on beats, never with a new strike. (Detuned pairs were tried: they
+ *  beat about twice a second and are heard as pulses where nothing happens on screen.) */
+function pad(at: number, notes: string[], until: number, gain: number, attack = 0.35): Note[] {
+  return notes.map((n, i) => ({
+    at: at + i * 0.02,
+    f: n,
+    decay: 0.3,
+    timbre: 'sine' as const,
+    attack,
+    hold: Math.max(0, until - at - attack),
+    gain: gain * 1.6,
+    pan: i % 2 ? 0.3 : -0.3,
+  }));
 }
+
+/** the hello, a voice-like held note: a little scoop up into pitch and a vibrato that grows */
+const voice = (at: number, f: string, hold: number, gain: number): Note => ({
+  at,
+  f,
+  decay: 0.16,
+  gain,
+  timbre: 'glass',
+  attack: 0.012,
+  hold,
+  pitch: st([0, -1], [0.045, 0]),
+  vib: [5.5, 0.14],
+  vibDelay: 0.08,
+});
+
+/** Harmony G - Em - C - G: Gmaj9 with the glow, Em7 when the eyes open, Cmaj9 under the hello,
+ *  home to G on the last landing. Every tune note is a chord tone (or the 9th) of its chord. */
 const HARMONY: Note[] = [
-  // a bed, not a voice: ~25 dB under the tune, as coucou's is
-  ...pad(0.05, ['G3', 'D4', 'F#4', 'A4'], 1.6, 0.012),
-  ...pad(1.9, ['E3', 'B3', 'D4', 'G4'], 0.9, 0.012),
-  ...pad(2.9, ['C3', 'G3', 'B3', 'E4'], 0.7, 0.01),
+  ...pad(B.glow, ['G3', 'D4', 'F#4', 'A4'], B.eyes, 0.012, 0.5),
+  ...pad(B.eyes, ['E3', 'B3', 'D4', 'G4'], B.wave, 0.012),
+  ...pad(B.wave, ['C3', 'G3', 'B3', 'E4'], B.land2, 0.012),
+  ...pad(B.land2, ['G3', 'B3', 'D4'], B.fade + 0.2, 0.011),
 ];
 
 function greeting(kind: 'a' | 'b' | 'c'): Spec {
-  const g = (at: number, f: string, decay: number, gain: number, more: Partial<Note> = {}): Note =>
-    d(at, f, decay, gain, { timbre: 'glass', ...more });
-  const tune: Note[] =
-    kind === 'a'
-      ? [
-          // appears: a two-drop twinkle
-          d(0.9, 'B5', 0.06, 0.25),
-          d(1.0, 'D6', 0.08, 0.3),
-          // rises: a held note scooping up
-          g(1.35, 'D5', 0.18, 0.32, { hold: 0.25, pitch: st([0, -1], [0.12, 0]), vib: [5, 0.08] }),
-          // eyes open: the phrase, the loudest moment
-          g(1.95, 'G5', 0.1, 0.8),
-          g(2.07, 'B5', 0.1, 0.85),
-          g(2.19, 'D6', 0.16, 1, { hold: 0.06 }),
-          // looks left, then right
-          d(2.3, 'A5', 0.08, 0.5, { pan: -0.4 }),
-          g(2.6, 'E6', 0.2, 0.7, { pan: 0.4, hold: 0.1, vib: [5, 0.08] }),
-          // two hops, softer each time, and down to rest
-          d(2.95, 'D6', 0.1, 0.55),
-          d(3.4, 'B5', 0.22, 0.3),
-        ]
-      : kind === 'b'
-        ? [
-            // a lullaby: fewer, longer notes
-            g(1.35, 'D5', 0.25, 0.32, { hold: 0.35, vib: [4.5, 0.1] }),
-            g(1.95, 'G5', 0.14, 0.75),
-            g(2.12, 'A5', 0.14, 0.8),
-            g(2.3, 'B5', 0.3, 0.9, { hold: 0.2, vib: [4.5, 0.1] }),
-            g(2.95, 'A5', 0.12, 0.5),
-            g(3.4, 'G5', 0.3, 0.4, { hold: 0.15 }),
-          ]
-        : [
-            // sparks: bright, quick rolls
-            d(0.9, 'D6', 0.05, 0.25),
-            d(0.97, 'G6', 0.06, 0.25),
-            g(1.35, 'G4', 0.12, 0.4, { pitch: st([0, -5], [0.1, 0]) }),
-            d(1.95, 'G5', 0.08, 0.6),
-            d(2.01, 'B5', 0.08, 0.7),
-            d(2.07, 'D6', 0.08, 0.8),
-            d(2.13, 'G6', 0.18, 0.9),
-            d(2.3, 'F#6', 0.06, 0.35, { pan: -0.5 }),
-            d(2.6, 'A6', 0.06, 0.35, { pan: 0.5 }),
-            d(2.95, 'E6', 0.1, 0.5),
-            d(3.4, 'D6', 0.18, 0.35),
-          ];
-  return { len: 4.6, parts: [...HARMONY, ...tune], level: lvl(0.049), reverb: 0.22 };
+  // 1. the curtain: air rising with the outline (0-0.75) and the warp (to 1.0), a low tone
+  //    swelling under it - no strike, it opens
+  const curtain: Part[] = [
+    // peaks with the outline (0.3-0.6) and is nearly gone when the mascot pops up at 0.9
+    { at: B.curtain, dur: 0.95, band: st([0, 250], [0.6, 1800], [0.95, 900]), gain: 0.55, attack: 0.3, seed: 11 },
+    {
+      at: B.curtain,
+      f: 'G3',
+      decay: 0.2,
+      gain: 0.18,
+      timbre: 'sine',
+      attack: 0.6,
+      hold: 0.3,
+      pitch: st([0, -5], [0.75, 0]),
+    },
+  ];
+  // 2. it appears: a soft low bubble as its top pops out of the ground, a bloop gliding up
+  //    exactly as it rises (top at the tallest stretch, 1.456),
+  //    a soft low plop when it settles, and the one bright moment - its eyes light up
+  const appear: Note[] = [
+    d(B.appear, 'D4', 0.08, 0.7, { timbre: 'sine', attack: 0.006, pitch: st([0, 5], [0.03, 0]) }),
+    d(B.rise, 'G4', 0.09, 0.45, { timbre: 'sine', attack: 0.02, pitch: st([0, -7], [0.096, 0]) }),
+    d(B.settle, 'G3', 0.06, 0.3, { timbre: 'sine', attack: 0.01, pitch: st([0, 2], [0.05, 0]) }),
+    d(B.eyes, 'B5', 0.2, 0.55, { timbre: 'glass' }),
+    d(B.eyes + 0.012, 'E6', 0.22, 0.4, { timbre: 'glass' }),
+  ];
+  // 3. the melody follows its gaze - left, right - quietly, in the middle of the range
+  const gaze: Note[] =
+    kind === 'c'
+      ? []
+      : [
+          d(B.lookLeft, 'B4', 0.12, 0.28, { timbre: 'glass', pan: -0.35 }),
+          d(B.lookRight, 'G4', 0.14, 0.26, { timbre: 'glass', pan: 0.35 }),
+        ];
+  // 4. the hello, on the two takeoffs - the loudest moment; the second note is held over the
+  //    landing and lets go with the fade
+  const hello: Note[] =
+    kind === 'b'
+      ? [voice(B.hop1, 'G5', 0.16, 0.8), voice(B.hop2, 'E5', 0.42, 0.85)]
+      : [voice(B.hop1, 'D5', 0.16, 0.8), voice(B.hop2, 'G5', 0.42, 0.85)];
+  return { len: B.end, parts: [...curtain, ...HARMONY, ...appear, ...gaze, ...hello], level: lvl(0.049), reverb: 0.22 };
+}
+
+/** When each greeting variant strikes a note (the pad and the air excluded) - for the test that
+ *  every strike sits on a beat. */
+export function greetingStrikes(kind: 'a' | 'b' | 'c'): number[] {
+  const pads = new Set(HARMONY);
+  return greeting(kind)
+    .parts.filter((p): p is Note => 'f' in p && !pads.has(p as Note) && p.at > 0)
+    .map((p) => p.at);
 }
 
 // ---------------------------------------------------------------- variants
@@ -353,9 +403,9 @@ export const VARIANTS = {
     c: 'широкий аккорд с долгим хвостом',
   },
   greeting: {
-    a: 'мелодия: искорка, подъём, фраза на открытии глаз, взгляды, два прыжка',
-    b: 'колыбельная: меньше нот, длиннее',
-    c: 'искры: быстрые яркие переборы',
+    a: 'шторка, появление, глаза, взгляды, «при-вет» вверх на прыжках',
+    b: 'то же, «при-вет» вниз - мягче',
+    c: 'то же без нот на взглядах - тише в середине',
   },
 } as const;
 export type Variant = 'a' | 'b' | 'c';
