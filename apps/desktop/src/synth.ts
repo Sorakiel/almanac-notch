@@ -414,7 +414,7 @@ export const CHOICE: Record<keyof typeof VARIANTS, Variant> = {
   attention: 'a',
   question: 'a',
   success: 'a',
-  greeting: 'a',
+  greeting: 'c',
 };
 
 const VARIANT_SPECS: Record<keyof typeof VARIANTS, Record<Variant, () => Spec>> = {

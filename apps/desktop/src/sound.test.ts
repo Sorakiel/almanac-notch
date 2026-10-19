@@ -35,7 +35,7 @@ describe('which island moments sound (stage 9a)', () => {
     for (const kind of ['a', 'b', 'c'] as const)
       for (const at of greetingStrikes(kind)) expect(beats.some((b) => Math.abs(at - b) <= 0.015)).toBe(true);
     // nothing is struck after the last hop: the end is the pad letting go
-    expect(Math.max(...greetingStrikes('a'))).toBe(GREETING_BEATS.hop2);
+    expect(Math.max(...greetingStrikes('c'))).toBe(GREETING_BEATS.hop2);
   });
 
   it('events are louder than the mascot, the mascot than the buttons', () => {
