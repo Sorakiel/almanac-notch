@@ -36,6 +36,16 @@ pub struct Repo {
     pub total: u32,
     /// name of the first failed check
     pub failed: Option<String>,
+    /// "owner/name": the links and the re-run need it
+    pub full: String,
+    /// the head commit: short sha and its message's first line
+    pub sha: String,
+    pub title: String,
+    /// the failed check's page (else the commit's checks); opened by the card's button
+    pub url: String,
+    /// the failed check's Actions workflow run, which "re-run failed jobs" takes; None for
+    /// checks that are not Actions (an external CI cannot be re-run from here)
+    pub run_id: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -109,11 +119,12 @@ const QUERY: &str = "query($since: GitTimestamp!, $author: ID) {
 /// Step 2: the checks of the chosen commits.
 const ROLLUPS: &str = "query($ids: [ID!]!) {
   nodes(ids: $ids) { ... on Commit {
-    id
+    id oid messageHeadline
     statusCheckRollup { state contexts(first: 50) { totalCount nodes {
       __typename
-      ... on CheckRun { name status conclusion startedAt completedAt }
-      ... on StatusContext { context state createdAt }
+      ... on CheckRun { name status conclusion startedAt completedAt detailsUrl
+                        checkSuite { workflowRun { databaseId } } }
+      ... on StatusContext { context state createdAt targetUrl }
     } } }
   } }
 }";
@@ -242,6 +253,7 @@ struct Pick {
     /// commit node id
     id: String,
     repo: String,
+    full: String,
     branch: String,
     committed: f64,
     pushed: f64,
@@ -308,6 +320,7 @@ fn parse_branches(v: &Value, me: &str) -> Option<(State, Vec<Pick>)> {
             picks.push(Pick {
                 id: id.to_owned(),
                 repo: short.clone(),
+                full: name.to_owned(),
                 branch,
                 committed: at,
                 pushed,
@@ -335,11 +348,16 @@ fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
         .unwrap_or_default();
     let mut out: Vec<Repo> = Vec::new();
     for p in picks {
-        let roll = nodes
+        let node = nodes
             .iter()
             .find(|n| n["id"].as_str() == Some(p.id.as_str()))
-            .map(|n| &n["statusCheckRollup"])
+            .copied()
             .unwrap_or(&Value::Null);
+        let roll = &node["statusCheckRollup"];
+        let oid = node["oid"].as_str().unwrap_or("");
+        let sha: String = oid.chars().take(7).collect();
+        let title = node["messageHeadline"].as_str().unwrap_or("").to_owned();
+        let commit_url = format!("https://github.com/{}/commit/{oid}", p.full);
         let state = match roll["state"].as_str() {
             Some("SUCCESS") => "ok",
             Some("FAILURE" | "ERROR") => "fail",
@@ -354,6 +372,11 @@ fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
                     done: 0,
                     total: 0,
                     failed: None,
+                    full: p.full.clone(),
+                    sha,
+                    title,
+                    url: commit_url,
+                    run_id: None,
                 });
                 continue;
             }
@@ -366,12 +389,20 @@ fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
             .as_u64()
             .unwrap_or(ctx.len() as u64) as u32;
         let done = (ctx.iter().filter(|c| is_done(c)).count() as u32).min(total);
-        let failed = ctx.iter().find(|c| is_failed(c)).and_then(|c| {
+        let bad = ctx.iter().find(|c| is_failed(c));
+        let failed = bad.and_then(|c| {
             c["name"]
                 .as_str()
                 .or_else(|| c["context"].as_str())
                 .map(str::to_owned)
         });
+        // only GitHub's own pages: a status context's target can point anywhere
+        let url = bad
+            .and_then(|c| c["detailsUrl"].as_str().or_else(|| c["targetUrl"].as_str()))
+            .filter(|u| u.starts_with("https://github.com/"))
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{commit_url}/checks"));
+        let run_id = bad.and_then(|c| c["checkSuite"]["workflowRun"]["databaseId"].as_u64());
         // when the checks ran says more than when the commit was made (re-runs)
         let ran = ctx
             .iter()
@@ -388,6 +419,11 @@ fn apply_rollups(picks: &[Pick], v: &Value) -> Vec<Repo> {
             done,
             total,
             failed,
+            full: p.full.clone(),
+            sha,
+            title,
+            url,
+            run_id,
         });
     }
     out.sort_by(|a, b| b.at.total_cmp(&a.at));
@@ -496,6 +532,55 @@ pub fn connect(token: &str) -> Result<String, String> {
     Ok(login)
 }
 
+/// "Re-run failed jobs" of an Actions run. The token needs Actions: read and write.
+pub fn rerun(full: &str, run_id: u64) -> Result<(), String> {
+    let t = token().ok_or_else(|| {
+        crate::lang::t("GitHub не подключён", "GitHub is not connected").to_owned()
+    })?;
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .build(),
+        )
+        .build()
+        .into();
+    let url =
+        format!("https://api.github.com/repos/{full}/actions/runs/{run_id}/rerun-failed-jobs");
+    let r = agent
+        .post(&url)
+        .header("Authorization", format!("Bearer {t}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "almanac-notch")
+        .send_empty();
+    match r {
+        Ok(_) => {
+            poke();
+            Ok(())
+        }
+        Err(ureq::Error::StatusCode(403 | 404)) => Err(crate::lang::t(
+            "Токену нужен доступ Actions: запись",
+            "The token needs Actions: write access",
+        )
+        .to_owned()),
+        Err(_) => Err(crate::lang::t("Нет связи с GitHub", "No connection to GitHub").to_owned()),
+    }
+}
+
+/// Open a GitHub page in the browser.
+pub fn open(url: &str) {
+    if !url.starts_with("https://github.com/") {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(windows)]
+    let _ = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+}
+
 pub fn disconnect() {
     if let Ok(e) = entry() {
         let _ = e.delete_credential();
@@ -544,10 +629,12 @@ mod tests {
             {"id": "C1", "statusCheckRollup": {"state": "SUCCESS", "contexts": {"totalCount": 1, "nodes": [
                 {"__typename": "CheckRun", "name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS",
                  "startedAt": "2026-10-10T10:01:00Z", "completedAt": "2026-10-10T10:05:00Z"}]}}},
-            {"id": "C2", "statusCheckRollup": {"state": "FAILURE", "contexts": {"totalCount": 3, "nodes": [
+            {"id": "C2", "oid": "abcdef1234567", "messageHeadline": "Fix the build", "statusCheckRollup": {"state": "FAILURE", "contexts": {"totalCount": 3, "nodes": [
                 {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"},
                 {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "FAILURE",
-                 "completedAt": "2026-10-14T11:00:00Z"},
+                 "completedAt": "2026-10-14T11:00:00Z",
+                 "detailsUrl": "https://github.com/sora/almanac-app/actions/runs/77/job/9",
+                 "checkSuite": {"workflowRun": {"databaseId": 77}}},
                 {"__typename": "StatusContext", "context": "ci/x", "state": "PENDING"}]}}},
             {"id": "C4", "statusCheckRollup": null}
         ]}})
@@ -584,6 +671,16 @@ mod tests {
         );
         assert_eq!((r[0].done, r[0].total), (2, 3));
         assert_eq!(r[0].failed.as_deref(), Some("build"));
+        assert_eq!(
+            (r[0].sha.as_str(), r[0].title.as_str()),
+            ("abcdef1", "Fix the build")
+        );
+        assert_eq!(r[0].full, "sora/almanac-app");
+        assert_eq!(
+            r[0].url,
+            "https://github.com/sora/almanac-app/actions/runs/77/job/9"
+        );
+        assert_eq!(r[0].run_id, Some(77));
         // the time of the checks, not of the commit
         assert_eq!(iso(r[0].at), "2026-10-14T11:00:00Z");
         // a branch without checks is dropped

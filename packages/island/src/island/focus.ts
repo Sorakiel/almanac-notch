@@ -4,6 +4,7 @@ import type { IslandState, ModuleId } from '../sim/state';
 import type { MascotColor } from '../sim/settings';
 import { calMins } from '../stub';
 import { startFlight } from './flight';
+import { ciWantsFocus } from './ci';
 
 export type NotchState = 'closed' | 'half' | 'open';
 
@@ -93,6 +94,8 @@ export function autoFocus(s: IslandState): ModuleId {
   if ((ev === 'success' || ev === 'nudge' || ev === 'dance') && s.event && s.event.src === 'almanac' && on('almanac'))
     return 'almanac';
   if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
+  // a red CI nobody has seen yet takes the open island once (island/ci.ts); a prompt still wins
+  if (ev !== 'attention' && ev !== 'question' && ciWantsFocus(s) && on('github')) return 'github';
   if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
   if (callMins(s) <= 30 && on('cal')) return 'cal';
   if (s.musicPlaying && on('music')) return 'music';

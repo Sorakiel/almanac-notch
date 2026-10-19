@@ -202,6 +202,15 @@ export const EN: Readonly<Record<string, string>> = {
   'упал: {0}': 'failed: {0}',
   упал: 'failed',
   'CI упал': 'CI failed',
+  // the CI card (island/ci.ts)
+  'Упала проверка {0}': 'Check {0} failed',
+  'Все проверки прошли': 'All checks passed',
+  'Проверки идут': 'Checks running',
+  ' · {0} из {1}': ' · {0} of {1}',
+  'Открыть прогон': 'Open run',
+  Перезапустить: 'Re-run',
+  'Перезапускаю…': 'Re-running…',
+  'Перезапустил - жду результат': 'Re-run started - waiting for the result',
   // Vercel (apps/desktop/src/feeds.ts, island/cards.ts)
   'Настройки → Vercel': 'Settings → Vercel',
   'Vercel не подключён': 'Vercel not connected',

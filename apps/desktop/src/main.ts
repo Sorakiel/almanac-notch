@@ -22,6 +22,7 @@ import {
   islandPointerMove,
   islandRect,
   notchState,
+  tr,
   type EventType,
   type HostPrefs,
   type IslandPoint,
@@ -104,6 +105,23 @@ try {
 } catch {
   // unreadable storage: defaults
 }
+/** the CI card's "Перезапустить": the note under the lead line says how it went (island/ci.ts) */
+function rerunCi(repo: string): void {
+  const run = s.github?.runs.find((r) => r.repo === repo);
+  if (!run) return;
+  const note = (text: string, err = false): void => {
+    s.ciNote = { key: run.key, text: tr(s, text), at: s.t, err };
+  };
+  note('Перезапускаю…');
+  invoke('github_rerun', { name: repo }).then(
+    () => note('Перезапустил - жду результат'),
+    // the error is already in the interface language (src-tauri github.rs)
+    (e: unknown) => {
+      s.ciNote = { key: run.key, text: String(e), at: s.t, err: true };
+    },
+  );
+}
+
 function saveCard(): void {
   if (!s.host) return;
   try {
@@ -159,8 +177,23 @@ function readTiers(): void {
   }
 }
 readTiers();
+// how CI results reach the person (the settings window, GitHub; island/ci.ts)
+const CI_KEY = 'almanac-notch.ci';
+function readCi(): void {
+  try {
+    const v = JSON.parse(localStorage.getItem(CI_KEY) ?? '{}') as Record<string, unknown>;
+    s.ciNotify = {
+      ok: v.ok === 'off' ? 'off' : 'pop',
+      fail: v.fail === 'off' || v.fail === 'dot' ? v.fail : 'pop',
+    };
+  } catch {
+    // unreadable: both pop up
+  }
+}
+readCi();
 window.addEventListener('storage', (e) => {
   if (e.key === TIERS_KEY) readTiers();
+  if (e.key === CI_KEY) readCi();
 });
 
 // a call: asked from the app every few seconds, only while sound is on (src-tauri sound.rs)
@@ -530,6 +563,8 @@ function tick(now: number, id: number): void {
   for (const r of s.requests.splice(0))
     if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
     else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
+    else if (r.startsWith('gh:open:')) void invoke('github_open', { name: r.slice(8) });
+    else if (r.startsWith('gh:rerun:')) rerunCi(r.slice(9));
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
     else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));

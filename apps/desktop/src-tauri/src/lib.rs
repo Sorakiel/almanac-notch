@@ -141,6 +141,40 @@ async fn github_connect(token: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// The CI card's buttons: the repository's failed check page, or a re-run of its failed jobs.
+/// Looked up here by repository name, not sent by the page.
+fn gh_repo(feeds: &Arc<Mutex<Feeds>>, name: &str) -> Option<github::Repo> {
+    feeds
+        .lock()
+        .unwrap()
+        .github
+        .as_ref()
+        .and_then(|g| g.repos.iter().find(|r| r.name == name).cloned())
+}
+
+#[tauri::command]
+fn github_open(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) {
+    if let Some(r) = gh_repo(&feeds, &name) {
+        github::open(&r.url);
+    }
+}
+
+#[tauri::command]
+async fn github_rerun(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) -> Result<(), String> {
+    let r = gh_repo(&feeds, &name)
+        .ok_or_else(|| lang::t("Нет такого репозитория", "No such repository").to_owned())?;
+    let id = r.run_id.ok_or_else(|| {
+        lang::t(
+            "Эту проверку не перезапустить отсюда",
+            "This check can't be re-run from here",
+        )
+        .to_owned()
+    })?;
+    tauri::async_runtime::spawn_blocking(move || github::rerun(&r.full, id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn github_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
@@ -708,6 +742,8 @@ pub fn run() {
             set_volume,
             github_connect,
             github_disconnect,
+            github_open,
+            github_rerun,
             vercel_connect,
             vercel_disconnect,
             vercel_open,

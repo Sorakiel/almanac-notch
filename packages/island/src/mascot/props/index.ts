@@ -3,6 +3,7 @@ import type { MascotColor } from '../../sim/settings';
 import type { Pose } from '../../sim/pose';
 import type { IslandState, ModuleId } from '../../sim/state';
 import { busyAside, claudeState } from '../../island/focus';
+import { ciAlert } from '../../island/ci';
 import type { Prop } from './types';
 import { headphones } from './headphones';
 import { book } from './book';
@@ -43,6 +44,8 @@ export const MODULE_PROPS: Readonly<Record<ModuleId, PropKind>> = {
 export function propFor(s: IslandState, f: ModuleId): PropKind | null {
   if ((s.event && !busyAside(s)) || s.tab !== 'home') return null;
   if (f === 'claude' && claudeState(s) !== 'idle') return null;
+  // a red CI waiting is no time for the module's toy
+  if (f === 'github' && ciAlert(s)) return null;
   if (f === 'music' && !s.musicPlaying) return 'headphones';
   return MODULE_PROPS[f] || null;
 }

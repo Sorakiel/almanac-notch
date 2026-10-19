@@ -2,7 +2,8 @@
 import { plural, tr } from '../i18n';
 import { clamp, hexA, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
-import type { IslandState, ModuleId } from '../sim/state';
+import type { CiRun, IslandState, ModuleId } from '../sim/state';
+import { ciRun } from './ci';
 import { EVENTS, limitText, statusOf, stepAt, stepFrac, stepIndex } from '../sim/events';
 import { drawMascot } from '../mascot/body';
 import { propFor } from '../mascot/props';
@@ -557,6 +558,65 @@ function boardBlock(
 }
 
 /** proto: drawFocusCard - the large card of the module in focus */
+/** The CI card on the wide card: the lead line says what happened, the quiet line where (repo,
+ * branch, when, the commit), the buttons what can be done. A failure leads with what to do -
+ * open the run - and can be re-run or set aside; a success needs nothing, one quiet button. */
+function ciCard(s: IslandState, c: Ctx, run: CiRun, tx: number, y0: number, tmax: number): void {
+  const fail = run.state === 'fail',
+    of = run.total ? tr(s, ' · {0} из {1}', run.done, run.total) : '';
+  const lead = fail
+    ? run.check
+      ? tr(s, 'Упала проверка {0}', run.check)
+      : tr(s, 'CI упал')
+    : run.state === 'ok'
+      ? tr(s, 'Все проверки прошли') + of
+      : tr(s, 'Проверки идут') + of;
+  stateDisc(c, tx + 6, y0 + ROW0 - 1, run.state);
+  textAt(c, lead, tx + 20, y0 + ROW0 - 0.5, { size: 14, weight: 600, color: VAL, max: tmax - 20 });
+  // the commit's title is the least needed part: it goes last and is the one cut
+  const note = s.ciNote && s.ciNote.key === run.key ? s.ciNote : null,
+    where = [run.repo, run.branch, agoText(s, run.at || null)].join(' · ') + (run.title ? ` · «${run.title}»` : '');
+  textAt(c, note ? note.text : where, tx + 20, y0 + ROW0 + 19, {
+    size: 11.5,
+    weight: 400,
+    color: note && note.err ? '#F5B94A' : DIM,
+    max: tmax - 20,
+  });
+  const by = y0 + ROW0 + 34,
+    bw = (label: string): number => {
+      c.save();
+      c.font = '500 12px Onest, system-ui, sans-serif';
+      const w = c.measureText(label).width + 30;
+      c.restore();
+      return w;
+    };
+  const open = tr(s, 'Открыть прогон'),
+    rerun = tr(s, 'Перезапустить');
+  kbdButton(s, c, tx + 20, by, bw(open), 24, open, '', 'gh:open:' + run.repo, fail);
+  if (fail && run.rerun)
+    kbdButton(s, c, tx + 28 + bw(open), by, bw(rerun), 24, rerun, '', 'gh:rerun:' + run.repo, false);
+  // set aside: a cross in the card's corner, where a dismissal is looked for
+  if (fail) {
+    const cx = tx + tmax - 2,
+      cy = y0 + 20,
+      hov = hovering(s, cx - 11, cy - 11, 22, 22);
+    c.fillStyle = hov ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.07)';
+    c.beginPath();
+    c.arc(cx, cy, 11, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = hov ? INK : DIM;
+    c.lineWidth = 1.5;
+    c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(cx - 3.5, cy - 3.5);
+    c.lineTo(cx + 3.5, cy + 3.5);
+    c.moveTo(cx + 3.5, cy - 3.5);
+    c.lineTo(cx - 3.5, cy + 3.5);
+    c.stroke();
+    addHit(s, c, { x: cx - 11, y: cy - 11, w: 22, h: 22, act: 'gh:hide' });
+  }
+}
+
 export function drawFocusCard(
   s: IslandState,
   c: Ctx,
@@ -669,26 +729,31 @@ export function drawFocusCard(
             : tr(s, 'нет проверок');
     const prs = gh ? gh.prs : 2,
       week = (gh ? gh.commits : [4, 0, 6, 9, 3, 7, 5]).reduce((a, b) => a + b, 0);
-    statRow(
-      c,
-      (x, y) => stateDisc(c, x, y, ci),
-      repo ? tr(s, 'CI · {0}', repo) : tr(s, 'CI основной ветки'),
-      ciWord,
-      tx,
-      y0 + ROW0,
-      tmax,
-      ci === 'fail' ? '#F4505E' : VAL,
-    );
-    statRow(c, (x, y) => prIcon(c, x, y), tr(s, 'Ждут ревью'), String(prs), tx, y0 + ROW0 + ROW_STEP, tmax);
-    statRow(
-      c,
-      (x, y) => rowIcon(c, 'commits', x, y),
-      tr(s, 'Коммиты за 7 дней'),
-      String(week),
-      tx,
-      y0 + ROW0 + ROW_STEP * 2,
-      tmax,
-    );
+    // the wide card (an event, a red CI in focus): what happened, where, what to do (island/ci.ts)
+    const run = tmax > 300 ? ciRun(s) : null;
+    if (run) ciCard(s, c, run, tx, y0, tmax);
+    else {
+      statRow(
+        c,
+        (x, y) => stateDisc(c, x, y, ci),
+        repo ? tr(s, 'CI · {0}', repo) : tr(s, 'CI основной ветки'),
+        ciWord,
+        tx,
+        y0 + ROW0,
+        tmax,
+        ci === 'fail' ? '#F4505E' : VAL,
+      );
+      statRow(c, (x, y) => prIcon(c, x, y), tr(s, 'Ждут ревью'), String(prs), tx, y0 + ROW0 + ROW_STEP, tmax);
+      statRow(
+        c,
+        (x, y) => rowIcon(c, 'commits', x, y),
+        tr(s, 'Коммиты за 7 дней'),
+        String(week),
+        tx,
+        y0 + ROW0 + ROW_STEP * 2,
+        tmax,
+      );
+    }
   } else if (it.kind === 'deploy' && s.vercel) {
     // not in the prototype (docs/CHANGES.md): the newest deployments, as coucou's card
     const vc = s.vercel;

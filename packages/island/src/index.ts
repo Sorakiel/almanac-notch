@@ -20,6 +20,8 @@ export {
   type MediaFeed,
   type HostPrefs,
   type GithubFeed,
+  type CiRun,
+  type CiNotify,
   type VercelFeed,
   type NotionFeed,
   type GrafanaFeed,

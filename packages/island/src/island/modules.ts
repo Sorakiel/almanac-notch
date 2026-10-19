@@ -74,16 +74,23 @@ export function modules(s: IslandState): ModuleItem[] {
       id: 'github',
       kind: 'ci',
       name: 'GitHub',
+      // a red head anywhere keeps the pill red, even when a newer repository is green (island/ci.ts)
       state: gh
-        ? gh.auth === 'ok' && gh.ci !== 'none'
-          ? gh.ci
-          : 'off'
+        ? gh.auth === 'ok' && gh.fail
+          ? 'fail'
+          : gh.auth === 'ok' && gh.ci !== 'none'
+            ? gh.ci
+            : 'off'
         : ev === 'working'
           ? 'run'
           : ev === 'error'
             ? 'fail'
             : 'ok',
-      short: gh ? gh.short : tr(s, ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный'),
+      short: gh
+        ? gh.auth === 'ok' && gh.fail
+          ? tr(s, 'CI упал')
+          : gh.short
+        : tr(s, ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный'),
     },
     {
       id: 'cal',

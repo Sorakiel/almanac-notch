@@ -9,6 +9,7 @@ import { TRACKS, TRACK_LEN } from '../stub';
 import type { ModuleId, Tab } from '../sim/state';
 import { habitsDone, habitsTotal } from './focus';
 import { hitAt } from './hits';
+import { ciHide } from './ci';
 
 export interface IslandPoint {
   x: number;
@@ -107,6 +108,9 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   }
   // not in the prototype: the Vercel card's arrow opens the deployment on vercel.com (the app)
   else if (act.startsWith('vercel:')) s.requests.push(act);
+  // the CI card (island/ci.ts): set aside here, open and re-run in the app
+  else if (act === 'gh:hide') ciHide(s);
+  else if (act.startsWith('gh:')) s.requests.push(act);
   // not in the prototype: a Notion card row opens the page (the app)
   else if (act.startsWith('notion:')) s.requests.push(act);
   // not in the prototype: the Grafana card opens the alert list or the picked dashboard (the app)

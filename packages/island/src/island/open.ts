@@ -7,7 +7,8 @@ import type { Status } from '../sim/events';
 import type { WorkFx } from './fx';
 import { effectiveFocus } from './focus';
 import { addHit, hovering, withScale } from './hits';
-import { card, cardTint } from './card';
+import { card, cardTint, haloTint } from './card';
+import { ciAlert } from './ci';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
 import { drawAdd, drawChat, drawSettings } from './tabs';
@@ -372,7 +373,9 @@ function bigFocus(
 /** an event that takes the big card, the other modules wait in the rail */
 function railEvent(s: IslandState): boolean {
   const ev = s.event && s.event.type;
-  return ev === 'attention' || ev === 'question' || ev === 'success' || ev === 'error';
+  if (ev === 'attention' || ev === 'question' || ev === 'success' || ev === 'error') return true;
+  // a red CI in focus keeps the big card after its event: it has buttons to reach (island/ci.ts)
+  return !!ciAlert(s) && effectiveFocus(s) === 'github';
 }
 
 /** width of the tab's left card when it has one (the card the tabs share in a switch) */
@@ -395,6 +398,7 @@ export function drawOpenBody(
   cy1: number,
   fx: WorkFx | null,
 ): void {
+  haloTint.k = 0;
   drawBody(s, c, X0, X1, cy0, cy1, fx);
   // mascots crossing between the card and the grid go over both
   flushLate();

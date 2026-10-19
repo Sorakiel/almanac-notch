@@ -9,6 +9,7 @@ import {
   type CalFeed,
   type EventType,
   type GithubFeed,
+  type CiRun,
   type GrafanaFeed,
   type IslandState,
   type Lang,
@@ -376,6 +377,13 @@ export interface GhRepo {
   done: number;
   total: number;
   failed: string | null;
+  /** owner/name */
+  full: string;
+  sha: string;
+  title: string;
+  url: string;
+  /** an Actions run: the card can re-run its failed jobs */
+  run_id: number | null;
 }
 
 export interface GhState {
@@ -434,6 +442,8 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
     prText: '',
     commits: [0, 0, 0, 0, 0, 0, 0],
     hint: [tr(L, hint[0]), tr(L, hint[1])],
+    runs: [],
+    fail: null,
   });
   if (!g || g.auth === 'off') return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена');
   if (g.auth === 'bad') return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят');
@@ -441,6 +451,8 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
   const withCi = g.repos.filter((r): r is GhRepo & { state: 'run' | 'fail' | 'ok' } => r.state !== 'none'),
     latest = withCi.reduce<(typeof withCi)[number] | null>((a, r) => (!a || r.at > a.at ? r : a), null);
   const commits = commitDays(g.commits, now);
+  const runs = withCi.map(ciRunOf).sort((a, b) => b.at - a.at),
+    fail = runs.find((r) => r.state === 'fail') ?? null;
   if (!latest)
     return {
       auth: 'ok',
@@ -451,6 +463,8 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
       prText: prText(g.prs, L),
       commits,
       hint: ['', ''],
+      runs,
+      fail,
     };
   // the card line is narrow: the status is short, the repository gets what is left
   const st =
@@ -472,8 +486,31 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
     prText: prText(g.prs, L),
     commits,
     hint: ['', ''],
+    runs,
+    fail,
   };
 }
+
+/** one repository's head as the CI card shows it (packages/island/src/island/ci.ts) */
+export function ciRunOf(r: GhRepo & { state: 'run' | 'fail' | 'ok' }): CiRun {
+  return {
+    key: r.name + '#' + r.sha,
+    state: r.state,
+    repo: r.name,
+    branch: r.branch,
+    check: r.failed ?? '',
+    sha: r.sha,
+    title: r.title,
+    done: r.done,
+    total: r.total,
+    at: r.at,
+    rerun: r.state === 'fail' && r.run_id !== null,
+  };
+}
+
+/** how long a CI result pops up, s: long enough to read its card (a failure has more to read)
+ * and the buttons to be reached; the pointer on the island holds it (island/ci.ts) */
+export const CI_POP = { ok: 3, fail: 4 };
 
 /** Prompts keep the island; a CI result waits until they are answered. */
 const PROMPTS: readonly string[] = ['attention', 'question'];
@@ -487,7 +524,7 @@ export class GithubDriver {
   private lang: Lang = 'ru';
   /** last CI state per repository; a change to ok or fail is an event */
   private seen = new Map<string, GhRepo['state']>();
-  private pending: { type: EventType; label: string } | null = null;
+  private pending: { type: EventType; label: string; key: string } | null = null;
   constructor(
     private s: IslandState,
     private m: { trigger: (t: EventType) => void },
@@ -499,7 +536,7 @@ export class GithubDriver {
   onState(g: GhState): void {
     // the first read after start only seeds the states: no event for what was already so
     const first = this.seen.size === 0 && this.g === null;
-    let hit: { type: EventType; label: string } | null = null;
+    let hit: { type: EventType; label: string; key: string } | null = null;
     if (g.login) {
       for (const r of g.repos) {
         const key = r.name + '#' + r.branch,
@@ -507,9 +544,15 @@ export class GithubDriver {
         this.seen.set(key, r.state);
         if (first || was === undefined || was === r.state || r.state === 'run' || r.state === 'none') continue;
         const type: EventType = r.state === 'ok' ? 'success' : 'error';
+        // the person chose how CI results reach them (settings): only "pop" brings the event
+        if ((type === 'success' ? this.s.ciNotify.ok : this.s.ciNotify.fail) !== 'pop') continue;
         // a failure outranks a success from another repository in the same read
         if (!hit || type === 'error')
-          hit = { type, label: tr(this.s, type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12) };
+          hit = {
+            type,
+            label: tr(this.s, type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12),
+            key: r.name + '#' + r.sha,
+          };
       }
     } else if (g.auth === 'off' || g.auth === 'bad') this.seen.clear();
     this.g = g;
@@ -532,7 +575,12 @@ export class GithubDriver {
     if (p && !(ev && PROMPTS.includes(ev.type))) {
       this.pending = null;
       this.m.trigger(p.type);
-      if (this.s.event) this.s.event.label = p.label;
+      const ev = this.s.event;
+      if (ev) {
+        ev.label = p.label;
+        ev.ci = p.key;
+        ev.until = ev.start + CI_POP[p.type === 'success' ? 'ok' : 'fail'];
+      }
     }
   }
 }

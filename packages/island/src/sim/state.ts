@@ -30,6 +30,36 @@ export interface MascotEvent {
   answerAt?: number;
   /** set by real Claude Code sessions, Vercel, Notion and Grafana: success and error then belong to that card */
   src?: 'agent' | 'vercel' | 'notion' | 'grafana' | 'almanac';
+  /** a GitHub CI result: the run's key (CiRun.key), which the card then shows */
+  ci?: string;
+}
+
+/** One repository's newest CI result, as the CI card shows it (island/ci.ts). */
+export interface CiRun {
+  /** repo#sha: one failure, one alert - hiding or seeing it is kept per key */
+  key: string;
+  state: 'run' | 'fail' | 'ok';
+  /** short repository name; the app looks the links up by it */
+  repo: string;
+  branch: string;
+  /** the first failed check, '' when GitHub names none */
+  check: string;
+  sha: string;
+  /** the commit message's first line */
+  title: string;
+  done: number;
+  total: number;
+  /** when the checks ran, epoch ms */
+  at: number;
+  /** an Actions run: its failed jobs can be re-run from the card */
+  rerun: boolean;
+}
+
+/** How a CI result reaches the person (settings, GitHub): the card pops up on its own, only the
+ * mascot's dot says it (a failure), or nothing */
+export interface CiNotify {
+  ok: 'pop' | 'off';
+  fail: 'pop' | 'dot' | 'off';
 }
 
 /**
@@ -118,6 +148,10 @@ export interface GithubFeed {
   commits: number[];
   /** the card's two lines while there is nothing to show (no token, no CI) */
   hint: [string, string];
+  /** every repository's newest CI, newest first (events look their run up here) */
+  runs: CiRun[];
+  /** the newest failing head, null when nothing is red */
+  fail: CiRun | null;
 }
 
 /**
@@ -312,6 +346,13 @@ export interface IslandState {
   cal: CalFeed | null;
   media: MediaFeed | null;
   github: GithubFeed | null;
+  /** CI alerts (island/ci.ts): how they reach the person, the one set aside, the one already
+   * seen in the open island, the one that was on screen, the card's note after a button */
+  ciNotify: CiNotify;
+  ciHidden: string;
+  ciSeen: string;
+  ciShown: string;
+  ciNote: { key: string; text: string; at: number; err: boolean } | null;
   vercel: VercelFeed | null;
   notion: NotionFeed | null;
   grafana: GrafanaFeed | null;
@@ -470,6 +511,11 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     cal: null,
     media: null,
     github: null,
+    ciNotify: { ok: 'pop', fail: 'pop' },
+    ciHidden: '',
+    ciSeen: '',
+    ciShown: '',
+    ciNote: null,
     vercel: null,
     notion: null,
     grafana: null,

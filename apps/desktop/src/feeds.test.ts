@@ -218,6 +218,11 @@ describe('github feed', () => {
     done: 5,
     total: 5,
     failed: null,
+    full: 'sora/almanac-notch',
+    sha: 'abc1234',
+    title: 'Fix the build',
+    url: 'https://github.com/sora/almanac-notch/commit/abc1234/checks',
+    run_id: 42,
     ...o,
   });
   const gh = (o: Partial<GhState> = {}): GhState => ({
@@ -284,6 +289,34 @@ describe('github feed', () => {
     d.onState(gh({ repos: [repo({ state: 'fail' })] }));
     expect(m.state.event?.type).toBe('error');
     expect(m.state.github?.ci).toBe('fail');
+  });
+  it('the card gets every run and the newest red head, even under a newer green repository', () => {
+    const f = githubFeed(
+      gh({
+        repos: [
+          repo({ name: 'site', state: 'ok', at: T0 - min }),
+          repo({ state: 'fail', failed: 'test', at: T0 - 5 * min }),
+        ],
+      }),
+      T0,
+    );
+    expect(f.runs.map((r) => r.repo)).toEqual(['site', 'almanac-notch']);
+    expect(f.fail).toMatchObject({ key: 'almanac-notch#abc1234', check: 'test', title: 'Fix the build', rerun: true });
+    expect(githubFeed(gh({ repos: [repo({ state: 'fail', run_id: null })] }), T0).fail?.rerun).toBe(false);
+  });
+  it('driver: the event names its run and stays long enough to read; settings can silence it', () => {
+    const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+    const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(gh({ repos: [repo({ state: 'run' })] }));
+    d.onState(gh({ repos: [repo({ state: 'fail' })] }));
+    const ev = m.state.event;
+    expect(ev?.ci).toBe('almanac-notch#abc1234');
+    expect(ev ? ev.until - ev.start : 0).toBe(4);
+    m.state.event = null;
+    m.state.ciNotify = { ok: 'off', fail: 'dot' };
+    d.onState(gh({ repos: [repo({ state: 'ok' })] }));
+    d.onState(gh({ repos: [repo({ state: 'fail' })] }));
+    expect(m.state.event).toBeNull();
   });
   it('driver: a new repository or a start of a run is not an event; a prompt holds the result back', () => {
     const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });

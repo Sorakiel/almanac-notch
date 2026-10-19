@@ -13,6 +13,14 @@ export function hexA(hex: string, a: number): string {
   return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + clamp(a, 0, 1).toFixed(3) + ')';
 }
 
+/** mix as #rrggbb, for hexA */
+export function mixHex(hex: string, hex2: string, k: number): string {
+  const a = parseInt(hex.slice(1), 16),
+    b = parseInt(hex2.slice(1), 16);
+  const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - k) + ((b >> s) & 255) * k);
+  return '#' + ((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0');
+}
+
 /** proto: mix */
 export function mix(hex: string, hex2: string, k: number): string {
   const a = parseInt(hex.slice(1), 16),

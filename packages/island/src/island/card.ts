@@ -1,7 +1,7 @@
 // Card building blocks of the open island: plate, tint, the card mascot, keyboard buttons.
 import { hoverK, pressScale } from './hover';
-import { hexA } from '../util/math';
-import { rrect, rrectSub, textAt, type Ctx } from '../util/draw';
+import { hexA, mixHex } from '../util/math';
+import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { drawMascot } from '../mascot/body';
 import { mascotMarks } from '../mascot/marks';
@@ -38,7 +38,8 @@ export function cardMascot(
     // a soft halo of the module's colour behind the mascot (Grok Bot, coucou): the card's light source
     // (Almanac's own mascot has no module colour: a cool blue, as Grok Bot's white mascot)
     if (halo > 0.01) {
-      const hc = colKey ? MODULE_COL[colKey].body : '#8FA8FF',
+      const base = colKey ? MODULE_COL[colKey].body : '#8FA8FF',
+        hc = haloTint.k > 0 ? mixHex(base, haloTint.color, 0.75 * haloTint.k) : base,
         hr = r * 2.3,
         g = c.createRadialGradient(x, y, r * 0.4, x, y, hr);
       g.addColorStop(0, hexA(hc, (colKey ? 0.26 : 0.2) * halo));
@@ -72,31 +73,46 @@ export function cardMascot(
 }
 
 /** proto: cardTint - the state's colour as light at the card's edges (docs/CHANGES.md 2026-10-19).
- * Grok Bot's cards stay dark and glow at their rim, most at the bottom edge and its corners; the
- * prototype's wash over the whole card read loud and flattened the text on it. Drawn as the shadow
- * of shapes just outside the card, clipped to it, so the light bleeds in from the border. */
+ * The light comes from the rim, not from a fill: it pools in the two bottom corners, runs a little
+ * way up the sides and fades out along the bottom middle, so the card under the text stays dark
+ * and the text keeps its contrast; the prototype's wash over the whole card flattened it. The top
+ * stays dark (owner, 2026-10-19). The mascot's halo takes the same colour (haloTint), so the
+ * mascot reads as being in that state rather than lit by its own module colour. */
 export function cardTint(c: Ctx, x: number, y: number, w: number, h: number, color: string, strength: number): void {
-  const a = Math.min(0.85, strength * 1.9),
-    px = c.getTransform().a; // shadowBlur ignores the transform
+  const a = Math.min(0.85, strength * 1.9);
+  haloTint.color = color;
+  haloTint.k = Math.min(1, strength / 0.4);
   c.save();
   rrect(c, x, y, w, h, 14);
   c.clip();
-  c.fillStyle = '#000';
-  // the whole rim, faint: Grok Bot's top edge stays almost dark, the light pools at the bottom
-  c.shadowColor = hexA(color, a * 0.2);
-  c.shadowBlur = 16 * px;
-  // the frame around the card, the card a hole in it (rrect would start a new path and paint the
-  // whole card black - the tinted cards were dark holes until 2026-10-19)
-  c.beginPath();
-  c.rect(x - 60, y - 60, w + 120, h + 120);
-  rrectSub(c, x, y, w, h, 14);
-  c.fill('evenodd');
-  // the bottom edge, stronger and taller
-  c.shadowColor = hexA(color, a);
-  c.shadowBlur = h * 0.55 * px;
-  c.fillRect(x - 10, y + h + 1, w + 20, 40);
+  // a corner: an ellipse taller than wide, so the light climbs the side edge
+  const corner = (cx: number): void => {
+    const rx = Math.min(w * 0.2, 150),
+      ry = h * 0.72;
+    c.save();
+    c.translate(cx, y + h);
+    c.scale(rx / ry, 1);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, ry);
+    g.addColorStop(0, hexA(color, a * 0.75));
+    g.addColorStop(0.4, hexA(color, a * 0.24));
+    g.addColorStop(1, hexA(color, 0));
+    c.fillStyle = g;
+    c.fillRect(-ry, -ry, ry * 2, ry);
+    c.restore();
+  };
+  corner(x);
+  corner(x + w);
+  // the bottom edge between the corners: a thin, faint line of the same light
+  const g = c.createLinearGradient(0, y + h, 0, y + h - h * 0.22);
+  g.addColorStop(0, hexA(color, a * 0.26));
+  g.addColorStop(1, hexA(color, 0));
+  c.fillStyle = g;
+  c.fillRect(x, y + h * 0.78, w, h * 0.22);
   c.restore();
 }
+
+/** the state colour the card mascot's halo takes on a tinted card; reset every frame */
+export const haloTint = { color: '', k: 0 };
 
 /** proto: kbdButton - a pill button with its keyboard shortcut */
 export function kbdButton(
@@ -127,10 +143,16 @@ export function kbdButton(
   c.font = '500 12px Onest, system-ui, sans-serif';
   const lw = c.measureText(label).width;
   c.restore();
-  const kw = 16,
-    total = lw + 6 + kw,
+  // no shortcut (the panel never takes the keyboard outside prompts): the label alone
+  const kw = key ? 16 : 0,
+    total = key ? lw + 6 + kw : lw,
     lx = x + (w - total) / 2;
   textAt(c, label, lx, y + h / 2 + 0.5, { size: 12, color: primary ? '#000' : 'rgba(255,255,255,0.92)' });
+  if (!key) {
+    c.restore();
+    addHit(s, c, { x, y, w, h, act });
+    return;
+  }
   c.strokeStyle = primary ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.3)';
   c.lineWidth = 1;
   rrect(c, lx + lw + 6, y + h / 2 - 7, kw, 14, 4);

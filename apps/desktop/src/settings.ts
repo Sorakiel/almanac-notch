@@ -549,6 +549,29 @@ for (const box of tierBoxes) {
   });
 }
 
+// CI results (island/ci.ts): kept in the shared storage, as the sound tiers
+const CI_KEY = 'almanac-notch.ci';
+const ciRadios = [...document.querySelectorAll<HTMLInputElement>('input[name=ci-ok], input[name=ci-fail]')];
+function readCi(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(CI_KEY) ?? '{}') as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+for (const r of ciRadios) {
+  const key = r.name === 'ci-ok' ? 'ok' : 'fail';
+  r.checked = (readCi()[key] ?? 'pop') === r.value;
+  r.addEventListener('change', () => {
+    if (!r.checked) return;
+    try {
+      localStorage.setItem(CI_KEY, JSON.stringify({ ...readCi(), [key]: r.value }));
+    } catch {
+      // not saved: the island keeps its choice
+    }
+  });
+}
+
 // ---------- music ----------
 interface MediaNow {
   none?: boolean;

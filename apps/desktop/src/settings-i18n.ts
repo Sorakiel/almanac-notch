@@ -150,6 +150,18 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Read-only permissions: Contents, Pull requests, Commit statuses, Actions (Metadata is added by itself).',
   'Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
     'Repository names, the check status of the latest commits, the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.',
+  'Чтобы перезапускать упавшие проверки из острова, дайте Actions право на запись.':
+    'To re-run failed checks from the island, give Actions write access.',
+  'Названия репозиториев, статус проверок последних коммитов (название упавшей проверки, ветка, первая строка сообщения коммита), число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
+    "Repository names, the check status of the latest commits (the failed check's name, the branch, the first line of the commit message), the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.",
+  'Результат CI': 'CI result',
+  'Проверки прошли': 'Checks passed',
+  'Проверка упала': 'A check failed',
+  Показывать: 'Show',
+  'Не показывать': "Don't show",
+  'Только точка': 'Dot only',
+  'Упавшая проверка ненадолго всплывает, потом о ней напоминает красная точка на маскоте. В открытом острове она один раз встанет в карточку с кнопками «Открыть прогон» и «Перезапустить»; крестик убирает её до следующего падения.':
+    'A failed check pops up briefly, then a red dot on the mascot keeps it in mind. On the open island it takes the card once, with "Open run" and "Re-run"; the cross puts it away until the next failure.',
   // dynamic texts (src/settings.ts)
   'GitHub не принял сохранённый токен': 'GitHub rejected the saved token',
   // Vercel, the module limit
