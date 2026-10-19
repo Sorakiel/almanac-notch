@@ -1,7 +1,7 @@
 // Card building blocks of the open island: plate, tint, the card mascot, keyboard buttons.
 import { hoverK, pressScale } from './hover';
 import { hexA, mixHex } from '../util/math';
-import { rrect, textAt, type Ctx } from '../util/draw';
+import { rrect, rrectSub, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { drawMascot } from '../mascot/body';
 import { mascotMarks } from '../mascot/marks';
@@ -73,43 +73,94 @@ export function cardMascot(
 }
 
 /** proto: cardTint - the state's colour as light at the card's edges (docs/CHANGES.md 2026-10-19).
- * The light comes from the rim, not from a fill: it pools in the two bottom corners, runs a little
- * way up the sides and fades out along the bottom middle, so the card under the text stays dark
- * and the text keeps its contrast; the prototype's wash over the whole card flattened it. The top
+ * The light comes from the rim, not from a fill: an inner glow along the card's own edge, in the
+ * lower part only, stronger at the corners and up the sides than along the bottom middle, so the
+ * card under the text stays dark and the text keeps its contrast; the prototype's wash over the whole card flattened it. The top
  * stays dark (owner, 2026-10-19). The mascot's halo takes the same colour (haloTint), so the
  * mascot reads as being in that state rather than lit by its own module colour. */
 export function cardTint(c: Ctx, x: number, y: number, w: number, h: number, color: string, strength: number): void {
   const a = Math.min(0.85, strength * 1.9);
   haloTint.color = color;
   haloTint.k = Math.min(1, strength / 0.4);
+  if (typeof document === 'undefined' || a < 0.01) return;
+  // the light follows the card's own edge (an inner glow), drawn in device pixels on a side
+  // canvas and then masked: no shapes of its own, so no circles or bands show
+  const m = c.getTransform(),
+    px = Math.hypot(m.a, m.b),
+    dx = m.a * x + m.c * y + m.e,
+    dy = m.b * x + m.d * y + m.f,
+    W = Math.ceil(w * px),
+    H = Math.ceil(h * px);
+  if (W < 2 || H < 2) return;
+  tintCanvas ??= document.createElement('canvas');
+  const cv = tintCanvas;
+  if (cv.width < W) cv.width = W;
+  if (cv.height < H) cv.height = H;
+  const o = cv.getContext('2d');
+  if (!o) return;
+  // the same card in the same light as last frame: the side canvas already holds it
+  const key = `${W}x${H}:${color}:${a.toFixed(3)}:${px}`;
+  if (key !== tintKey) {
+    tintKey = key;
+    paintTint(o, cv, W, H, px, color, a);
+  }
   c.save();
-  rrect(c, x, y, w, h, 14);
-  c.clip();
-  // a corner: an ellipse taller than wide, so the light climbs the side edge
-  const corner = (cx: number): void => {
-    const rx = Math.min(w * 0.2, 150),
-      ry = h * 0.72;
-    c.save();
-    c.translate(cx, y + h);
-    c.scale(rx / ry, 1);
-    const g = c.createRadialGradient(0, 0, 0, 0, 0, ry);
-    g.addColorStop(0, hexA(color, a * 0.75));
-    g.addColorStop(0.4, hexA(color, a * 0.24));
-    g.addColorStop(1, hexA(color, 0));
-    c.fillStyle = g;
-    c.fillRect(-ry, -ry, ry * 2, ry);
-    c.restore();
-  };
-  corner(x);
-  corner(x + w);
-  // the bottom edge between the corners: a thin, faint line of the same light
-  const g = c.createLinearGradient(0, y + h, 0, y + h - h * 0.22);
-  g.addColorStop(0, hexA(color, a * 0.26));
-  g.addColorStop(1, hexA(color, 0));
-  c.fillStyle = g;
-  c.fillRect(x, y + h * 0.78, w, h * 0.22);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.drawImage(cv, 0, 0, W, H, dx, dy, W, H);
   c.restore();
 }
+
+function paintTint(
+  o: CanvasRenderingContext2D,
+  cv: HTMLCanvasElement,
+  W: number,
+  H: number,
+  px: number,
+  color: string,
+  a: number,
+): void {
+  o.setTransform(1, 0, 0, 1, 0, 0);
+  o.globalCompositeOperation = 'source-over';
+  o.clearRect(0, 0, cv.width, cv.height);
+  o.save();
+  rrect(o as unknown as Ctx, 0, 0, W, H, 14 * px);
+  o.clip();
+  // the frame's shadow: a faint rim and a wide soft light inside it (no hard line at the edge)
+  const rim = (blur: number, alpha: number): void => {
+    o.shadowColor = hexA(color, alpha);
+    o.shadowBlur = blur;
+    o.fillStyle = '#000';
+    o.beginPath();
+    o.rect(-200, -200, W + 400, H + 400);
+    rrectSub(o as unknown as Ctx, 0, 0, W, H, 14 * px);
+    o.fill('evenodd');
+  };
+  rim(24 * px, a * 0.35);
+  rim(H * 0.55, a * 0.85);
+  o.restore();
+  o.shadowColor = 'transparent';
+  // masks multiply: dark on the top, the light in the lower part only...
+  o.globalCompositeOperation = 'destination-in';
+  const v = o.createLinearGradient(0, 0, 0, H);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(0.3, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(0,0,0,1)');
+  o.fillStyle = v;
+  o.fillRect(0, 0, W, H);
+  // ...and quieter along the bottom middle than at the corners
+  const hz = o.createLinearGradient(0, 0, W, 0);
+  hz.addColorStop(0, 'rgba(0,0,0,1)');
+  hz.addColorStop(0.25, 'rgba(0,0,0,0.5)');
+  hz.addColorStop(0.5, 'rgba(0,0,0,0.32)');
+  hz.addColorStop(0.75, 'rgba(0,0,0,0.5)');
+  hz.addColorStop(1, 'rgba(0,0,0,1)');
+  o.fillStyle = hz;
+  o.fillRect(0, 0, W, H);
+  o.globalCompositeOperation = 'source-over';
+}
+
+let tintCanvas: HTMLCanvasElement | null = null,
+  tintKey = '';
 
 /** the state colour the card mascot's halo takes on a tinted card; reset every frame */
 export const haloTint = { color: '', k: 0 };
