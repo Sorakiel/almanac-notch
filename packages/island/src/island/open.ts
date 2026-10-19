@@ -16,6 +16,20 @@ import { deepCol, focusTint, isHot, miniFor, modules, type ModuleItem } from './
 import { MODULE_COL } from './focus';
 import { drawMini } from './crew';
 import { hexA } from '../util/math';
+import { EV_OUT, eventInDt, evTextA, evTintA, evWidthK, seq } from './eventIn';
+import {
+  cardFade,
+  drawLate,
+  flushLate,
+  flyBox,
+  flyDt,
+  flyMascot,
+  markBox,
+  markSpot,
+  newPillA,
+  startFlight,
+  toLocal,
+} from './flight';
 
 type IconKind = 'home' | 'chat' | 'add' | 'gear' | 'sound';
 
@@ -381,6 +395,12 @@ export function drawOpenBody(
   cy1: number,
   fx: WorkFx | null,
 ): void {
+  drawBody(s, c, X0, X1, cy0, cy1, fx);
+  // mascots crossing between the card and the grid go over both
+  flushLate();
+}
+
+function drawBody(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, cy1: number, fx: WorkFx | null): void {
   if (s.tab !== 'home') {
     c.save();
     // chat and settings layer their own rows; the add tab is one layer until the shelf replaces it
@@ -396,22 +416,41 @@ export function drawOpenBody(
   const k = ss(0, 1, (s.t - s.focusStart) / 0.28);
   // permission, question, done, error: one big card, the other modules as a rail of mascots
   if (railEvent(s)) {
-    const bx1 = X1 - RAIL_W - gap;
+    const bx1 = X1 - RAIL_W - gap,
+      // on an island already open the event comes in by a sequence (island/eventIn.ts)
+      dt = eventInDt(s);
+    if (dt !== null) {
+      // the mascots gather from where they were last frame: into the big card and the rail
+      if (s.event && s.flyStart < s.event.start) startFlight(s);
+      if (dt < EV_OUT) drawOldHome(s, c, X0, X1, cy0, cy1, 1 - dt / EV_OUT);
+    }
+    const w0 = (X1 - X0) * SPLIT - gap / 2,
+      bw = dt === null ? bx1 - X0 : w0 + (bx1 - X0 - w0) * evWidthK(dt);
+    seq.on = dt !== null;
+    seq.textA = dt === null ? 1 : evTextA(dt);
+    seq.tintA = dt === null ? 1 : evTintA(dt);
     c.save();
-    layer(s, c, 0);
-    if (s.event && (s.event.type === 'attention' || s.event.type === 'question'))
+    if (dt === null) layer(s, c, 0);
+    if (s.event && (s.event.type === 'attention' || s.event.type === 'question')) {
+      if (seq.on && !shared.card) card(c, X0, cy0, bw, cy1 - cy0, false);
       withScale(s, c, X0, cy0, CARD_K, () =>
         drawAsk(s, c, X0, X0 + (bx1 - X0) / CARD_K, cy0, cy0 + (cy1 - cy0) / CARD_K, fx),
       );
-    else {
-      if (!shared.card) card(c, X0, cy0, bx1 - X0, cy1 - cy0, false);
+    } else {
+      if (!shared.card) card(c, X0, cy0, bw, cy1 - cy0, false);
       const tintC = focusTint(s, f);
-      if (tintC) cardTint(c, X0, cy0, bx1 - X0, cy1 - cy0, tintC.c, tintC.a);
+      if (tintC) cardTint(c, X0, cy0, bw, cy1 - cy0, tintC.c, tintC.a * seq.tintA);
+      if (seq.on) {
+        cardFade.a = c.globalAlpha;
+        c.globalAlpha *= seq.textA;
+      }
       bigFocus(s, c, f, X0, cy0, bx1, cy1, fx);
+      cardFade.a = -1;
     }
+    seq.on = false;
     c.restore();
     c.save();
-    layer(s, c, 1);
+    if (dt === null) layer(s, c, 1);
     drawRail(
       s,
       c,
@@ -420,6 +459,7 @@ export function drawOpenBody(
       cy0,
       cy1,
       modules(s).filter((m) => m.id !== f),
+      dt,
     );
     c.restore();
     return;
@@ -427,6 +467,7 @@ export function drawOpenBody(
   if (f === 'music') {
     c.save();
     layer(s, c, 0);
+    cardFade.a = c.globalAlpha;
     c.globalAlpha *= k;
     c.translate((1 - k) * 8, 0);
     // the player grows with the island like the other cards, instead of spreading its rows apart
@@ -446,6 +487,7 @@ export function drawOpenBody(
       modules(s).filter((m) => m.id !== 'music'),
     );
     c.restore();
+    cardFade.a = -1;
     return;
   }
   const split = X0 + (X1 - X0) * SPLIT;
@@ -455,9 +497,11 @@ export function drawOpenBody(
   const tintC = focusTint(s, f);
   if (tintC) cardTint(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, tintC.c, tintC.a);
   c.save();
+  cardFade.a = c.globalAlpha;
   c.globalAlpha *= k;
   c.translate((1 - k) * 8, 0);
   bigFocus(s, c, f, X0, cy0, split - gap / 2, cy1, fx);
+  cardFade.a = -1;
   c.restore();
   c.restore();
   // the other modules: Grok Bot's grid - one card, a 2 × 2 of pills, each a small mascot in its
@@ -466,42 +510,69 @@ export function drawOpenBody(
   const items = modules(s)
     .filter((m) => m.id !== f)
     .slice(0, 4);
-  const gx0 = split + gap / 2,
-    gw = X1 - gx0,
-    pad = 10,
-    pg = 8,
-    pw = (gw - pad * 2 - pg) / 2,
-    // the pills fill their card (they floated in it at 34 px, with 40 px of nothing above and below)
-    ph = Math.min(48, (cy1 - cy0 - pad * 2 - pg) / 2),
-    rows = Math.ceil(items.length / 2),
-    py0 = cy0 + (cy1 - cy0 - (rows * ph + (rows - 1) * pg)) / 2;
+  const g = grid(X0, X1, cy0, cy1, items.length);
   c.save();
   layer(s, c, 1);
-  card(c, gx0, cy0, gw, cy1 - cy0, false);
+  card(c, g.x0, cy0, g.w, cy1 - cy0, false);
   c.restore();
   items.forEach((it, i) => {
     c.save();
     layer(s, c, 1 + i);
-    modulePill(s, c, it, gx0 + pad + (i % 2) * (pw + pg), py0 + Math.floor(i / 2) * (ph + pg), pw, ph);
+    const p = g.pill(i);
+    modulePill(s, c, it, i, p.x, p.y, g.pw, g.ph);
     c.restore();
   });
+  const picked = modules(s).find((m) => m.id === f);
+  if (picked) ghostPill(s, c, picked);
 }
 
 /** a module as a pill: a dark fill tinted with its colour, a rim of it, its mascot and the name */
-function modulePill(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number, w: number, h: number): void {
+function modulePill(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  i: number,
+  px: number,
+  py: number,
+  pw: number,
+  ph: number,
+): void {
   const col = MODULE_COL[it.id].body,
-    hov = hovering(s, x, y, w, h),
-    hot = isHot(it),
-    r = h / 2;
+    hov = hovering(s, px, py, pw, ph),
+    hot = isHot(it);
+  // a focus change: the pill slides from its old slot, one after another (island/flight.ts)
+  const fb = flyBox(s, c, it.id, i, px, py, pw, ph),
+    { x, y, w, h } = fb || { x: px, y: py, w: pw, h: ph };
+  markBox(s, c, it.id, x, y, w, h);
   // coucou's chip hover: lifts to 1.04 on a spring, the fill and rim take the module colour, a
   // glow of it comes up behind (2026-10-19)
   const k = hoverK(s, 'pill:' + it.id, hov),
     ka = clamp(k, 0, 1),
-    sc = (1 + 0.04 * k) * pressScale(s, 'focus:' + it.id);
+    sc = (1 + 0.04 * k) * pressScale(s, 'focus:' + it.id),
+    a0 = c.globalAlpha;
   c.save();
+  c.globalAlpha *= newPillA(s, it.id);
   c.translate(x + w / 2, y + h / 2);
   c.scale(sc, sc);
   c.translate(-(x + w / 2), -(y + h / 2));
+  pillPlate(c, x, y, w, h, col, hot, ka);
+  const mx = x + 8 + h * 0.25,
+    my = y + h / 2 + 0.5,
+    mR = h * 0.25,
+    mini = { ...miniFor(it), body: deepCol(col) },
+    // the module that just left focus: its mascot shrinks in from the card, its pill comes up under it
+    fl = flyMascot(s, c, it.id, mx, my, mR);
+  if (fl) drawLate(c, () => drawMini(s, c, fl.x, fl.y, fl.R, mini), a0);
+  else drawMini(s, c, mx, my, mR, mini);
+  markSpot(s, c, it.id, fl ? fl.x : mx, fl ? fl.y : my, fl ? fl.R : mR);
+  pillName(c, it.name, x, y, w, h, col, ka);
+  c.restore();
+  addHit(s, c, { x: px, y: py, w: pw, h: ph, act: 'focus:' + it.id });
+}
+
+/** a pill's plate: a dark fill tinted with the module colour and a rim of it; ka - hover */
+function pillPlate(c: Ctx, x: number, y: number, w: number, h: number, col: string, hot: boolean, ka: number): void {
+  const r = h / 2;
   if (ka > 0.01) {
     c.save();
     c.shadowColor = hexA(deepCol(col), 0.5 * ka);
@@ -520,15 +591,88 @@ function modulePill(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number
   c.strokeStyle = hexA(col, (hot ? 0.34 : 0.16) + 0.36 * ka);
   rrect(c, x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5);
   c.stroke();
-  drawMini(s, c, x + 8 + h * 0.25, y + h / 2 + 0.5, h * 0.25, { ...miniFor(it), body: deepCol(col) });
+}
+
+function pillName(c: Ctx, name: string, x: number, y: number, w: number, h: number, col: string, ka: number): void {
   const tx = x + 12 + h * 0.5;
-  textAt(c, it.name, tx, y + h / 2 + 0.5, {
+  textAt(c, name, tx, y + h / 2 + 0.5, {
     size: 12.5,
     color: mixWhite(col, 0.45 + 0.25 * ka),
     max: w - (tx - x) - 8,
   });
+}
+
+/** the pill just picked: its mascot lifts out and flies to the card, the plate and name it leaves
+ * fade and settle back a little instead of vanishing in one frame */
+const GHOST = 0.16;
+function ghostPill(s: IslandState, c: Ctx, it: ModuleItem): void {
+  const b = s.flyBoxFrom[it.id],
+    dt = flyDt(s);
+  if (!b || dt >= GHOST || !s.flyFrom[it.id]) return;
+  const k = dt / GHOST,
+    p = toLocal(c, b.x, b.y),
+    w = b.w / p.k,
+    h = b.h / p.k,
+    col = MODULE_COL[it.id].body,
+    sc = 1 - 0.04 * k;
+  c.save();
+  c.globalAlpha *= 1 - k;
+  c.translate(p.x + w / 2, p.y + h / 2);
+  c.scale(sc, sc);
+  c.translate(-(p.x + w / 2), -(p.y + h / 2));
+  pillPlate(c, p.x, p.y, w, h, col, false, 0);
+  pillName(c, it.name, p.x, p.y, w, h, col, 0);
   c.restore();
-  addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });
+}
+
+/** home's right half: one card holding a 2 × 2 of pills */
+function grid(X0: number, X1: number, cy0: number, cy1: number, n: number) {
+  const gap = 8,
+    x0 = X0 + (X1 - X0) * SPLIT + gap / 2,
+    w = X1 - x0,
+    pad = 10,
+    pg = 8,
+    pw = (w - pad * 2 - pg) / 2,
+    // the pills fill their card (they floated in it at 34 px, with 40 px of nothing above and below)
+    ph = Math.min(48, (cy1 - cy0 - pad * 2 - pg) / 2),
+    rows = Math.ceil(n / 2),
+    py0 = cy0 + (cy1 - cy0 - (rows * ph + (rows - 1) * pg)) / 2;
+  return {
+    x0,
+    w,
+    pw,
+    ph,
+    pill: (i: number) => ({ x: x0 + pad + (i % 2) * (pw + pg), y: py0 + Math.floor(i / 2) * (ph + pg) }),
+  };
+}
+
+/** home as it was before an event took the big card, fading out (alpha a): the old focus card's
+ * text and the pills' plates and names. Their mascots are not drawn: they are flying to the big
+ * card and the rail. Takes no clicks. */
+function drawOldHome(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, cy1: number, a: number): void {
+  const f0 = s.prevFocus;
+  if (!f0 || f0 === 'music' || !modules(s).some((m) => m.id === f0)) return;
+  const items = modules(s)
+      .filter((m) => m.id !== f0)
+      .slice(0, 4),
+    g = grid(X0, X1, cy0, cy1, items.length),
+    n = s.hits.length,
+    spots = { ...s.flySpots };
+  c.save();
+  c.globalAlpha *= a;
+  cardFade.hide = true;
+  drawLeaving(() => bigFocus(s, c, f0, X0, cy0, X0 + (X1 - X0) * SPLIT - 4, cy1, null));
+  cardFade.hide = false;
+  card(c, g.x0, cy0, g.w, cy1 - cy0, false);
+  items.forEach((it, i) => {
+    const p = g.pill(i),
+      col = MODULE_COL[it.id].body;
+    pillPlate(c, p.x, p.y, g.pw, g.ph, col, isHot(it), 0);
+    pillName(c, it.name, p.x, p.y, g.pw, g.ph, col, 0);
+  });
+  c.restore();
+  s.hits.length = n;
+  s.flySpots = spots;
 }
 
 /** a module colour lifted toward white, for text on its own tint */

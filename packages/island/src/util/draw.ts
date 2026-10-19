@@ -2,8 +2,13 @@ export type Ctx = CanvasRenderingContext2D;
 
 /** proto: rrect */
 export function rrect(c: Ctx, x: number, y: number, w: number, h: number, r: number): void {
-  r = Math.max(0, Math.min(r, w / 2, h / 2));
   c.beginPath();
+  rrectSub(c, x, y, w, h, r);
+}
+
+/** a rounded rectangle added to the current path, for shapes with holes */
+export function rrectSub(c: Ctx, x: number, y: number, w: number, h: number, r: number): void {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
   c.moveTo(x + r, y);
   c.arcTo(x + w, y, x + w, y + h, r);
   c.arcTo(x + w, y + h, x, y + h, r);

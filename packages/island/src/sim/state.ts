@@ -367,6 +367,16 @@ export interface IslandState {
   /** the last clicked zone and when, for the press dip (island/hover.ts) */
   pressAct: string;
   pressAt: number;
+  /** focus change flights (island/flight.ts): where each module's mascot and pill were last drawn,
+   * device px, and the copies frozen when the focus changed */
+  flySpots: Partial<Record<ModuleId, import('../island/flight').Spot>>;
+  flyBoxes: Partial<Record<ModuleId, import('../island/flight').Box>>;
+  flyFrom: Partial<Record<ModuleId, import('../island/flight').Spot>>;
+  flyBoxFrom: Partial<Record<ModuleId, import('../island/flight').Box>>;
+  /** when the flights began (a focus change or an event taking the big card) */
+  flyStart: number;
+  /** the card that was in focus before the last change */
+  prevFocus: ModuleId | null;
   /** the open island was drawn on the previous frame */
   drawnOpen: boolean;
   musicPlaying: boolean;
@@ -513,6 +523,12 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     revealStart: -10,
     pressAct: '',
     pressAt: -10,
+    flySpots: {},
+    flyBoxes: {},
+    flyFrom: {},
+    flyBoxFrom: {},
+    flyStart: -10,
+    prevFocus: null,
     drawnOpen: false,
     musicPlaying: true,
     trackIdx: 0,

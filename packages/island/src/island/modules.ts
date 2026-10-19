@@ -15,7 +15,8 @@ import {
   type ClaudeState,
 } from './focus';
 import { STATE_COL, drawMini, type MiniItem } from './crew';
-import { hexA } from '../util/math';
+import { hexA, ss } from '../util/math';
+import { drawLate, flyMascot, markSpot } from './flight';
 
 export type ModuleItem =
   | { id: 'claude'; kind: 'agent'; name: string; body: string; seed: number; state: ClaudeState; short: string }
@@ -453,10 +454,26 @@ export function deepCol(hex: string): string {
 /** a mascot sunk in a round well with a thin ring of its colour - a "slime" of the module rail.
  * The well is darker than the rail card (Grok Bot: (30,6,15) on (20,20,20)): the face sits in it
  * instead of on it, which is where the depth comes from */
-export function slime(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number, d: number, k = 0): void {
+export function slime(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  x0: number,
+  y: number,
+  d: number,
+  k = 0,
+  enter = 1,
+  delay = 0,
+): void {
   const col = MODULE_COL[it.id].body,
     r = d / 2;
+  // gathering into the rail (island/eventIn.ts): the mascot flies in from wherever it was and its
+  // plate comes up as it lands; with nowhere to fly from the whole slime slides in from the right
+  const fl = flyMascot(s, c, it.id, x0, y + r * 0.06, r * 0.62, delay),
+    x = fl ? x0 : x0 + (1 - enter) * 22;
+  const a0 = c.globalAlpha;
   c.save();
+  c.globalAlpha *= fl ? ss(0.45, 1, fl.k) : enter;
   c.beginPath();
   c.arc(x, y, r, 0, Math.PI * 2);
   c.fillStyle = '#070708';
@@ -466,6 +483,11 @@ export function slime(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: numb
   c.lineWidth = 1.2;
   c.strokeStyle = hexA(col, 0.2 + 0.4 * k);
   c.stroke();
-  drawMini(s, c, x, y + r * 0.06, r * 0.62, { ...miniFor(it), body: deepCol(col) });
+  const my = y + r * 0.06,
+    mR = r * 0.62,
+    mini = { ...miniFor(it), body: deepCol(col) };
+  if (fl) drawLate(c, () => drawMini(s, c, fl.x, fl.y, fl.R, mini), a0);
+  else drawMini(s, c, x, my, mR, mini);
+  markSpot(s, c, it.id, fl ? fl.x : x, fl ? fl.y : my, fl ? fl.R : mR);
   c.restore();
 }

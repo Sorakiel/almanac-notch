@@ -10,6 +10,7 @@ import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { card, cardMascot, cardTint } from './card';
 import { slime, type ModuleItem } from './modules';
+import { evRailA, evSlideK } from './eventIn';
 
 /** proto: TRACK_ART - gradient pairs of the generated covers */
 export const TRACK_ART: readonly (readonly [string, string])[] = [
@@ -280,6 +281,7 @@ export function drawRail(
   cy0: number,
   cy1: number,
   items: ModuleItem[],
+  seqDt: number | null = null,
 ): void {
   // Grok Bot's rail (docs/CHANGES.md 2026-10-19): a narrow card, the modules as a stack of round
   // mascots in their colours, overlapping when they do not fit; hover pulls the name out to the left
@@ -293,7 +295,10 @@ export function drawRail(
     step = n > 1 ? Math.min(d * 0.62, span / (n - 1)) : 0,
     top = cy0 + pad + d / 2 + (span - step * (n - 1)) / 2,
     cx = rx0 + rw / 2;
+  c.save();
+  if (seqDt !== null) c.globalAlpha *= evRailA(seqDt);
   card(c, rx0, cy0, rw, cy1 - cy0, false);
+  c.restore();
   const rows = items.map((it, i) => {
     const y = top + i * step,
       st = s.railK[it.id] || (s.railK[it.id] = { k: 0, last: t });
@@ -307,7 +312,10 @@ export function drawRail(
   // bottom first: the upper one sits in front, as in a stack
   // bottom first: the upper one sits in front; the hovered one comes to the very front
   const order = [...rows].reverse().sort((a, b) => a.k - b.k);
-  for (const { it, y, k } of order) slime(s, c, it, cx, y, d * (1 + 0.1 * k), k);
+  for (const { it, y, k } of order) {
+    const i = items.indexOf(it);
+    slime(s, c, it, cx, y, d * (1 + 0.1 * k), k, seqDt === null ? 1 : evSlideK(seqDt, i), i * 0.04);
+  }
   for (const { it, y, k, hy0, hy1 } of rows) {
     if (k > 0.05) {
       c.save();

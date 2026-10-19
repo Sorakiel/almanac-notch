@@ -1,5 +1,5 @@
 // Stage 9 filmstrip: the app page on a virtual clock, one action, then the island every 1/60 s.
-// node tools/strip.mjs <scene> [out-dir]  - scenes: open, tab-chat, tab-settings, tab-home
+// node tools/strip.mjs <scene> [out-dir]  - scenes: open, focus, ev-error, ev-attention, focus-back, tab-chat, tab-settings, tab-home
 // Writes frames to <out-dir>/<scene>/NNN.png and a contact sheet <out-dir>/<scene>.png (ffmpeg).
 import { chromium } from 'playwright';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -64,6 +64,31 @@ if (scene === 'hover-mascot') {
   await p.clock.runFor(1500);
   const h = await p.evaluate(() => window.__state.hits.find((x) => x.act.startsWith('focus:')));
   await p.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+  await shoot();
+} else if (scene === 'focus' || scene === 'focus-back') {
+  // click a module pill: its mascot flies into the focus card, the pills slide over
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  const pill = (i) => p.evaluate((i) => window.__state.hits.filter((x) => x.act.startsWith('focus:'))[i], i);
+  let h = await pill(1);
+  if (scene === 'focus-back') {
+    await p.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+    await p.mouse.down();
+    await p.mouse.up();
+    await p.clock.runFor(1500);
+    h = await pill(1);
+  }
+  await p.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+  await p.mouse.down();
+  await p.mouse.up();
+  // off the pills, so hover does not colour the frames
+  await p.mouse.move(340, 12);
+  await shoot();
+} else if (scene.startsWith('ev-')) {
+  // an event on the open island: ev-error, ev-success, ev-attention, ev-question
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  await p.evaluate((e) => window.__debug('ev:' + e), scene.slice(3));
   await shoot();
 } else if (scene === 'open') {
   await p.evaluate(() => window.dispatchEvent(new Event('blur')));

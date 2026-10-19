@@ -3,6 +3,7 @@ import { tr } from '../i18n';
 import type { IslandState, ModuleId } from '../sim/state';
 import type { MascotColor } from '../sim/settings';
 import { calMins } from '../stub';
+import { startFlight } from './flight';
 
 export type NotchState = 'closed' | 'half' | 'open';
 
@@ -130,8 +131,10 @@ export function busyAside(s: IslandState): boolean {
 export function effectiveFocus(s: IslandState): ModuleId {
   const f = (s.focusId && hasModule(s, s.focusId) && s.focusId) || autoFocus(s);
   if (f !== s.shownFocus) {
+    s.prevFocus = s.shownFocus;
     s.shownFocus = f;
     s.focusStart = s.t;
+    startFlight(s);
   }
   return f;
 }

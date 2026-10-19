@@ -12,6 +12,8 @@ import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { MODULE_COL, minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
+import { seq } from './eventIn';
+import { cardFade } from './flight';
 import { deployDot, modules, pageMark, prIcon, type ModuleItem } from './modules';
 
 /** the muted word after the name in coucou's card head */
@@ -901,7 +903,9 @@ export function drawAsk(
   const q = ev.type === 'question',
     el = t - ev.start,
     E = EVENTS[ev.type];
-  const k = ss(0, 1, el / 0.35);
+  // on an island already open the card comes in by the event sequence (island/eventIn.ts): the
+  // plate is drawn outside, widening; the glow and the text come up late
+  const k = seq.on ? 1 : ss(0, 1, el / 0.35);
   let dx = 0;
   if (ev.answer === 'deny') {
     const a = t - (ev.answerAt ?? 0);
@@ -912,9 +916,14 @@ export function drawAsk(
   c.globalAlpha *= k;
   const W = X1 - X0,
     H = cy1 - cy0;
-  card(c, X0, cy0, W, H, false);
-  cardTint(c, X0, cy0, W, H, ev.answer === 'approve' ? '#34C759' : E.color, 0.42);
+  if (!seq.on) card(c, X0, cy0, W, H, false);
+  cardTint(c, X0, cy0, W, H, ev.answer === 'approve' ? '#34C759' : E.color, 0.42 * (seq.on ? seq.tintA : 1));
+  if (seq.on) cardFade.a = c.globalAlpha;
   cardMascot(s, c, X0, cy0, cy1, 'claude', fx);
+  if (seq.on) {
+    cardFade.a = -1;
+    c.globalAlpha *= seq.textA;
+  }
   // the text block sits in the middle of a card taller than the prototype's (2026-10-19); the
   // timer line stays on the bottom edge
   const top = cy0 + Math.max(0, (H - 100) / 2);
