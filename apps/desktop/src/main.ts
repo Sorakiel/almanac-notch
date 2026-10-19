@@ -29,7 +29,7 @@ import {
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
-import { DEFAULT_VOLUME, SoundPlayer, SoundWatch } from './sound';
+import { DEFAULT_VOLUME, SOUND_NAMES, SoundPlayer, SoundWatch } from './sound';
 import {
   CalDriver,
   GithubDriver,
@@ -120,14 +120,22 @@ if (!s.muted) player.preload();
 /** what the island did this frame that sounds - checked every frame so a muted event never
  *  sounds late after unmuting */
 function playSounds(): void {
-  const due = sounds.step(s);
+  const { play, stop } = sounds.step(s),
+    clicks = sounds.takeClicks(s.t);
+  for (const n of stop) player.fadeOut(n);
   if (s.muted || !s.host) return;
   player.setVolume(s.host.volume);
-  for (const n of due) player.play(n);
+  // a poke shifts its pitch a little each time, so a run of them isn't a machine gun
+  for (const n of [...play, ...clicks]) player.play(n, n === 'poke' ? 0.92 + Math.random() * 0.16 : 1);
 }
-/** a sample at the chosen level: after the slider, and when sound is switched on */
+/** a sample at the chosen level: after the slider, and when sound is switched on; switching it
+ *  off silences what is still playing (the greeting is long) */
 function previewSound(): void {
-  if (s.muted || !s.host) return;
+  if (!s.host) return;
+  if (s.muted) {
+    for (const n of SOUND_NAMES) player.fadeOut(n, 0.1);
+    return;
+  }
   player.setVolume(s.host.volume);
   player.play('attention');
 }
@@ -202,7 +210,11 @@ const domPoint = (e: MouseEvent): IslandPoint => {
   return { x: ((e.clientX - r.left) * s.IW) / r.width, y: ((e.clientY - r.top) * s.IH) / r.height };
 };
 island.addEventListener('pointerdown', (e) => {
-  islandPointerDown(s, domPoint(e));
+  const p = domPoint(e),
+    act = hitTest(s, p);
+  // the control's sound depends on its state before the click (a habit ticked or unticked)
+  if (act) sounds.click(s, act);
+  islandPointerDown(s, p);
   // the volume slider keeps following the pointer outside its zone until release
   if (s.host?.volDrag) island.setPointerCapture(e.pointerId);
 });
@@ -262,7 +274,11 @@ async function syncHotkeys(): Promise<void> {
     hotkeysBusy = false;
   }
 }
-island.addEventListener('dblclick', (e) => islandDoubleClick(s, domPoint(e)));
+island.addEventListener('dblclick', (e) => {
+  const p = domPoint(e);
+  if (hitTest(s, p) === 'mascot') sounds.joy();
+  islandDoubleClick(s, p);
+});
 
 // ---------- Claude Code (hooks, plan usage), calendar, music ----------
 let agent: AgentDriver | null = null;
