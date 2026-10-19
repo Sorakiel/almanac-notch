@@ -1,6 +1,6 @@
 // Cards of the home tab: the focus card, approvals and questions, the overload alert, the launch warp.
 import { plural, tr } from '../i18n';
-import { clamp, ss } from '../util/math';
+import { clamp, hexA, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { EVENTS, limitText, statusOf, stepAt, stepFrac, stepIndex } from '../sim/events';
@@ -12,10 +12,148 @@ import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { MODULE_COL, minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
-import { deployDot, drawGlyph, modules, pageMark, prIcon, type ModuleItem } from './modules';
+import { deployDot, modules, pageMark, prIcon, type ModuleItem } from './modules';
 
 /** the muted word after the name in coucou's card head */
-const HEAD_WORD: Partial<Record<ModuleId, string>> = { vercel: 'Деплои', notion: 'Недавние', grafana: 'Алерты' };
+const HEAD_WORD: Partial<Record<ModuleId, string>> = {
+  vercel: 'Деплои',
+  notion: 'Недавние',
+  grafana: 'Алерты',
+  claude: 'агент',
+  cal: 'сегодня',
+  music: 'сейчас играет',
+  almanac: 'привычки',
+};
+
+// One text system for every module card (2026-10-19), coucou's: three tones and two sizes. The
+// name is ink, values are a soft light grey, labels and meta are dim; colour only marks a state
+// (an icon, a dot, a late meeting), never a whole line.
+const INK = '#F5F6F8',
+  VAL = '#C5C8CD',
+  DIM = '#8E939C',
+  DIM3 = '#6B7079';
+/** first content row and the step between rows, under the head */
+const ROW0 = 42,
+  ROW_STEP = 21;
+
+/** a "label ... value" row with a small icon, as coucou's stats */
+function statRow(
+  c: Ctx,
+  icon: (x: number, y: number) => void,
+  label: string,
+  value: string,
+  tx: number,
+  y: number,
+  tmax: number,
+  valueColor = VAL,
+): void {
+  // label and value stay together on a wide card (the event card is twice as wide as the home one)
+  tmax = Math.min(tmax, 240);
+  icon(tx + 6, y);
+  c.save();
+  c.font = '600 12px Onest, system-ui, sans-serif';
+  const vw = c.measureText(value).width;
+  c.restore();
+  textAt(c, label, tx + 18, y + 0.5, { size: 11.5, weight: 400, color: DIM, max: Math.max(20, tmax - 30 - vw) });
+  textAt(c, value, tx + tmax, y + 0.5, { size: 12, weight: 600, color: valueColor, align: 'right' });
+}
+
+/** a list row: a dot of its colour, the name, a quiet note on the right; the first one leads on a
+ * faint wash of its colour, as coucou's lists */
+function listRow(
+  c: Ctx,
+  accent: string,
+  first: boolean,
+  name: string,
+  meta: string,
+  tx: number,
+  y: number,
+  tmax: number,
+  lead = '',
+): void {
+  if (first) {
+    c.fillStyle = hexA(accent, 0.08);
+    rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
+    c.fill();
+  }
+  c.fillStyle = accent;
+  c.beginPath();
+  c.arc(tx + 3, y, 2.6, 0, Math.PI * 2);
+  c.fill();
+  let x = tx + 12;
+  if (lead) {
+    textAt(c, lead, x, y + 0.5, { size: 11, weight: 500, mono: true, color: '#C9956A' });
+    c.save();
+    c.font = '500 11px "JetBrains Mono", monospace';
+    x += c.measureText(lead).width + 7;
+    c.restore();
+  }
+  c.save();
+  c.font = '400 11px Onest, system-ui, sans-serif';
+  const mw = meta ? c.measureText(meta).width + 10 : 0;
+  c.restore();
+  textAt(c, name, x, y + 0.5, { size: 11.5, weight: 500, color: first ? VAL : DIM, max: tx + tmax - x - mw });
+  if (meta) textAt(c, meta, tx + tmax, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+}
+
+/** small row icons in one line style */
+function rowIcon(c: Ctx, kind: 'review' | 'clock' | 'commits', x: number, y: number, col = DIM3): void {
+  c.save();
+  c.strokeStyle = col;
+  c.lineWidth = 1.2;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  if (kind === 'review') {
+    c.ellipse(x, y, 5.2, 3.4, 0, 0, Math.PI * 2);
+    c.moveTo(x + 1.6, y);
+    c.arc(x, y, 1.6, 0, Math.PI * 2);
+  } else if (kind === 'clock') {
+    c.arc(x, y, 4.8, 0, Math.PI * 2);
+    c.moveTo(x, y - 2.6);
+    c.lineTo(x, y);
+    c.lineTo(x + 1.8, y + 1.2);
+  } else {
+    c.moveTo(x - 4.5, y);
+    c.lineTo(x - 1.8, y);
+    c.moveTo(x + 1.8, y);
+    c.lineTo(x + 4.5, y);
+    c.moveTo(x + 1.8, y);
+    c.arc(x, y, 1.8, 0, Math.PI * 2);
+  }
+  c.stroke();
+  c.restore();
+}
+
+/** a status disc: filled circle of the state's colour with a check, cross or dash */
+function stateDisc(c: Ctx, x: number, y: number, st: 'ok' | 'fail' | 'run' | 'none'): void {
+  const col = st === 'ok' ? '#22C55E' : st === 'fail' ? '#F4505E' : st === 'run' ? '#3D8BFF' : '#6B7079';
+  c.save();
+  c.fillStyle = col;
+  c.beginPath();
+  c.arc(x, y, 5, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = '#0B0B0D';
+  c.lineWidth = 1.4;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  if (st === 'ok') {
+    c.moveTo(x - 2.2, y);
+    c.lineTo(x - 0.6, y + 1.6);
+    c.lineTo(x + 2.3, y - 1.6);
+  } else if (st === 'fail') {
+    c.moveTo(x - 1.8, y - 1.8);
+    c.lineTo(x + 1.8, y + 1.8);
+    c.moveTo(x + 1.8, y - 1.8);
+    c.lineTo(x - 1.8, y + 1.8);
+  } else {
+    c.moveTo(x - 2, y);
+    c.lineTo(x + 2, y);
+  }
+  c.stroke();
+  c.restore();
+}
 
 /** proto: QUESTION */
 export const QUESTION: readonly [string, readonly string[]] = [
@@ -184,25 +322,14 @@ export function drawSteps(s: IslandState, c: Ctx, tx: number, y0: number, tmax: 
   });
 }
 
-/** "последняя сессия N мин назад" from the newest hook */
-function lastSession(s: IslandState, at: number | null): string {
-  if (at === null) return tr(s, 'сессий ещё не было');
+/** "12 мин назад" - the value of the "last session" row */
+function agoText(s: IslandState, at: number | null): string {
+  if (at === null) return tr(s, 'не было');
   const min = Math.floor((s.date().getTime() - at) / 60000);
-  if (min < 1) return tr(s, 'последняя сессия только что');
-  if (min < 60) return tr(s, 'последняя сессия {0} мин назад', min);
+  if (min < 1) return tr(s, 'только что');
+  if (min < 60) return tr(s, '{0} мин назад', min);
   const h = Math.floor(min / 60);
-  return h < 24 ? tr(s, 'последняя сессия {0} ч назад', h) : tr(s, 'последняя сессия давно');
-}
-
-function commitsWord(s: IslandState, n: number): string {
-  if (s.lang === 'en') return plural(n, ' commit', ' commits');
-  const m10 = n % 10,
-    m100 = n % 100;
-  return m10 === 1 && m100 !== 11
-    ? ' коммит'
-    : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)
-      ? ' коммита'
-      : ' коммитов';
+  return h < 24 ? tr(s, '{0} ч назад', h) : tr(s, 'давно');
 }
 
 /**
@@ -210,21 +337,39 @@ function commitsWord(s: IslandState, n: number): string {
  * name, a muted word ("Деплои", "Недавние", "Алерты"), an optional arrow (Vercel: the newest
  * deployment, Grafana: the alert list).
  */
-function brandHead(s: IslandState, c: Ctx, id: ModuleId, name: string, tx: number, y0: number, x1: number): void {
+function brandHead(
+  s: IslandState,
+  c: Ctx,
+  id: ModuleId,
+  name: string,
+  tx: number,
+  y0: number,
+  x1: number,
+  wordIn?: string,
+  wordCol = DIM,
+): void {
   c.fillStyle = MODULE_COL[id].body;
   c.beginPath();
-  c.arc(tx + 4, y0 + 18, 4, 0, Math.PI * 2);
+  c.arc(tx + 3.5, y0 + 18, 3.5, 0, Math.PI * 2);
   c.fill();
-  textAt(c, name, tx + 14, y0 + 18.5, { size: 13, weight: 600 });
+  textAt(c, name, tx + 13, y0 + 18.5, { size: 12.5, weight: 600, color: INK });
   c.save();
-  c.font = '600 13px Onest, system-ui, sans-serif';
+  c.font = '600 12.5px Onest, system-ui, sans-serif';
   const nw = c.measureText(name).width;
   c.restore();
-  textAt(c, tr(s, HEAD_WORD[id] ?? ''), tx + 20 + nw, y0 + 18.5, {
-    size: 12,
-    weight: 400,
-    color: T_MUTED,
-  });
+  const word = wordIn ?? tr(s, HEAD_WORD[id] ?? '');
+  if (word)
+    textAt(c, word, tx + 19 + nw, y0 + 18.5, { size: 11.5, weight: wordCol === DIM ? 400 : 500, color: wordCol });
+  // GitHub: the week of commits as small cells after the name, as coucou's head
+  if (id === 'github') {
+    const CM = s.github ? s.github.commits : [4, 0, 6, 9, 3, 7, 5],
+      mx = Math.max(1, ...CM);
+    CM.forEach((v, i) => {
+      c.fillStyle = !v ? 'rgba(255,255,255,0.08)' : hexA('#22C55E', 0.25 + 0.75 * (v / mx));
+      rrect(c, tx + 21 + nw + i * 9, y0 + 14.5, 7, 7, 1.5);
+      c.fill();
+    });
+  }
   const top = id === 'vercel' && s.vercel && s.vercel.auth === 'ok' ? s.vercel.rows[0] : undefined;
   const act = top
     ? 'vercel:' + top.id
@@ -378,91 +523,120 @@ export function drawFocusCard(
   cardMascot(s, c, x0, y0, y1, f, f === 'claude' ? fx : null, propFor(s, f));
   const tx = x0 + 84,
     tmax = x1 - tx - 10;
-  if (it.kind === 'deploy' || it.kind === 'pages' || it.kind === 'alerts') brandHead(s, c, it.id, it.name, tx, y0, x1);
-  else {
-    // the module's name is a quiet label (2026-10-19): the mascot's colour already says whose card
-    // this is, the first line below is what to read
-    drawGlyph(s, c, it, tx + 5, y0 + 18, 4.6);
-    textAt(c, it.name, tx + 14, y0 + 18.5, { size: 11.5, weight: 500, color: 'rgba(255,255,255,0.5)', max: tmax - 14 });
-  }
+  // one head for every card; the calendar's says how soon the next meeting is (amber when close)
+  const calMins = it.kind === 'cal' ? (s.cal ? s.cal.mins : it.mins) : null;
+  if (calMins !== null)
+    brandHead(
+      s,
+      c,
+      it.id,
+      it.name,
+      tx,
+      y0,
+      x1,
+      calMins <= 0 ? tr(s, 'сейчас') : tr(s, 'через {0}', minsText(s, calMins)),
+      calMins <= 5 ? '#F5B94A' : DIM,
+    );
+  else brandHead(s, c, it.id, it.name, tx, y0, x1);
   // one line leads (14 px, bright), the rest step back - as Grok Bot's card reads at a glance
+  // plain lines (music, hints): the first one in the value tone, the rest dim - the same system
   const L = (i: number, str: string, color?: string, mono?: boolean): void =>
-    textAt(c, str, tx, y0 + (i === 0 ? 41 : i === 1 ? 62 : 80), {
-      size: mono ? 11 : i === 0 ? 14 : 12,
+    textAt(c, str, tx, y0 + ROW0 + i * ROW_STEP, {
+      size: mono ? 11 : i === 0 ? 12.5 : 11.5,
       weight: i === 0 ? 500 : 400,
-      color: color || (i === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.6)'),
+      color: color || (i === 0 ? VAL : DIM),
       ...(mono ? { mono } : {}),
       max: tmax,
     });
   if (it.kind === 'agent') {
     if (it.state === 'work') drawSteps(s, c, tx, y0, tmax);
     else if (it.state === 'search') {
-      L(0, tr(s, 'ищет по проекту'), '#5FD6F0');
-      L(1, s.agent ? s.agent.search : tr(s, 'grep "rrect(" · 14 совпадений'), T_MUTED);
+      listRow(c, '#5FD6F0', true, tr(s, 'ищет по проекту'), '', tx, y0 + ROW0, tmax);
+      listRow(
+        c,
+        DIM3,
+        false,
+        s.agent ? s.agent.search : tr(s, 'grep "rrect(" · 14 совпадений'),
+        '',
+        tx,
+        y0 + ROW0 + ROW_STEP,
+        tmax,
+      );
     } else if (it.state === 'limit') {
-      L(0, tr(s, 'лимит плана исчерпан'), '#C7C7CC');
-      L(1, tr(s, 'сброс через {0}', limitText(s)), T_MUTED);
-      L(2, tr(s, 'план {0} · окно 5 часов', s.agent ? s.agent.plan : 'Pro'), T_MUTED);
+      listRow(c, '#C7C7CC', true, tr(s, 'лимит плана исчерпан'), '', tx, y0 + ROW0, tmax);
+      statRow(c, (x, y) => rowIcon(c, 'clock', x, y), tr(s, 'Сброс'), limitText(s), tx, y0 + ROW0 + ROW_STEP, tmax);
+      statRow(
+        c,
+        (x, y) => rowIcon(c, 'commits', x, y),
+        tr(s, 'План'),
+        s.agent ? s.agent.plan : 'Pro',
+        tx,
+        y0 + ROW0 + ROW_STEP * 2,
+        tmax,
+      );
     } else if (it.state === 'think') {
-      L(0, tr(s, s.agent ? 'думает' : 'планирует изменения'), '#BFA6FF');
-      L(1, s.agent ? s.agent.think : tr(s, 'смотрит структуру проекта'), T_MUTED);
+      listRow(c, '#BFA6FF', true, tr(s, s.agent ? 'думает' : 'планирует изменения'), '', tx, y0 + ROW0, tmax);
+      listRow(
+        c,
+        DIM3,
+        false,
+        s.agent ? s.agent.think : tr(s, 'смотрит структуру проекта'),
+        '',
+        tx,
+        y0 + ROW0 + ROW_STEP,
+        tmax,
+      );
     } else {
-      L(0, tr(s, 'свободен'));
-      L(1, s.agent ? lastSession(s, s.agent.lastActive) : tr(s, 'последняя сессия {0} мин назад', 12), T_MUTED);
+      statRow(c, (x, y) => stateDisc(c, x, y, 'ok'), tr(s, 'Статус'), tr(s, 'свободен'), tx, y0 + ROW0, tmax);
+      statRow(
+        c,
+        (x, y) => rowIcon(c, 'clock', x, y),
+        tr(s, 'Последняя сессия'),
+        agoText(s, s.agent ? s.agent.lastActive : Date.now() - 12 * 60000),
+        tx,
+        y0 + ROW0 + ROW_STEP,
+        tmax,
+      );
     }
   } else if (it.kind === 'ci' && s.github && s.github.auth !== 'ok') {
     // live GitHub with nothing to show: say why and where to connect
     L(0, s.github.hint[0], 'rgba(255,255,255,0.92)');
     L(1, s.github.hint[1], T_MUTED);
   } else if (it.kind === 'ci') {
+    // coucou's GitHub card: the numbers as rows, the colour only on the CI disc
     const gh = s.github,
-      ciCol =
-        it.state === 'fail' ? '#FF6B61' : it.state === 'run' ? '#7FB0FF' : it.state === 'off' ? '#8E8E93' : '#5FD27D';
-    drawGlyph(s, c, { kind: 'ci', state: it.state }, tx + 6, y0 + 40, 6.8);
-    textAt(
+      ci = gh ? gh.ci : it.state === 'off' ? 'none' : it.state;
+    const repo = gh && gh.ciText.includes(' · ') ? gh.ciText.split(' · ')[0] : '';
+    const ciWord =
+      ci === 'ok'
+        ? tr(s, 'зелёный')
+        : ci === 'fail'
+          ? tr(s, 'упал')
+          : ci === 'run'
+            ? tr(s, 'идёт')
+            : tr(s, 'нет проверок');
+    const prs = gh ? gh.prs : 2,
+      week = (gh ? gh.commits : [4, 0, 6, 9, 3, 7, 5]).reduce((a, b) => a + b, 0);
+    statRow(
       c,
-      gh
-        ? gh.ciText
-        : tr(
-            s,
-            it.state === 'fail'
-              ? 'деплой упал на build'
-              : it.state === 'run'
-                ? 'CI идёт · 2 из 5'
-                : 'CI зелёный · 5 из 5',
-          ),
-      tx + 18,
-      y0 + 40.5,
-      { size: 14, weight: 500, color: ciCol, max: tmax - 18 },
+      (x, y) => stateDisc(c, x, y, ci),
+      repo ? tr(s, 'CI · {0}', repo) : tr(s, 'CI основной ветки'),
+      ciWord,
+      tx,
+      y0 + ROW0,
+      tmax,
+      ci === 'fail' ? '#F4505E' : VAL,
     );
-    prIcon(c, tx + 6, y0 + 61);
-    textAt(c, gh ? gh.prText : tr(s, '2 PR ждут ревью'), tx + 18, y0 + 61.5, {
-      size: 12,
-      weight: 400,
-      color: 'rgba(255,255,255,0.6)',
-      max: tmax - 18,
-    });
-    // commits over the last 7 days, today on the right
-    const CM = gh ? gh.commits : [4, 0, 6, 9, 3, 7, 5],
-      mxc = Math.max(...CM),
-      bw = 6,
-      bg = 3,
-      base = y0 + 88;
-    CM.forEach((v, i) => {
-      const hh = v ? 3 + (v / mxc) * 13 : 2,
-        x = tx + i * (bw + bg);
-      c.fillStyle = !v ? 'rgba(255,255,255,0.15)' : i === CM.length - 1 ? '#5FD27D' : 'rgba(95,210,125,0.5)';
-      rrect(c, x, base - hh, bw, hh, 1.5);
-      c.fill();
-    });
-    const nC = CM.reduce((a, b) => a + b, 0);
-    // live: the word does not fit next to the bars without being squeezed
-    textAt(c, tr(s, '{0} за 7 дн', gh ? nC : nC + commitsWord(s, nC)), tx + CM.length * (bw + bg) + 6, base - 6, {
-      size: 11,
-      weight: 400,
-      color: T_MUTED,
-      max: tmax - CM.length * (bw + bg) - 6,
-    });
+    statRow(c, (x, y) => prIcon(c, x, y), tr(s, 'Ждут ревью'), String(prs), tx, y0 + ROW0 + ROW_STEP, tmax);
+    statRow(
+      c,
+      (x, y) => rowIcon(c, 'commits', x, y),
+      tr(s, 'Коммиты за 7 дней'),
+      String(week),
+      tx,
+      y0 + ROW0 + ROW_STEP * 2,
+      tmax,
+    );
   } else if (it.kind === 'deploy' && s.vercel) {
     // not in the prototype (docs/CHANGES.md): the newest deployments, as coucou's card
     const vc = s.vercel;
@@ -570,22 +744,27 @@ export function drawFocusCard(
   } else if (it.kind === 'cal' && s.cal) {
     const cal = s.cal;
     if (cal.mins === null) {
-      L(0, cal.title, 'rgba(255,255,255,0.92)');
-      L(1, cal.after, T_MUTED);
+      listRow(c, MODULE_COL.cal.body, true, cal.title, '', tx, y0 + ROW0, tmax);
+      if (cal.after) listRow(c, DIM3, false, cal.after, '', tx, y0 + ROW0 + ROW_STEP, tmax);
     } else {
-      // the meeting leads, its time follows (amber in the last five minutes)
-      L(0, cal.title);
-      L(
-        1,
-        (cal.mins <= 0 ? tr(s, 'сейчас') : tr(s, 'через {0}', minsText(s, cal.mins))) + ' · ' + cal.at,
-        cal.mins <= 5 ? '#F5B94A' : undefined,
-      );
-      if (cal.after) L(2, cal.after, 'rgba(255,255,255,0.4)');
+      // the next meeting leads, its time in the warm mono of coucou's lists (how soon is in the head)
+      const soon = cal.mins <= 5;
+      listRow(c, soon ? '#F5B94A' : MODULE_COL.cal.body, true, cal.title, '', tx, y0 + ROW0, tmax, cal.at);
+      if (cal.after) listRow(c, DIM3, false, cal.after, '', tx, y0 + ROW0 + ROW_STEP, tmax);
     }
   } else if (it.kind === 'cal') {
-    L(0, tr(s, 'Созвон с командой'));
-    L(1, tr(s, 'через {0} мин · 15:00', it.mins), it.mins <= 5 ? '#F5B94A' : undefined);
-    L(2, tr(s, 'дальше: лекция в 17:10'), 'rgba(255,255,255,0.4)');
+    listRow(
+      c,
+      it.mins <= 5 ? '#F5B94A' : MODULE_COL.cal.body,
+      true,
+      tr(s, 'Созвон с командой'),
+      '',
+      tx,
+      y0 + ROW0,
+      tmax,
+      '15:00',
+    );
+    listRow(c, DIM3, false, tr(s, 'Лекция'), '', tx, y0 + ROW0 + ROW_STEP, tmax, '17:10');
   } else if (it.kind === 'music') {
     const trk = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
     // live track names pass through; the stub and the "nothing playing" lines are keys
