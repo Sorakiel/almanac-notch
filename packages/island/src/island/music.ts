@@ -1,6 +1,7 @@
 // Music in focus: the wide player and the narrow rail of the other modules (docs/SPEC.md 2.5).
+import { hoverK } from './hover';
 import { tr } from '../i18n';
-import { clamp, ss } from '../util/math';
+import { clamp } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { propFor } from '../mascot/props';
@@ -299,9 +300,9 @@ export function drawRail(
     const hy0 = i === 0 ? cy0 : y - step / 2,
       hy1 = i === n - 1 ? cy1 : y + step / 2;
     const hov = hovering(s, rx0, hy0, rw, hy1 - hy0);
-    st.k += ((hov ? 1 : 0) - st.k) * Math.min(1, (t - st.last) * 16);
+    st.k = hoverK(s, 'rail:' + it.id, hov);
     st.last = t;
-    return { it, y, k: ss(0, 1, st.k), hy0, hy1 };
+    return { it, y, k: st.k, hy0, hy1 };
   });
   // bottom first: the upper one sits in front, as in a stack
   // bottom first: the upper one sits in front; the hovered one comes to the very front
@@ -310,7 +311,7 @@ export function drawRail(
   for (const { it, y, k, hy0, hy1 } of rows) {
     if (k > 0.05) {
       c.save();
-      c.globalAlpha *= k;
+      c.globalAlpha *= Math.min(1, k);
       c.font = '500 12px Onest, system-ui, sans-serif';
       const w = c.measureText(it.name).width + 20,
         x = rx0 - 6 - w * (0.85 + 0.15 * k);

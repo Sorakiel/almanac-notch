@@ -45,7 +45,14 @@ async function shoot() {
   }
 }
 
-if (scene === 'open') {
+if (scene === 'hover-pill') {
+  // hover the first module pill, then leave it
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  const h = await p.evaluate(() => window.__state.hits.find((x) => x.act.startsWith('focus:')));
+  await p.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+  await shoot();
+} else if (scene === 'open') {
   await p.evaluate(() => window.dispatchEvent(new Event('blur')));
   await p.clock.runFor(1500);
   await p.mouse.move(340, 12);

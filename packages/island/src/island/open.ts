@@ -1,4 +1,5 @@
 // Open state: top bar with tabs and settings, then the active tab (docs/SPEC.md 2.4-2.9).
+import { hoverK, pressScale } from './hover';
 import { clamp, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId, Tab } from '../sim/state';
@@ -225,9 +226,10 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
   tabs.forEach(([k, act], i) => {
     const x = x0 + 22 + i * 30,
       on = s.tab === k,
-      hov = hovering(s, x - 13, y - 11, 26, 22);
-    if (!on && hov) {
-      c.fillStyle = 'rgba(255,255,255,0.08)';
+      hov = hovering(s, x - 13, y - 11, 26, 22),
+      hk = clamp(hoverK(s, 'bar:' + k, !on && hov, 0.2, 1), 0, 1);
+    if (hk > 0.01) {
+      c.fillStyle = `rgba(255,255,255,${(0.08 * hk).toFixed(3)})`;
       rrect(c, x - 13, y - 11, 26, 22, 11);
       c.fill();
     }
@@ -236,9 +238,10 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
   });
   right.forEach(([k, act, x]) => {
     const on = k === 'gear' && s.tab === 'settings',
-      hov = hovering(s, x - 13, y - 11, 26, 22);
-    if (!on && hov) {
-      c.fillStyle = 'rgba(255,255,255,0.08)';
+      hov = hovering(s, x - 13, y - 11, 26, 22),
+      hk = clamp(hoverK(s, 'bar:' + k, !on && hov, 0.2, 1), 0, 1);
+    if (hk > 0.01) {
+      c.fillStyle = `rgba(255,255,255,${(0.08 * hk).toFixed(3)})`;
       rrect(c, x - 13, y - 11, 26, 22, 11);
       c.fill();
     }
@@ -477,18 +480,37 @@ function modulePill(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number
     hov = hovering(s, x, y, w, h),
     hot = isHot(it),
     r = h / 2;
+  // coucou's chip hover: lifts to 1.04 on a spring, the fill and rim take the module colour, a
+  // glow of it comes up behind (2026-10-19)
+  const k = hoverK(s, 'pill:' + it.id, hov),
+    ka = clamp(k, 0, 1),
+    sc = (1 + 0.04 * k) * pressScale(s, 'focus:' + it.id);
+  c.save();
+  c.translate(x + w / 2, y + h / 2);
+  c.scale(sc, sc);
+  c.translate(-(x + w / 2), -(y + h / 2));
+  if (ka > 0.01) {
+    c.save();
+    c.shadowColor = hexA(deepCol(col), 0.5 * ka);
+    c.shadowBlur = 14 * c.getTransform().a;
+    rrect(c, x, y, w, h, r);
+    c.fillStyle = '#0B0B0C';
+    c.fill();
+    c.restore();
+  }
   rrect(c, x, y, w, h, r);
   c.fillStyle = '#0B0B0C';
   c.fill();
-  c.fillStyle = hexA(deepCol(col), hov ? 0.2 : 0.1);
+  c.fillStyle = hexA(deepCol(col), 0.1 + 0.12 * ka);
   c.fill();
   c.lineWidth = 1;
-  c.strokeStyle = hexA(col, hov ? 0.45 : hot ? 0.34 : 0.16);
+  c.strokeStyle = hexA(col, (hot ? 0.34 : 0.16) + 0.36 * ka);
   rrect(c, x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5);
   c.stroke();
   drawMini(s, c, x + r, y + h / 2 + 0.5, h * 0.3, { ...miniFor(it), body: deepCol(col) });
   const tx = x + h + 1;
-  textAt(c, it.name, tx, y + h / 2 + 0.5, { size: 12, color: mixWhite(col, 0.45), max: w - (tx - x) - 10 });
+  textAt(c, it.name, tx, y + h / 2 + 0.5, { size: 12, color: mixWhite(col, 0.45 + 0.25 * ka), max: w - (tx - x) - 10 });
+  c.restore();
   addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });
 }
 

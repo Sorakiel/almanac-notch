@@ -1,4 +1,5 @@
 // Clickable zones of the island, rebuilt on every frame.
+import { hoverK, pressScale } from './hover';
 import type { Ctx } from '../util/draw';
 import { rrect, textAt } from '../util/draw';
 import type { Hit, IslandState } from '../sim/state';
@@ -35,8 +36,15 @@ export function button(
   act: string,
   primary: boolean,
 ): void {
-  const hov = hovering(s, x, y, w, h);
-  c.fillStyle = primary ? (hov ? '#E6E6E6' : '#FFFFFF') : hov ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)';
+  const hk = Math.min(1, hoverK(s, 'btn:' + act, hovering(s, x, y, w, h), 0.2, 1)),
+    sc = pressScale(s, act);
+  c.save();
+  c.translate(x + w / 2, y + h / 2);
+  c.scale(sc, sc);
+  c.translate(-(x + w / 2), -(y + h / 2));
+  c.fillStyle = primary
+    ? `rgb(${255 - 25 * hk},${255 - 25 * hk},${255 - 25 * hk})`
+    : `rgba(255,255,255,${(0.12 + 0.08 * hk).toFixed(3)})`;
   rrect(c, x, y, w, h, h / 2);
   c.fill();
   textAt(c, label, x + w / 2, y + h / 2 + 0.5, {
@@ -44,6 +52,7 @@ export function button(
     align: 'center',
     color: primary ? '#000' : 'rgba(255,255,255,0.92)',
   });
+  c.restore();
   addHit(s, c, { x, y, w, h, act });
 }
 

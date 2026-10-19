@@ -237,13 +237,16 @@ describe("the app's open on hover and auto-close (stage 8g)", () => {
     expect(notchState(s)).toBe('half');
   });
 
-  it('on: hovering opens and leaving folds at once, as in the prototype', () => {
+  // 2026-10-19 (docs/CHANGES.md): not at once as in the prototype - 0.6 s later, as coucou's
+  it('on: hovering opens and leaving folds 0.6 s later', () => {
     const { s, run } = host(true);
     s.islandHover = true;
     run(1);
     expect(notchState(s)).toBe('open');
     islandPointerLeave(s);
-    run(0.1);
+    run(0.3);
+    expect(notchState(s)).toBe('open');
+    run(0.4);
     expect(notchState(s)).toBe('half');
   });
 

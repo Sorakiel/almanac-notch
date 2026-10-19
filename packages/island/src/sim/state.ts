@@ -364,6 +364,9 @@ export interface IslandState {
   tabStart: number;
   /** when the open island's content began to reveal (layered, island/reveal.ts) */
   revealStart: number;
+  /** the last clicked zone and when, for the press dip (island/hover.ts) */
+  pressAct: string;
+  pressAt: number;
   /** the open island was drawn on the previous frame */
   drawnOpen: boolean;
   musicPlaying: boolean;
@@ -508,6 +511,8 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     prevTab: 'home',
     tabStart: -10,
     revealStart: -10,
+    pressAct: '',
+    pressAt: -10,
     drawnOpen: false,
     musicPlaying: true,
     trackIdx: 0,

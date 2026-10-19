@@ -1,4 +1,5 @@
 // Card building blocks of the open island: plate, tint, the card mascot, keyboard buttons.
+import { hoverK, pressScale } from './hover';
 import { hexA } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
@@ -90,8 +91,16 @@ export function kbdButton(
   act: string,
   primary: boolean,
 ): void {
-  const hov = hovering(s, x, y, w, h);
-  c.fillStyle = primary ? (hov ? '#E8E8E8' : '#FFFFFF') : hov ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)';
+  // hover fades in on a spring, a press sinks to 0.94 (coucou, 2026-10-19)
+  const hk = Math.min(1, hoverK(s, 'btn:' + act, hovering(s, x, y, w, h), 0.2, 1)),
+    sc = pressScale(s, act);
+  c.save();
+  c.translate(x + w / 2, y + h / 2);
+  c.scale(sc, sc);
+  c.translate(-(x + w / 2), -(y + h / 2));
+  c.fillStyle = primary
+    ? `rgb(${255 - 23 * hk},${255 - 23 * hk},${255 - 23 * hk})`
+    : `rgba(255,255,255,${(0.12 + 0.08 * hk).toFixed(3)})`;
   rrect(c, x, y, w, h, h / 2);
   c.fill();
   c.save();
@@ -112,5 +121,6 @@ export function kbdButton(
     align: 'center',
     color: primary ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.65)',
   });
+  c.restore();
   addHit(s, c, { x, y, w, h, act });
 }

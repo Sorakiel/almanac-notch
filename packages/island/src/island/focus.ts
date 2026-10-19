@@ -15,6 +15,9 @@ export function notchState(s: IslandState): NotchState {
   if (s.host) {
     if (s.islandHover) return s.host.openOnHover || s.clickOpen ? 'open' : 'half';
     if (s.clickOpen && t - s.hoverLeftAt < s.host.autoClose) return 'open';
+    // a pointer that slips off for a moment does not slam the island shut: it closes 0.6 s after
+    // the pointer left, as coucou's (2026-10-19)
+    if (s.host.openOnHover && s.hoverLeftAt > 0 && t - s.hoverLeftAt < 0.6) return 'open';
   } else if (s.islandHover) return 'open';
   if (event && (event.type === 'attention' || event.type === 'question' || event.type === 'greeting')) return 'open';
   if (s.overloadUntil > t || s.sp.alertA.x > 0.15) return 'open';

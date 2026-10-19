@@ -66,6 +66,8 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   const h = hitAt(s, p);
   if (!h) return;
   const act = h.act;
+  s.pressAct = act;
+  s.pressAt = s.t;
   if (act === 'mascot') {
     const R = h.R ?? 1;
     poke(s, clamp((p.x - (h.cx ?? 0)) / R, -1, 1), clamp((p.y - (h.cy ?? 0)) / (R * 0.92), -1, 1));
