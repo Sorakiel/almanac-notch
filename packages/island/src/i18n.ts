@@ -116,6 +116,7 @@ export const EN: Readonly<Record<string, string>> = {
   Звуки: 'Sounds',
   'Запуск при входе': 'Launch at login',
   'Открывать при наведении': 'Open on hover',
+  Звук: 'Sound',
   // stubs (stub.ts)
   'плейлист дня': 'playlist of the day',
   'Ночной джаз': 'Night jazz',

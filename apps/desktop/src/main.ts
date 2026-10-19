@@ -17,6 +17,7 @@ import {
   hitTest,
   islandDoubleClick,
   islandPointerDown,
+  islandPointerUp,
   islandPointerLeave,
   islandPointerMove,
   islandRect,
@@ -28,6 +29,7 @@ import {
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
+import { DEFAULT_VOLUME, SoundPlayer, SoundWatch } from './sound';
 import {
   CalDriver,
   GithubDriver,
@@ -80,24 +82,54 @@ const s = m.state;
 }
 s.bare = true;
 s.settingsLink = true;
-// the settings tab is the app's own card, after coucou's (stage 8g, docs/CHANGES.md); its two
+// the settings tab is the app's own card, after coucou's (stage 8g, docs/CHANGES.md); its
 // choices are this window's own, kept in its storage
 const CARD_KEY = 'almanac-notch.card';
-s.host = { openOnHover: true, autoClose: 15, status: [], version: '' };
+s.host = { openOnHover: true, autoClose: 15, status: [], version: '', volume: DEFAULT_VOLUME };
 try {
-  const saved = JSON.parse(localStorage.getItem(CARD_KEY) ?? '{}') as Partial<HostPrefs>;
+  const saved = JSON.parse(localStorage.getItem(CARD_KEY) ?? '{}') as Partial<HostPrefs> & { sound?: boolean };
   if (typeof saved.openOnHover === 'boolean') s.host.openOnHover = saved.openOnHover;
   if (saved.autoClose === 10 || saved.autoClose === 15 || saved.autoClose === 30) s.host.autoClose = saved.autoClose;
+  if (typeof saved.volume === 'number' && saved.volume >= 0 && saved.volume <= 1) s.host.volume = saved.volume;
+  if (typeof saved.sound === 'boolean') s.muted = !saved.sound;
 } catch {
   // unreadable storage: defaults
 }
 function saveCard(): void {
   if (!s.host) return;
   try {
-    localStorage.setItem(CARD_KEY, JSON.stringify({ openOnHover: s.host.openOnHover, autoClose: s.host.autoClose }));
+    localStorage.setItem(
+      CARD_KEY,
+      JSON.stringify({
+        openOnHover: s.host.openOnHover,
+        autoClose: s.host.autoClose,
+        sound: !s.muted,
+        volume: s.host.volume,
+      }),
+    );
   } catch {
     // not saved: the choice holds until restart
   }
+}
+
+// sounds (stage 9a): on by default and quiet; the speaker and the card's switch turn them off
+const player = new SoundPlayer(),
+  sounds = new SoundWatch();
+player.setVolume(s.host.volume);
+if (!s.muted) player.preload();
+/** what the island did this frame that sounds - checked every frame so a muted event never
+ *  sounds late after unmuting */
+function playSounds(): void {
+  const due = sounds.step(s);
+  if (s.muted || !s.host) return;
+  player.setVolume(s.host.volume);
+  for (const n of due) player.play(n);
+}
+/** a sample at the chosen level: after the slider, and when sound is switched on */
+function previewSound(): void {
+  if (s.muted || !s.host) return;
+  player.setVolume(s.host.volume);
+  player.play('attention');
 }
 s.iconSet = 'solid';
 
@@ -169,7 +201,13 @@ const domPoint = (e: MouseEvent): IslandPoint => {
   const r = island.getBoundingClientRect();
   return { x: ((e.clientX - r.left) * s.IW) / r.width, y: ((e.clientY - r.top) * s.IH) / r.height };
 };
-island.addEventListener('pointerdown', (e) => islandPointerDown(s, domPoint(e)));
+island.addEventListener('pointerdown', (e) => {
+  islandPointerDown(s, domPoint(e));
+  // the volume slider keeps following the pointer outside its zone until release
+  if (s.host?.volDrag) island.setPointerCapture(e.pointerId);
+});
+island.addEventListener('pointerup', () => islandPointerUp(s));
+island.addEventListener('pointercancel', () => islandPointerUp(s));
 
 // proto: keydown - the answer keys Y/N and 1-3 (SPEC 2.10). The panel never takes the keyboard
 // (it would steal focus), so in the window they are global ⌥Y / ⌥N / ⌥1-3, registered only
@@ -435,7 +473,11 @@ function tick(now: number, id: number): void {
     else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));
     // the settings card
     else if (r === 'host:quit') void invoke('island_action', { id: 'quit' });
-    else if (r.startsWith('host:')) saveCard();
+    else if (r.startsWith('host:')) {
+      saveCard();
+      if (r === 'host:vol' || r === 'host:sound') previewSound();
+    }
+  playSounds();
   if (s.tab === 'settings') cardStatus(now);
   if (inTauri) void syncHotkeys();
   idle = isIdle();

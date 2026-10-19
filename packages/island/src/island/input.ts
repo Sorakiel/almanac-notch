@@ -21,6 +21,9 @@ export function islandPointerMove(s: IslandState, p: IslandPoint, now: number): 
   const was = s.islandHover;
   s.islandHover = p.x > B.x0 - 10 && p.x < B.x1 + 10 && p.y < B.y1 + 10;
   if (was && !s.islandHover) s.hoverLeftAt = s.t;
+  // the app: dragging the settings card's volume follows the pointer anywhere in the window
+  const drag = s.host?.volDrag;
+  if (s.host && drag) s.host.volume = clamp((p.x - drag.bx0) / (drag.bx1 - drag.bx0), 0, 1);
   const cursor = hitAt(s, p) ? 'pointer' : 'default';
   s.ptr.lastMoveReal = now;
   s.ptr.seen = true;
@@ -69,7 +72,11 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   else if (act === 'approve' || act === 'deny' || act.startsWith('opt:')) answer(s, act as Answer);
   else if (act.startsWith('tab:'))
     s.tab = act.slice(4) === s.tab && s.tab === 'settings' ? 'home' : (act.slice(4) as Tab);
-  else if (act === 'mute') s.muted = !s.muted;
+  else if (act === 'mute') {
+    s.muted = !s.muted;
+    // the app keeps the choice and lets it be heard (apps/desktop/src/main.ts)
+    if (s.host) s.requests.push('host:sound');
+  }
   // not in the prototype (docs/CHANGES.md): a live habit row - the app marks it in Almanac and
   // answers with the same feedback as the stub's checkbox (src/feeds.ts AlmanacDriver)
   else if (act.startsWith('almanac:')) s.requests.push(act);
@@ -84,6 +91,15 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
     const [, key, v] = act.split(':');
     if (key === 'hover') s.host.openOnHover = !s.host.openOnHover;
     else if (key === 'close') s.host.autoClose = Number(v);
+    else if (key === 'sound') s.muted = !s.muted;
+    else if (key === 'vol') {
+      // the request (save, a sample at the new level) goes out on release: islandPointerUp
+      const bx0 = h.bx0 ?? 0,
+        bx1 = h.bx1 ?? 1;
+      s.host.volDrag = { bx0, bx1 };
+      s.host.volume = clamp((p.x - bx0) / (bx1 - bx0), 0, 1);
+      return;
+    }
     s.requests.push(act);
   }
   // not in the prototype: the Vercel card's arrow opens the deployment on vercel.com (the app)
@@ -139,6 +155,13 @@ function mediaAct(s: IslandState, act: string, h: Hit, p: IslandPoint): void {
     s.volume = frac;
     md.out.push('vol ' + frac.toFixed(3));
   }
+}
+
+/** Not in the prototype: the end of a press - finishes a drag of the settings card's volume. */
+export function islandPointerUp(s: IslandState): void {
+  if (!s.host?.volDrag) return;
+  s.host.volDrag = null;
+  s.requests.push('host:vol');
 }
 
 /** proto: island dblclick - joy from the island's mascot (no burst, unlike the stage) */

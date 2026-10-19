@@ -36,6 +36,7 @@ export {
   islandPointerMove,
   islandPointerLeave,
   islandPointerDown,
+  islandPointerUp,
   islandDoubleClick,
   islandRect,
   hitTest,

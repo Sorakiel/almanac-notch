@@ -397,6 +397,10 @@ export interface HostPrefs {
   /** connection dots in the card's footer: Claude Code and the switched-on services */
   status: { name: string; state: 'ok' | 'bad' | 'off' }[];
   version: string;
+  /** sound volume 0..1 (stage 9a); on/off is `muted`, shared with the top bar's speaker */
+  volume: number;
+  /** the volume slider is being dragged: its track, island px */
+  volDrag?: { bx0: number; bx1: number } | null;
 }
 
 export interface Hit {

@@ -114,7 +114,8 @@ function segment(
   cur: string,
   act: string,
 ): void {
-  const H = 22,
+  // 20 high: four rows share the card since the sound row (stage 9a)
+  const H = 20,
     pad = 9;
   c.save();
   c.font = SEG_FONT;
@@ -185,9 +186,29 @@ const DOT: Readonly<Record<'ok' | 'bad' | 'off', string>> = {
   off: 'rgba(255,255,255,0.28)',
 };
 
-/** The app's settings card (stage 8g, docs/CHANGES.md), after coucou's: the mascot, auto-close,
- *  open on hover, the connection dots, "Settings…" and "Quit". Coucou's sound row comes with the
- *  sounds in stage 9. Every control is real; the prototype's dummy switches are gone. */
+/** A volume slider from x0 to x1: a thin track, the level in white, a knob; pale when off. */
+function slider(s: IslandState, c: Ctx, x0: number, x1: number, y: number, v: number, on: boolean): void {
+  const kx = x0 + (x1 - x0) * v;
+  c.save();
+  c.globalAlpha = on ? 1 : 0.4;
+  c.fillStyle = 'rgba(255,255,255,0.18)';
+  rrect(c, x0, y - 2, x1 - x0, 4, 2);
+  c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  rrect(c, x0, y - 2, kx - x0, 4, 2);
+  c.fill();
+  c.fillStyle = '#FFFFFF';
+  c.beginPath();
+  c.arc(kx, y, hovering(s, x0 - 6, y - 10, x1 - x0 + 12, 20) || s.host?.volDrag ? 6.5 : 5.5, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  // the zone reaches past the ends so 0 and 100 % are easy to hit
+  addHit(s, c, { x: x0 - 6, y: y - 10, w: x1 - x0 + 12, h: 20, act: 'host:vol', bx0: x0, bx1: x1 });
+}
+
+/** The app's settings card (stage 8g, docs/CHANGES.md), after coucou's: the mascot, the sound row
+ *  (switch, volume - stage 9a), auto-close, open on hover, the connection dots, "Settings…" and
+ *  "Quit". Every control is real; the prototype's dummy switches are gone. */
 function drawHostSettings(
   s: IslandState,
   c: Ctx,
@@ -202,9 +223,21 @@ function drawHostSettings(
   const L = X0 + 92,
     R = X1 - 14,
     h = y1 - y0,
-    r1 = y0 + h * 0.24,
-    r2 = y0 + h * 0.52,
-    r3 = y0 + h * 0.81;
+    r0 = y0 + h * 0.17,
+    r1 = y0 + h * 0.39,
+    r2 = y0 + h * 0.61,
+    r3 = y0 + h * 0.83;
+  // sound, as coucou's first row: the switch, the word, the volume; the switch is the speaker's
+  // state in the top bar
+  const on = !s.muted;
+  toggle(c, L + 30, r0, on);
+  c.save();
+  c.font = '500 12.5px Onest, system-ui, sans-serif';
+  const soundW = c.measureText(tr(s, 'Звук')).width;
+  c.restore();
+  textAt(c, tr(s, 'Звук'), L + 40, r0 + 0.5, { size: 12.5 });
+  addHit(s, c, { x: L - 4, y: r0 - 10, w: 48 + soundW, h: 20, act: 'host:sound' });
+  slider(s, c, L + 40 + soundW + 18, R - 6, r0, host.volume, on);
   // auto-close: a clock, the delay, the choices
   c.save();
   c.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -233,15 +266,15 @@ function drawHostSettings(
     'host:close',
   );
   // open on hover: the whole row toggles
-  const hov = hovering(s, L - 6, r2 - 13, R - L + 12, 26);
+  const hov = hovering(s, L - 6, r2 - 11, R - L + 12, 22);
   if (hov) {
     c.fillStyle = 'rgba(255,255,255,0.05)';
-    rrect(c, L - 6, r2 - 13, R - L + 12, 26, 13);
+    rrect(c, L - 6, r2 - 11, R - L + 12, 22, 11);
     c.fill();
   }
   textAt(c, tr(s, 'Открывать при наведении'), L, r2 + 0.5, { size: 12.5 });
   toggle(c, R - 4, r2, host.openOnHover);
-  addHit(s, c, { x: L - 6, y: r2 - 13, w: R - L + 12, h: 26, act: 'host:hover' });
+  addHit(s, c, { x: L - 6, y: r2 - 11, w: R - L + 12, h: 22, act: 'host:hover' });
   // footer: links on the right, the connection dots as far as they fit on the left
   const quitX = linkButton(s, c, R, r3, 'Выйти', 'host:quit');
   const linksX = linkButton(s, c, quitX - 4, r3, 'Настройки…', 'open:settings');
