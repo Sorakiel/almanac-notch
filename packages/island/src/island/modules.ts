@@ -429,8 +429,8 @@ export function deepCol(hex: string): string {
     sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
   if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
   h *= 60;
-  sat = Math.min(1, sat * 1.22);
-  const L = l * 0.82,
+  sat = Math.min(1, sat * 1.08);
+  const L = l * 0.8,
     C = (1 - Math.abs(2 * L - 1)) * sat,
     X = C * (1 - Math.abs(((h / 60) % 2) - 1)),
     m = L - C / 2;

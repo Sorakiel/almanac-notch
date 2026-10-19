@@ -20,8 +20,8 @@ import { hexA } from '../util/math';
 type IconKind = 'home' | 'chat' | 'add' | 'gear' | 'sound';
 
 /** proto: icon */
-export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
-  if (s.iconSet === 'solid') return solidIcon(s, c, kind, x, y, active);
+export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean, hk = 0): void {
+  if (s.iconSet === 'solid') return solidIcon(s, c, kind, x, y, active, hk);
   c.save();
   c.strokeStyle = c.fillStyle = active ? '#FFFFFF' : 'rgba(255,255,255,0.6)';
   c.lineWidth = 1.5;
@@ -95,94 +95,112 @@ export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: numbe
   c.restore();
 }
 
-// Filled top-bar icons for the app (docs/CHANGES.md 2026-10-17): drawn on a 24-unit grid,
-// scaled to the prototype's ~13 px glyph box. Paths are our own, not a system symbol set.
-// 2026-10-19: a size smaller and softer, as Grok Bot's bar: the icons are the frame, not the content
-const SOLID_SCALE = 0.56;
+// Top-bar icons of the app (docs/CHANGES.md 2026-10-19): one family on a 24-unit grid, drawn at
+// 18 px - the way tab bars do it: an outline when idle (1.4 px, round caps and joins), the same
+// shape filled when active. The earlier set mixed filled blobs with a thick toothed gear and read
+// harsh. Paths are our own.
+const ICON_Z = 0.75;
+const ICON_LW = 1.9;
 const P_HOME =
-  'M12 3.3c.4 0 .8.1 1.1.4l8.2 7.1c.7.6.3 1.7-.6 1.7H19.5v7.4c0 .9-.7 1.6-1.6 1.6h-3.4v-5.2c0-.6-.4-1-1-1h-3c-.6 0-1 .4-1 1v5.2H6.1c-.9 0-1.6-.7-1.6-1.6v-7.4H3.3c-.9 0-1.3-1.1-.6-1.7l8.2-7.1c.3-.3.7-.4 1.1-.4Z';
+  'M3.8 10.2 11 4.3a1.6 1.6 0 0 1 2 0l7.2 5.9c.5.4.8 1 .8 1.6V19a2 2 0 0 1-2 2h-3.4a.6.6 0 0 1-.6-.6v-4.2a1.6 1.6 0 0 0-1.6-1.6h-2.8a1.6 1.6 0 0 0-1.6 1.6v4.2a.6.6 0 0 1-.6.6H5a2 2 0 0 1-2-2v-7.2c0-.6.3-1.2.8-1.6Z';
 const P_CHAT =
-  'M6.2 4h11.6c2 0 3.7 1.7 3.7 3.7v6.1c0 2-1.7 3.7-3.7 3.7h-6.9l-4.6 3.3c-.6.4-1.4-.1-1.2-.8l.6-2.6c-1.7-.4-3.2-1.9-3.2-3.6V7.7C2.5 5.7 4.2 4 6.2 4Z';
+  'M7 4.5h10a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4h-4.6l-4.1 3.1c-.5.4-1.3 0-1.3-.6v-2.6A4 4 0 0 1 3 13.5v-5a4 4 0 0 1 4-4Z';
 const P_SPEAKER =
-  'M4 8.6h2.9l4.5-3.8c.7-.6 1.7-.1 1.7.8v12.8c0 .9-1 1.4-1.7.8l-4.5-3.8H4c-.8 0-1.5-.7-1.5-1.5V10.1c0-.8.7-1.5 1.5-1.5Z';
+  'M4.5 9h2.8l4.4-3.7c.6-.5 1.5-.1 1.5.7v12c0 .8-.9 1.2-1.5.7L7.3 15H4.5A1.5 1.5 0 0 1 3 13.5v-3A1.5 1.5 0 0 1 4.5 9Z';
 const pathCache = new Map<string, Path2D>();
 function path(d: string): Path2D {
   let p = pathCache.get(d);
   if (!p) pathCache.set(d, (p = new Path2D(d)));
   return p;
 }
-/** a cog: 8 rounded teeth around a ring, the hole cut out (even-odd) */
+/** a cog with 8 short rounded teeth (round joins do the rounding) */
 function gearPath(): Path2D {
   let p = pathCache.get('gear');
   if (p) return p;
   p = new Path2D();
-  const teeth = 7,
-    rIn = 8,
-    rOut = 10,
-    half = (Math.PI / teeth) * 0.5;
-  for (let i = 0; i < teeth * 2; i++) {
-    const a = (i / (teeth * 2)) * Math.PI * 2 - Math.PI / 2,
-      r = i % 2 === 0 ? rOut : rIn,
-      w = i % 2 === 0 ? half : half * 1.25;
-    const x0 = 12 + Math.cos(a - w) * r,
-      y0 = 12 + Math.sin(a - w) * r;
+  const teeth = 8,
+    rIn = 7.6,
+    rOut = 9.7;
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2 - Math.PI / 2,
+      half = Math.PI / teeth;
+    const pt = (ang: number, r: number) => [12 + Math.cos(ang) * r, 12 + Math.sin(ang) * r] as const;
+    const [x0, y0] = pt(a - half * 0.55, rOut),
+      [x1, y1] = pt(a + half * 0.55, rOut),
+      [x2, y2] = pt(a + half * 0.75, rIn),
+      [x3, y3] = pt(a + half * 1.25, rIn);
     if (i === 0) p.moveTo(x0, y0);
     else p.lineTo(x0, y0);
-    p.lineTo(12 + Math.cos(a + w) * r, 12 + Math.sin(a + w) * r);
+    p.lineTo(x1, y1);
+    p.lineTo(x2, y2);
+    p.lineTo(x3, y3);
   }
   p.closePath();
-  p.moveTo(12 + 3.4, 12);
-  p.arc(12, 12, 3.4, 0, Math.PI * 2);
   pathCache.set('gear', p);
   return p;
 }
 
-function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
+function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean, hk = 0): void {
   c.save();
-  const col = active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.42)';
+  const col = active ? 'rgba(255,255,255,0.95)' : `rgba(255,255,255,${(0.5 + 0.3 * hk).toFixed(3)})`;
   c.fillStyle = c.strokeStyle = col;
+  c.lineWidth = ICON_LW;
   c.lineCap = 'round';
   c.lineJoin = 'round';
-  c.translate(x - 12 * SOLID_SCALE, y - 12 * SOLID_SCALE);
-  c.scale(SOLID_SCALE, SOLID_SCALE);
-  if (kind === 'home') c.fill(path(P_HOME));
-  else if (kind === 'chat') c.fill(path(P_CHAT));
+  c.translate(x - 12 * ICON_Z, y - 12 * ICON_Z);
+  c.scale(ICON_Z, ICON_Z);
+  const shape = (p: Path2D) => (active ? c.fill(p) : c.stroke(p));
+  if (kind === 'home') shape(path(P_HOME));
+  else if (kind === 'chat') shape(path(P_CHAT));
   else if (kind === 'add') {
-    // a plus cut out of a filled circle, like the other filled glyphs (a bare thick cross read heavy)
     c.beginPath();
-    c.arc(12, 12, 9.5, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = '#0B0B0D';
-    c.lineWidth = 2.2;
+    c.arc(12, 12, 8.6, 0, Math.PI * 2);
+    if (active) c.fill();
+    else c.stroke();
+    c.strokeStyle = active ? '#0B0B0D' : col;
     c.beginPath();
-    c.moveTo(12, 7.6);
-    c.lineTo(12, 16.4);
-    c.moveTo(7.6, 12);
-    c.lineTo(16.4, 12);
+    c.moveTo(12, 8.2);
+    c.lineTo(12, 15.8);
+    c.moveTo(8.2, 12);
+    c.lineTo(15.8, 12);
     c.stroke();
   } else if (kind === 'gear') {
-    // a wide round stroke rounds the teeth: square teeth read hard
-    c.lineWidth = 2.4;
-    c.fill(gearPath(), 'evenodd');
-    c.stroke(gearPath());
+    if (active) {
+      const p = new Path2D();
+      p.addPath(gearPath());
+      p.moveTo(15, 12);
+      p.arc(12, 12, 3, 0, Math.PI * 2);
+      c.stroke(gearPath());
+      c.fill(p, 'evenodd');
+    } else {
+      c.stroke(gearPath());
+      c.beginPath();
+      c.arc(12, 12, 3, 0, Math.PI * 2);
+      c.stroke();
+    }
   } else {
-    c.fill(path(P_SPEAKER));
-    c.lineWidth = 1.8;
+    shape(path(P_SPEAKER));
     c.beginPath();
     if (s.muted) {
-      c.moveTo(16, 9.5);
-      c.lineTo(21, 14.5);
-      c.moveTo(21, 9.5);
-      c.lineTo(16, 14.5);
+      c.moveTo(16.4, 9.6);
+      c.lineTo(21, 14.4);
+      c.moveTo(21, 9.6);
+      c.lineTo(16.4, 14.4);
     } else {
-      c.arc(13.5, 12, 3.6, -0.85, 0.85);
-      c.moveTo(13.5 + Math.cos(-0.85) * 7, 12 + Math.sin(-0.85) * 7);
-      c.arc(13.5, 12, 7, -0.85, 0.85);
+      c.arc(14.2, 12, 3.4, -0.8, 0.8);
+      c.moveTo(14.2 + Math.cos(-0.8) * 6.6, 12 + Math.sin(-0.8) * 6.6);
+      c.arc(14.2, 12, 6.6, -0.8, 0.8);
     }
     c.stroke();
   }
   c.restore();
 }
+
+/** top bar layout (2026-10-19, after Grok Bot): 40 apart, a 36 x 26 capsule with a hairline rim */
+const BAR_L = 26,
+  BAR_STEP = 40,
+  CAP_W = 36,
+  CAP_H = 26;
 
 /** proto: topBar */
 export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number): void {
@@ -191,27 +209,34 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
     ['chat', 'tab:chat'],
     ['add', 'tab:add'],
   ].filter(([k]) => !(s.chatOff && k === 'chat')) as [Tab & IconKind, string][];
-  const right: [IconKind, string, number][] = [
-    ['gear', 'tab:settings', x1 - 50],
-    ['sound', 'mute', x1 - 22],
-  ];
+  const gearX = x1 - BAR_L - BAR_STEP + 4,
+    right: [IconKind, string, number][] = [
+      ['gear', 'tab:settings', gearX],
+      ['sound', 'mute', x1 - BAR_L + 2],
+    ];
   // the active capsule travels from the tab we left to the new one (docs/CHANGES.md 2026-10-19):
   // the eye follows one object instead of two capsules blinking; across the notch to the gear it
   // cross-fades, a slide that long under the camera would read as lag
   const tabX = (t: Tab): number | null => {
-    if (t === 'settings') return x1 - 50;
+    if (t === 'settings') return gearX;
     const i = tabs.findIndex(([k]) => k === t);
-    return i < 0 ? null : x0 + 22 + i * 30;
+    return i < 0 ? null : x0 + BAR_L + i * BAR_STEP;
   };
   const dt = s.t - s.tabStart,
     xNew = tabX(s.tab),
     xOld = s.prevTab !== s.tab ? tabX(s.prevTab) : null;
-  const pill = (x: number, a: number) => {
+  const pill = (x: number, a: number, hover = false) => {
     c.save();
     c.globalAlpha *= a;
-    c.fillStyle = 'rgba(255,255,255,0.16)';
-    rrect(c, x - 13, y - 11, 26, 22, 11);
+    rrect(c, x - CAP_W / 2, y - CAP_H / 2, CAP_W, CAP_H, CAP_H / 2);
+    c.fillStyle = hover ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.13)';
     c.fill();
+    if (!hover) {
+      c.lineWidth = 1;
+      c.strokeStyle = 'rgba(255,255,255,0.07)';
+      rrect(c, x - CAP_W / 2 + 0.5, y - CAP_H / 2 + 0.5, CAP_W - 1, CAP_H - 1, CAP_H / 2 - 0.5);
+      c.stroke();
+    }
     c.restore();
   };
   if (xNew !== null) {
@@ -223,31 +248,15 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
       pill(xNew, k);
     }
   }
-  tabs.forEach(([k, act], i) => {
-    const x = x0 + 22 + i * 30,
-      on = s.tab === k,
-      hov = hovering(s, x - 13, y - 11, 26, 22),
+  const item = (k: IconKind, act: string, x: number, on: boolean) => {
+    const hov = hovering(s, x - CAP_W / 2, y - CAP_H / 2, CAP_W, CAP_H),
       hk = clamp(hoverK(s, 'bar:' + k, !on && hov, 0.2, 1), 0, 1);
-    if (hk > 0.01) {
-      c.fillStyle = `rgba(255,255,255,${(0.08 * hk).toFixed(3)})`;
-      rrect(c, x - 13, y - 11, 26, 22, 11);
-      c.fill();
-    }
-    icon(s, c, k, x, y, on);
-    addHit(s, c, { x: x - 13, y: y - 11, w: 26, h: 22, act });
-  });
-  right.forEach(([k, act, x]) => {
-    const on = k === 'gear' && s.tab === 'settings',
-      hov = hovering(s, x - 13, y - 11, 26, 22),
-      hk = clamp(hoverK(s, 'bar:' + k, !on && hov, 0.2, 1), 0, 1);
-    if (hk > 0.01) {
-      c.fillStyle = `rgba(255,255,255,${(0.08 * hk).toFixed(3)})`;
-      rrect(c, x - 13, y - 11, 26, 22, 11);
-      c.fill();
-    }
-    icon(s, c, k, x, y, on);
-    addHit(s, c, { x: x - 13, y: y - 11, w: 26, h: 22, act });
-  });
+    if (hk > 0.01) pill(x, hk, true);
+    icon(s, c, k, x, y, on, hk);
+    addHit(s, c, { x: x - CAP_W / 2, y: y - CAP_H / 2, w: CAP_W, h: CAP_H, act });
+  };
+  tabs.forEach(([k, act], i) => item(k, act, x0 + BAR_L + i * BAR_STEP, s.tab === k));
+  right.forEach(([k, act, x]) => item(k, act, x, k === 'gear' && s.tab === 'settings'));
 }
 
 /** proto: drawOpen */
@@ -320,7 +329,7 @@ export function drawOpen(
 }
 
 /** the focus card takes this share of home: the active module says more than the others together */
-const SPLIT = 0.58;
+const SPLIT = 0.53;
 /** the module rail beside a big event card, as Grok Bot's */
 const RAIL_W = 52;
 /** the card's content (mascot, text, buttons) is drawn this much bigger than the prototype's,
@@ -459,7 +468,8 @@ export function drawOpenBody(
     pad = 10,
     pg = 8,
     pw = (gw - pad * 2 - pg) / 2,
-    ph = 34,
+    // the pills fill their card (they floated in it at 34 px, with 40 px of nothing above and below)
+    ph = Math.min(48, (cy1 - cy0 - pad * 2 - pg) / 2),
     rows = Math.ceil(items.length / 2),
     py0 = cy0 + (cy1 - cy0 - (rows * ph + (rows - 1) * pg)) / 2;
   c.save();
@@ -507,9 +517,13 @@ function modulePill(s: IslandState, c: Ctx, it: ModuleItem, x: number, y: number
   c.strokeStyle = hexA(col, (hot ? 0.34 : 0.16) + 0.36 * ka);
   rrect(c, x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5);
   c.stroke();
-  drawMini(s, c, x + r, y + h / 2 + 0.5, h * 0.3, { ...miniFor(it), body: deepCol(col) });
-  const tx = x + h + 1;
-  textAt(c, it.name, tx, y + h / 2 + 0.5, { size: 12, color: mixWhite(col, 0.45 + 0.25 * ka), max: w - (tx - x) - 10 });
+  drawMini(s, c, x + 8 + h * 0.25, y + h / 2 + 0.5, h * 0.25, { ...miniFor(it), body: deepCol(col) });
+  const tx = x + 12 + h * 0.5;
+  textAt(c, it.name, tx, y + h / 2 + 0.5, {
+    size: 12.5,
+    color: mixWhite(col, 0.45 + 0.25 * ka),
+    max: w - (tx - x) - 8,
+  });
   c.restore();
   addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });
 }

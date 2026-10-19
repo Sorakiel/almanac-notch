@@ -380,14 +380,17 @@ export function drawFocusCard(
     tmax = x1 - tx - 10;
   if (it.kind === 'deploy' || it.kind === 'pages' || it.kind === 'alerts') brandHead(s, c, it.id, it.name, tx, y0, x1);
   else {
-    drawGlyph(s, c, it, tx + 6, y0 + 18, 5.5);
-    textAt(c, it.name, tx + 17, y0 + 18.5, { size: 13, weight: 600, max: tmax - 17 });
+    // the module's name is a quiet label (2026-10-19): the mascot's colour already says whose card
+    // this is, the first line below is what to read
+    drawGlyph(s, c, it, tx + 5, y0 + 18, 4.6);
+    textAt(c, it.name, tx + 14, y0 + 18.5, { size: 11.5, weight: 500, color: 'rgba(255,255,255,0.5)', max: tmax - 14 });
   }
+  // one line leads (14 px, bright), the rest step back - as Grok Bot's card reads at a glance
   const L = (i: number, str: string, color?: string, mono?: boolean): void =>
-    textAt(c, str, tx, y0 + 40 + i * 18, {
-      size: mono ? 11 : 11.5,
-      weight: 400,
-      color: color || 'rgba(255,255,255,0.75)',
+    textAt(c, str, tx, y0 + (i === 0 ? 41 : i === 1 ? 62 : 80), {
+      size: mono ? 11 : i === 0 ? 14 : 12,
+      weight: i === 0 ? 500 : 400,
+      color: color || (i === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.6)'),
       ...(mono ? { mono } : {}),
       max: tmax,
     });
@@ -430,13 +433,13 @@ export function drawFocusCard(
           ),
       tx + 18,
       y0 + 40.5,
-      { size: 11.5, weight: 400, color: ciCol, max: tmax - 18 },
+      { size: 14, weight: 500, color: ciCol, max: tmax - 18 },
     );
-    prIcon(c, tx + 6, y0 + 59);
-    textAt(c, gh ? gh.prText : tr(s, '2 PR ждут ревью'), tx + 18, y0 + 59.5, {
-      size: 11.5,
+    prIcon(c, tx + 6, y0 + 61);
+    textAt(c, gh ? gh.prText : tr(s, '2 PR ждут ревью'), tx + 18, y0 + 61.5, {
+      size: 12,
       weight: 400,
-      color: 'rgba(255,255,255,0.8)',
+      color: 'rgba(255,255,255,0.6)',
       max: tmax - 18,
     });
     // commits over the last 7 days, today on the right
@@ -570,18 +573,19 @@ export function drawFocusCard(
       L(0, cal.title, 'rgba(255,255,255,0.92)');
       L(1, cal.after, T_MUTED);
     } else {
+      // the meeting leads, its time follows (amber in the last five minutes)
+      L(0, cal.title);
       L(
-        0,
+        1,
         (cal.mins <= 0 ? tr(s, 'сейчас') : tr(s, 'через {0}', minsText(s, cal.mins))) + ' · ' + cal.at,
-        cal.mins <= 5 ? '#F5B94A' : '#FFFFFF',
+        cal.mins <= 5 ? '#F5B94A' : undefined,
       );
-      L(1, cal.title);
-      if (cal.after) L(2, cal.after, T_MUTED);
+      if (cal.after) L(2, cal.after, 'rgba(255,255,255,0.4)');
     }
   } else if (it.kind === 'cal') {
-    L(0, tr(s, 'через {0} мин · 15:00', it.mins), it.mins <= 5 ? '#F5B94A' : '#FFFFFF');
-    L(1, tr(s, 'Созвон с командой'));
-    L(2, tr(s, 'дальше: лекция в 17:10'), T_MUTED);
+    L(0, tr(s, 'Созвон с командой'));
+    L(1, tr(s, 'через {0} мин · 15:00', it.mins), it.mins <= 5 ? '#F5B94A' : undefined);
+    L(2, tr(s, 'дальше: лекция в 17:10'), 'rgba(255,255,255,0.4)');
   } else if (it.kind === 'music') {
     const trk = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
     // live track names pass through; the stub and the "nothing playing" lines are keys

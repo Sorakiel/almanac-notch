@@ -31,7 +31,7 @@ await p.clock.runFor(1500);
 const box = () => p.evaluate(() => window.__state.islandBox);
 async function clickTab(i, right = false) {
   const bx = await box();
-  const x = right ? bx.x1 - 50 : bx.x0 + 22 + i * 30;
+  const x = right ? bx.x1 - 62 : bx.x0 + 26 + i * 40;
   await p.mouse.move(x, 16);
   await p.mouse.down();
   await p.mouse.up();
