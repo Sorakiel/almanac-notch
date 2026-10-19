@@ -504,9 +504,9 @@ async function saveModules(next: Modules): Promise<void> {
     renderModules(modCfg);
     return;
   }
-  // like coucou: Claude Code is the main module, at most 4 others (modules.rs MAX_ON)
-  if (Object.values(MOD_OF).filter((id) => id !== 'claude' && !next.off.includes(id)).length > 4) {
-    say(t('Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один'));
+  // the open island fits 5: Claude Code counts only while it is on (modules.rs MAX_ON)
+  if (Object.values(MOD_OF).filter((id) => !next.off.includes(id)).length > 5) {
+    say(t('Одновременно можно включить не больше 5 модулей - сначала выключите один'));
     renderModules(modCfg);
     return;
   }
@@ -671,7 +671,6 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-ev]'))
 $('hooks-install').addEventListener('click', () => act('hooks:install'));
 $('hooks-uninstall').addEventListener('click', () => act('hooks:uninstall'));
 $('quit').addEventListener('click', () => act('quit'));
-$('welcome-again').addEventListener('click', () => showWelcome());
 // the hook dialogs finish outside this window; read the status again when it is back in front
 window.addEventListener('focus', () => void refreshIsland());
 
@@ -684,6 +683,8 @@ interface UpdateState {
 }
 interface AppInfo {
   version: string;
+  /** the commit of this build: test builds share a version number */
+  build: string;
   onboarded: boolean;
   updates: boolean;
   autostart: boolean;
@@ -693,7 +694,7 @@ let appInfo: AppInfo | null = null,
   lastUpd: UpdateState = { state: 'idle', version: null, progress: null, error: null };
 function renderApp(a: AppInfo | null): void {
   appInfo = a;
-  $('app-version').textContent = a ? t('Версия {0}', a.version) : '';
+  $('app-version').textContent = a ? t('Версия {0}', a.build ? a.version + ' · ' + a.build : a.version) : '';
   $<HTMLInputElement>('autostart').checked = !!a?.autostart;
   $<HTMLInputElement>('updates').checked = !!a?.updates;
   if (a) renderUpdate(a.update);
@@ -703,13 +704,13 @@ function renderUpdate(u: UpdateState): void {
   const go = $<HTMLButtonElement>('upd-go');
   $('upd-status').textContent =
     u.state === 'checking'
-      ? t('Проверяю…')
+      ? t('Проверка…')
       : u.state === 'latest'
         ? t('Установлена последняя версия')
         : u.state === 'available'
           ? t('Вышла версия {0}', u.version ?? '')
           : u.state === 'downloading'
-            ? t('Скачиваю обновление… {0}%', Math.round((u.progress ?? 0) * 100))
+            ? t('Загрузка обновления… {0}%', Math.round((u.progress ?? 0) * 100))
             : '';
   go.textContent = u.state === 'available' ? t('Обновить и перезапустить') : t('Проверить сейчас');
   go.classList.toggle('primary', u.state === 'available');

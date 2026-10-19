@@ -28,10 +28,10 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Проверять обновления': 'Check for updates',
   'Проверить сейчас': 'Check now',
   'Версия {0}': 'Version {0}',
-  'Проверяю…': 'Checking…',
+  'Проверка…': 'Checking…',
   'Установлена последняя версия': 'You have the latest version',
   'Вышла версия {0}': 'Version {0} is out',
-  'Скачиваю обновление… {0}%': 'Downloading the update… {0}%',
+  'Загрузка обновления… {0}%': 'Downloading the update… {0}%',
   'Обновить и перезапустить': 'Update and restart',
   // first-run guide (stage 8f)
   'Привет! Я живу у выреза камеры': 'Hi! I live at the camera notch',
@@ -55,8 +55,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Claude Code is always with me. Pick up to four modules - you can connect them later.',
   'Выбрано {0} из 4': '{0} of 4 picked',
   'Всё готово': 'All set',
-  'Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.':
-    'Once a day I check GitHub for a new version. It installs only when you press the button.',
+  'Раз в день приложение смотрит на GitHub, вышла ли новая версия. Ставится только по кнопке.':
+    'Once a day the app checks GitHub for a new version. It installs only when you press the button.',
   'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.':
     'The island sits at the top edge of the screen - hover over it. The menu is the Almanac Notch icon in the tray.',
   'Остров - у выреза камеры: наведите на него курсор. Меню - значок Almanac Notch в строке меню.':
@@ -105,8 +105,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Установить хуки…': 'Install hooks…',
   'Удалить хуки…': 'Remove hooks…',
   'Что это': 'What it is',
-  'Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа на разрешения и вопросы. Перед записью покажу, что изменится, и сделаю копию файла. Ваши другие хуки не трогаю.':
-    'Hooks are short commands in ~/.claude/settings.json: Claude Code tells the island what it is doing and waits for answers to permissions and questions. Before writing I show what changes and back the file up. Your other hooks stay untouched.',
+  'Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа на разрешения и вопросы. Перед записью видно, что изменится, и сохраняется копия файла. Другие ваши хуки не меняются.':
+    'Hooks are short commands in ~/.claude/settings.json: Claude Code tells the island what it is doing and waits for answers to permissions and questions. Before writing you see what changes, and the file is backed up. Your other hooks stay untouched.',
   'Источник календаря': 'Calendar source',
   'Ссылка iCal': 'iCal link',
   Ничего: 'None',
@@ -142,9 +142,9 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   // dynamic texts (src/settings.ts)
   'GitHub не принял сохранённый токен': 'GitHub rejected the saved token',
   // Vercel, the module limit
-  'Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один':
-    'Besides Claude Code, at most 4 modules can be on - switch one off first',
-  'Кроме Claude Code включено не больше 4 модулей': 'Besides Claude Code, at most 4 modules are on',
+  'Одновременно можно включить не больше 5 модулей - сначала выключите один':
+    'At most 5 modules can be on at once - switch one off first',
+  'В острове помещается 5 модулей': 'The island fits 5 modules',
   'Токен Vercel': 'Vercel token',
   'Откройте vercel.com → Account Settings → Tokens → Create Token.':
     'Open vercel.com → Account Settings → Tokens → Create Token.',
@@ -230,24 +230,24 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   // installer and uninstall windows (stage 8g)
   'Удалить Almanac Notch': 'Uninstall Almanac Notch',
   'Удалить Almanac Notch?': 'Uninstall Almanac Notch?',
-  'Сниму хуки Claude Code и запуск при входе, затем перенесу приложение в Корзину.':
-    "I'll remove the Claude Code hooks and launch at login, then move the app to the Trash.",
-  'Сниму хуки Claude Code и запуск при входе, удалю программу и её ярлыки.':
-    "I'll remove the Claude Code hooks and launch at login, then the app and its shortcuts.",
+  'Хуки Claude Code и запуск при входе будут сняты, приложение уйдёт в Корзину.':
+    'The Claude Code hooks and launch at login will be removed, and the app will go to the Trash.',
+  'Хуки Claude Code и запуск при входе будут сняты, программа и её ярлыки - удалены.':
+    'The Claude Code hooks and launch at login will be removed, along with the app and its shortcuts.',
   'Удалить настройки и данные': 'Remove settings and data',
   'Подключения, токены в связке ключей, кэш и доступ к календарю':
     'Connections, tokens in the keychain, the cache and calendar access',
   'Подключения, токены в диспетчере учётных данных и кэш': 'Connections, tokens in Credential Manager and the cache',
   Закрыть: 'Close',
   Удалить: 'Uninstall',
-  'Удаляю…': 'Uninstalling…',
-  'Снимаю хуки Claude Code и убираю файлы.': 'Removing the Claude Code hooks and the files.',
+  'Удаление…': 'Uninstalling…',
+  'Снимаются хуки Claude Code, удаляются файлы.': 'Removing the Claude Code hooks and the files.',
   'Almanac Notch удалён': 'Almanac Notch is uninstalled',
   'Хуки Claude Code сняты. Настройки остались - пригодятся, если вернёте приложение.':
     'The Claude Code hooks are gone. Your settings stay, in case you come back.',
   'Хуки Claude Code сняты, настройки и данные удалены.': 'The Claude Code hooks, settings and data are gone.',
   'Удалить…': 'Uninstall…',
-  'Сниму хуки Claude Code и запуск при входе; настройки и данные - по желанию':
+  'Снимает хуки Claude Code и запуск при входе; настройки и данные - по желанию':
     'Removes the Claude Code hooks and launch at login; settings and data if you choose',
   'Установка Almanac Notch': 'Almanac Notch Setup',
   'Живой остров у выреза камеры: ближайший созвон, музыка и модули, которые вы выберете сами.':
@@ -256,15 +256,15 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   Изменить: 'Change',
   'Ярлык на рабочем столе': 'Desktop shortcut',
   Установить: 'Install',
-  'Устанавливаю…': 'Installing…',
+  'Установка…': 'Installing…',
   'Займёт несколько секунд.': 'This takes a few seconds.',
   'Almanac Notch установлен. Остров живёт у верхнего края экрана, по центру.':
     'Almanac Notch is installed. The island lives at the top centre of the screen.',
   Открыть: 'Open',
-  'Обновлю версию {0} до {1}. Настройки и подключения сохранятся.':
-    "I'll update version {0} to {1}. Settings and connections stay.",
-  'Версия {0} уже установлена - поставлю её заново. Настройки и подключения сохранятся.':
-    "Version {0} is already installed - I'll install it again. Settings and connections stay.",
+  'Версия {0} обновится до {1}. Настройки и подключения сохранятся.':
+    'Version {0} will be updated to {1}. Settings and connections stay.',
+  'Версия {0} уже установлена - она будет поставлена заново. Настройки и подключения сохранятся.':
+    'Version {0} is already installed - it will be installed again. Settings and connections stay.',
   'Установлена более новая версия {0}. Можно поставить {1} поверх, настройки сохранятся.':
     'A newer version {0} is installed. You can put {1} over it, settings stay.',
   Обновить: 'Update',

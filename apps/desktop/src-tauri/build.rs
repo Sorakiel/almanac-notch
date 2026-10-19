@@ -26,6 +26,7 @@ fn main() {
         assert!(status.success(), "media helper build failed");
     }
     almanac_project();
+    build_id();
     tauri_build::build()
 }
 
@@ -48,4 +49,24 @@ fn almanac_project() {
             println!("cargo:rustc-env={name}={v}");
         }
     }
+}
+
+/// The commit this build is from, shown next to the version: test builds share a version number,
+/// and this tells them apart (the Actions checkout gives GITHUB_SHA, a local build asks git).
+fn build_id() {
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
+    println!("cargo:rerun-if-changed=../../../.git/HEAD");
+    let id = env::var("GITHUB_SHA")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        });
+    let short: String = id.unwrap_or_default().chars().take(7).collect();
+    println!("cargo:rustc-env=ALMANAC_BUILD={short}");
 }

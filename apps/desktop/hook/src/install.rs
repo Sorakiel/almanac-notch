@@ -63,7 +63,7 @@ fn read(path: &Path) -> Result<(String, Map<String, Value>), String> {
         Ok(Value::Object(m)) => Ok((text, m)),
         Ok(_) => Err(format!("{}: ожидался объект JSON", path.display())),
         Err(e) => Err(format!(
-            "{}: JSON не разбирается ({e}), файл не трогаю",
+            "{}: JSON не разбирается ({e}), файл не изменён",
             path.display()
         )),
     }
@@ -112,14 +112,14 @@ pub fn plan_install(path: &Path, hook: &Path) -> Result<Plan, String> {
         .entry("hooks")
         .or_insert_with(|| Value::Object(Map::new()));
     let Value::Object(hooks) = hooks else {
-        return Err("\"hooks\" в settings.json не объект, файл не трогаю".into());
+        return Err("\"hooks\" в settings.json не объект, файл не изменён".into());
     };
     for (event, timeout) in EVENTS {
         let groups = hooks
             .entry(event)
             .or_insert_with(|| Value::Array(Vec::new()));
         let Value::Array(groups) = groups else {
-            return Err(format!("hooks.{event} не массив, файл не трогаю"));
+            return Err(format!("hooks.{event} не массив, файл не изменён"));
         };
         groups.push(json!({
             "hooks": [{ "type": "command", "command": command, "timeout": timeout }]
@@ -187,7 +187,7 @@ fn unix_now() -> u64 {
 pub fn apply(plan: &Plan) -> Result<Option<PathBuf>, String> {
     let (now, _) = read(&plan.path)?;
     if now != plan.before {
-        return Err("settings.json изменился после показа диффа, повтори установку".into());
+        return Err("settings.json изменился после показа диффа, повторите установку".into());
     }
     if !plan.changed() {
         return Ok(None);

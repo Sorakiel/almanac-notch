@@ -414,6 +414,8 @@ fn lang_set(app: AppHandle, pick: String) -> Result<lang::Config, String> {
 #[derive(Serialize)]
 struct AppInfo {
     version: String,
+    /// the commit of this build (build.rs), empty when unknown
+    build: &'static str,
     onboarded: bool,
     updates: bool,
     autostart: bool,
@@ -425,6 +427,7 @@ fn app_info_of(app: &AppHandle) -> AppInfo {
     let p = prefs::get();
     AppInfo {
         version: app.package_info().version.to_string(),
+        build: env!("ALMANAC_BUILD"),
         onboarded: p.onboarded,
         updates: p.updates,
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
@@ -759,7 +762,8 @@ pub fn run() {
                 .find(|w| w.label == "island")
                 .expect("island window missing")
                 .clone();
-            let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?.build()?;
+            let window =
+                tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?.build()?;
             // Windows: tao's version would rewrite the extended styles (platform/windows.rs).
             #[cfg(not(windows))]
             window.set_ignore_cursor_events(true)?;

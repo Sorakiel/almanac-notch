@@ -72,7 +72,10 @@ fn data_paths() -> Vec<PathBuf> {
         v.push(lib.join("Caches").join(SERVICE));
         v.push(lib.join("WebKit").join(SERVICE));
         v.push(lib.join("HTTPStorages").join(SERVICE));
-        v.push(lib.join("Saved Application State").join(format!("{SERVICE}.savedState")));
+        v.push(
+            lib.join("Saved Application State")
+                .join(format!("{SERVICE}.savedState")),
+        );
         v.push(lib.join("Preferences").join(format!("{SERVICE}.plist")));
     } else if cfg!(windows) {
         // the webview's folder (EBWebView) lives in Local, the app data in Roaming
@@ -92,7 +95,11 @@ fn remove_path(p: &PathBuf, warnings: &mut Vec<String>) {
         Ok(())
     };
     if let Err(e) = res {
-        warnings.push(format!("{} {}: {e}", t("Не удалось удалить", "Could not remove"), p.display()));
+        warnings.push(format!(
+            "{} {}: {e}",
+            t("Не удалось удалить", "Could not remove"),
+            p.display()
+        ));
     }
 }
 
@@ -122,7 +129,11 @@ fn wipe(warnings: &mut Vec<String>) {
 /// connection file (settings and connections stay for a reinstall).
 fn remove_client(warnings: &mut Vec<String>) {
     let dir = paths::app_dir();
-    for p in [paths::installed_hook(), paths::connection_file(), dir.join("libalmanac_media.dylib")] {
+    for p in [
+        paths::installed_hook(),
+        paths::connection_file(),
+        dir.join("libalmanac_media.dylib"),
+    ] {
         remove_path(&p, warnings);
     }
 }
@@ -131,7 +142,10 @@ fn hooks_step(warnings: &mut Vec<String>) {
     if let Err(e) = remove_hooks() {
         warnings.push(format!(
             "{}: {e}. {}",
-            t("Хуки Claude Code не сняты", "Claude Code hooks were not removed"),
+            t(
+                "Хуки Claude Code не сняты",
+                "Claude Code hooks were not removed"
+            ),
             t(
                 "Уберите записи almanac-hook из ~/.claude/settings.json вручную",
                 "Remove the almanac-hook entries from ~/.claude/settings.json by hand"
@@ -256,15 +270,27 @@ fn remove_app(app: &AppHandle, warnings: &mut Vec<String>) {
     if let Err(e) = app.autolaunch().disable() {
         // not an error when it was never on
         if app.autolaunch().is_enabled().unwrap_or(false) {
-            warnings.push(format!("{}: {e}", t("Запуск при входе не выключен", "Launch at login is still on")));
+            warnings.push(format!(
+                "{}: {e}",
+                t(
+                    "Запуск при входе не выключен",
+                    "Launch at login is still on"
+                )
+            ));
         }
     }
     #[cfg(target_os = "macos")]
     if let Err(e) = trash_bundle() {
         warnings.push(format!(
             "{}: {e}. {}",
-            t("Приложение не перенесено в Корзину", "The app was not moved to the Trash"),
-            t("Перетащите его в Корзину сами", "Drag it to the Trash yourself")
+            t(
+                "Приложение не перенесено в Корзину",
+                "The app was not moved to the Trash"
+            ),
+            t(
+                "Перетащите его в Корзину сами",
+                "Drag it to the Trash yourself"
+            )
         ));
     }
 }
@@ -276,7 +302,13 @@ fn trash_bundle() -> Result<(), String> {
     let bundle = exe
         .ancestors()
         .find(|p| p.extension().is_some_and(|x| x == "app"))
-        .ok_or_else(|| t("приложение запущено не из .app", "the app is not running from an .app").to_string())?;
+        .ok_or_else(|| {
+            t(
+                "приложение запущено не из .app",
+                "the app is not running from an .app",
+            )
+            .to_string()
+        })?;
     let path = NSString::from_str(&bundle.to_string_lossy());
     let url = NSURL::fileURLWithPath(&path);
     NSFileManager::defaultManager()
@@ -328,7 +360,10 @@ fn remove_app(app: &AppHandle, warnings: &mut Vec<String>) {
                 t("Удаление файлов не удалось", "Removing the files failed"),
                 s.code().unwrap_or(-1)
             )),
-            Err(e) => warnings.push(format!("{}: {e}", t("Удаление файлов не удалось", "Removing the files failed"))),
+            Err(e) => warnings.push(format!(
+                "{}: {e}",
+                t("Удаление файлов не удалось", "Removing the files failed")
+            )),
         }
         // in place it can't delete itself; the folder goes only if nothing else is in it
         let _ = fs::remove_file(&un);
@@ -341,7 +376,11 @@ fn remove_app(app: &AppHandle, warnings: &mut Vec<String>) {
         ));
     }
     // launch at login (NSIS removes it too) and the remembered install folder
-    reg_delete(&[r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", "Almanac Notch"]);
+    reg_delete(&[
+        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+        "/v",
+        "Almanac Notch",
+    ]);
     reg_delete(&[r"HKCU\Software\almanac\Almanac Notch"]);
     let _ = std::process::Command::new("reg")
         .args(["query", r"HKCU\Software\almanac"])
@@ -349,7 +388,8 @@ fn remove_app(app: &AppHandle, warnings: &mut Vec<String>) {
         .output()
         .map(|o| {
             // only our key was there: drop the empty vendor key as well
-            if o.status.success() && String::from_utf8_lossy(&o.stdout).trim().lines().count() <= 1 {
+            if o.status.success() && String::from_utf8_lossy(&o.stdout).trim().lines().count() <= 1
+            {
                 reg_delete(&[r"HKCU\Software\almanac"]);
             }
         });
@@ -403,8 +443,12 @@ pub fn cli() -> Cli {
 #[cfg(windows)]
 fn relaunch_from_temp(rest: &[String]) -> i32 {
     use std::os::windows::process::CommandExt;
-    let Ok(exe) = env::current_exe() else { return 1 };
-    let Some(dir) = exe.parent().map(PathBuf::from) else { return 1 };
+    let Ok(exe) = env::current_exe() else {
+        return 1;
+    };
+    let Some(dir) = exe.parent().map(PathBuf::from) else {
+        return 1;
+    };
     let un = dir.join("uninstall.exe");
     // NSIS's own reinstall page calls UninstallString with its flags (/P, /UPDATE, _?=...):
     // hand them to uninstall.exe untouched and report its exit code
@@ -421,11 +465,19 @@ fn relaunch_from_temp(rest: &[String]) -> i32 {
     let copy = tmp.join("almanac-notch-uninstall.exe");
     let started = fs::create_dir_all(&tmp)
         .and_then(|_| fs::copy(&exe, &copy))
-        .and_then(|_| std::process::Command::new(&copy).arg("--uninstall-ui").arg(&dir).spawn());
+        .and_then(|_| {
+            std::process::Command::new(&copy)
+                .arg("--uninstall-ui")
+                .arg(&dir)
+                .spawn()
+        });
     match started {
         Ok(_) => 0,
         // no temp folder: the standard NSIS uninstaller still removes everything
-        Err(_) => std::process::Command::new(&un).spawn().map(|_| 0).unwrap_or(1),
+        Err(_) => std::process::Command::new(&un)
+            .spawn()
+            .map(|_| 0)
+            .unwrap_or(1),
     }
 }
 
@@ -458,7 +510,8 @@ mod tests {
         let plan = install::plan_install(&settings, &paths::installed_hook()).unwrap();
         install::apply(&plan).unwrap();
         // a foreign hook and a setting added later, next to ours
-        let mut v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        let mut v: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
         v["hooks"]["Stop"]
             .as_array_mut()
             .unwrap()
@@ -467,11 +520,15 @@ mod tests {
         fs::write(&settings, serde_json::to_string_pretty(&v).unwrap()).unwrap();
 
         assert!(remove_hooks().unwrap());
-        let after: serde_json::Value = serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+        let after: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
         assert!(!install::is_installed(&settings));
         assert_eq!(after["model"], "opus");
         assert_eq!(after["theme"], "dark");
-        assert_eq!(after["hooks"]["Stop"][0]["hooks"][0]["command"], "notchbuddy");
+        assert_eq!(
+            after["hooks"]["Stop"][0]["hooks"][0]["command"],
+            "notchbuddy"
+        );
         assert_eq!(after["hooks"].as_object().unwrap().len(), 1);
         // nothing of ours left: a second run changes nothing
         assert!(!remove_hooks().unwrap());

@@ -1,7 +1,8 @@
 //! Modules the user switched off in settings, and the chat tab (stage 7). A switched-off module
 //! reads nothing it would need the network or a system API for, and the island hides it.
-//! At least one module always stays on. Like coucou, Claude Code is the main module and takes no
-//! slot; at most `MAX_ON` of the others are on, so the island's 2 × 2 grid always fits them.
+//! At least one module always stays on. At most `MAX_ON` are on at once - the focus card and the
+//! 2 × 2 grid of the open island (coucou's MAX_DECLARED plus its main module). Claude Code counts
+//! only while it is on: switching it off frees its place (owner 2026-10-19).
 //! Stored in `<app data>/modules.json`.
 
 use std::fs;
@@ -14,15 +15,15 @@ pub const ALL: [&str; 8] = [
     "claude", "cal", "music", "github", "almanac", "vercel", "notion", "grafana",
 ];
 
-/// The main module: never counted against `MAX_ON`.
+/// The main module: never the one switched off to fit an old file.
 const MAIN: &str = "claude";
-/// Modules on besides the main one (coucou's MAX_DECLARED).
-pub const MAX_ON: usize = 4;
+/// Modules on at once: the open island's focus card and its 2 × 2 grid.
+pub const MAX_ON: usize = 5;
 
-/// Modules on besides the main one.
-fn others_on(off: &[String]) -> usize {
+/// Modules on, Claude Code included when it is on.
+fn on_count(off: &[String]) -> usize {
     ALL.iter()
-        .filter(|id| **id != MAIN && !off.iter().any(|o| o == *id))
+        .filter(|id| !off.iter().any(|o| o == *id))
         .count()
 }
 
@@ -62,7 +63,7 @@ fn clean(c: Config) -> Config {
         off.clear();
     }
     for id in ALL.iter().rev() {
-        if others_on(&off) <= MAX_ON {
+        if on_count(&off) <= MAX_ON {
             break;
         }
         if *id != MAIN && !off.iter().any(|o| o == id) {
@@ -104,10 +105,10 @@ pub fn set(off: Vec<String>, chat: bool) -> Result<Config, String> {
         )
         .into());
     }
-    if others_on(&off) > MAX_ON {
+    if on_count(&off) > MAX_ON {
         return Err(crate::lang::t(
-            "Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один",
-            "Besides Claude Code, at most 4 modules can be on - switch one off first",
+            "Одновременно можно включить не больше 5 модулей - сначала выключите один",
+            "At most 5 modules can be on at once - switch one off first",
         )
         .into());
     }
@@ -155,7 +156,24 @@ mod tests {
     }
 
     #[test]
-    fn at_most_four_besides_claude() {
+    fn claude_off_frees_its_place() {
+        // Claude Code off: five others fit, a sixth does not
+        let five = clean(Config {
+            off: vec!["claude".into(), "almanac".into(), "cal".into()],
+            chat: true,
+        });
+        assert_eq!(on_count(&five.off), 5);
+        assert!(five.off.len() == 3);
+        let six = clean(Config {
+            off: vec!["claude".into(), "almanac".into()],
+            chat: true,
+        });
+        assert_eq!(on_count(&six.off), 5);
+        assert!(six.off.contains(&"claude".to_string()));
+    }
+
+    #[test]
+    fn at_most_five_at_once() {
         // a file from before Vercel: everything on -> the newest modules go off
         let c = clean(Config {
             off: Vec::new(),
@@ -203,7 +221,7 @@ mod tests {
                 "grafana".to_string()
             ]
         );
-        // Claude off does not free a fifth slot
+        // Claude off frees its place for a fifth other module (owner 2026-10-19)
         let c = clean(Config {
             off: vec!["claude".into()],
             chat: true,
@@ -213,8 +231,7 @@ mod tests {
             vec![
                 "claude".to_string(),
                 "grafana".to_string(),
-                "notion".to_string(),
-                "vercel".to_string()
+                "notion".to_string()
             ]
         );
     }
