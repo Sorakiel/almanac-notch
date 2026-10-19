@@ -68,6 +68,13 @@ export const EN: Readonly<Record<string, string>> = {
   // cards (island/cards.ts)
   'Какой раннер тестов взять?': 'Which test runner?',
   'сессий ещё не было': 'no sessions yet',
+  // the agent's session line under its current step (plural forms; English builds its own)
+  шаг: 'step',
+  шага: 'steps',
+  шагов: 'steps',
+  'файл изменён': 'file changed',
+  'файла изменено': 'files changed',
+  'файлов изменено': 'files changed',
   'последняя сессия только что': 'last session just now',
   'последняя сессия {0} мин назад': 'last session {0} min ago',
   'последняя сессия {0} ч назад': 'last session {0} h ago',
