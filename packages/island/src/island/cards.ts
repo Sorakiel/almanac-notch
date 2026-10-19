@@ -36,6 +36,38 @@ const INK = '#F5F6F8',
 const ROW0 = 42,
   ROW_STEP = 21;
 
+/** a habit as a list row: the checkbox where the dot is, the name, its progress on the right;
+ * the plate lights up under the pointer since the row is a button */
+function habitRow(
+  s: IslandState,
+  c: Ctx,
+  name: string,
+  done: boolean,
+  progress: string,
+  act: string,
+  tx: number,
+  y: number,
+  tmax: number,
+): void {
+  const hov = hovering(s, tx - 6, y - 10, tmax + 6, 20);
+  c.fillStyle = hov ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)';
+  rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
+  c.fill();
+  checkBox(c, tx, y, done);
+  c.save();
+  c.font = '400 11px Onest, system-ui, sans-serif';
+  const pw = progress ? c.measureText(progress).width + 10 : 0;
+  c.restore();
+  textAt(c, name, tx + 16, y + 0.5, {
+    size: 11.5,
+    weight: 500,
+    color: done ? DIM3 : hov ? INK : VAL,
+    max: tmax - 16 - pw,
+  });
+  if (progress) textAt(c, progress, tx + tmax, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
+}
+
 /** a "label ... value" row with a small icon, as coucou's stats */
 function statRow(
   c: Ctx,
@@ -71,11 +103,10 @@ function listRow(
   tmax: number,
   lead = '',
 ): void {
-  if (first) {
-    c.fillStyle = hexA(accent, 0.08);
-    rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
-    c.fill();
-  }
+  // every row sits on a faint plate, the first on a wash of its colour (coucou's mail list)
+  c.fillStyle = first ? hexA(accent, 0.08) : 'rgba(255,255,255,0.03)';
+  rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
+  c.fill();
   c.fillStyle = accent;
   c.beginPath();
   c.arc(tx + 3, y, 2.6, 0, Math.PI * 2);
@@ -347,6 +378,7 @@ function brandHead(
   x1: number,
   wordIn?: string,
   wordCol = DIM,
+  badge?: string,
 ): void {
   c.fillStyle = MODULE_COL[id].body;
   c.beginPath();
@@ -360,6 +392,21 @@ function brandHead(
   const word = wordIn ?? tr(s, HEAD_WORD[id] ?? '');
   if (word)
     textAt(c, word, tx + 19 + nw, y0 + 18.5, { size: 11.5, weight: wordCol === DIM ? 400 : 500, color: wordCol });
+  // a count in a pill of the module's colour after the word, as coucou's "3 unread"
+  if (badge) {
+    c.save();
+    c.font = '400 11.5px Onest, system-ui, sans-serif';
+    const ww = word ? c.measureText(word).width + 8 : 0;
+    c.font = '500 11px Onest, system-ui, sans-serif';
+    const bw = c.measureText(badge).width + 14;
+    c.restore();
+    const bx = tx + 19 + nw + ww,
+      col = MODULE_COL[id].body;
+    c.fillStyle = hexA(col, 0.16);
+    rrect(c, bx, y0 + 10, bw, 17, 8.5);
+    c.fill();
+    textAt(c, badge, bx + bw / 2, y0 + 18.5, { size: 11, weight: 500, color: col, align: 'center' });
+  }
   // GitHub: the week of commits as small cells after the name, as coucou's head
   if (id === 'github') {
     const CM = s.github ? s.github.commits : [4, 0, 6, 9, 3, 7, 5],
@@ -537,6 +584,9 @@ export function drawFocusCard(
       calMins <= 0 ? tr(s, 'сейчас') : tr(s, 'через {0}', minsText(s, calMins)),
       calMins <= 5 ? '#F5B94A' : DIM,
     );
+  else if (it.kind === 'habits')
+    brandHead(s, c, it.id, it.name, tx, y0, x1, undefined, DIM, it.total ? `${it.done}/${it.total}` : undefined);
+  else if (it.kind === 'music' && !s.musicPlaying) brandHead(s, c, it.id, it.name, tx, y0, x1, tr(s, 'на паузе'));
   else brandHead(s, c, it.id, it.name, tx, y0, x1);
   // one line leads (14 px, bright), the rest step back - as Grok Bot's card reads at a glance
   // plain lines (music, hints): the first one in the value tone, the rest dim - the same system
@@ -768,19 +818,19 @@ export function drawFocusCard(
   } else if (it.kind === 'music') {
     const trk = s.media ? ([s.media.title, s.media.sub] as const) : (TRACKS[s.trackIdx] as readonly [string, string]);
     // live track names pass through; the stub and the "nothing playing" lines are keys
-    L(0, s.media && !s.media.idle ? trk[0] : tr(s, trk[0]), 'rgba(255,255,255,0.92)');
-    L(1, s.media && !s.media.idle ? trk[1] : tr(s, trk[1]), T_MUTED);
+    L(0, s.media && !s.media.idle ? trk[0] : tr(s, trk[0]));
+    L(1, s.media && !s.media.idle ? trk[1] : tr(s, trk[1]));
     const by = y1 - 16,
       cx = tx + tmax / 2;
     const ctrl = (x: number, act: string, draw: (x: number) => void): void => {
       const hov = hovering(s, x - 12, by - 11, 24, 22);
       if (hov) {
-        c.fillStyle = 'rgba(255,255,255,0.12)';
+        c.fillStyle = 'rgba(255,255,255,0.1)';
         c.beginPath();
         c.arc(x, by, 11, 0, Math.PI * 2);
         c.fill();
       }
-      c.fillStyle = '#FFFFFF';
+      c.fillStyle = hov ? INK : VAL;
       draw(x);
       addHit(s, c, { x: x - 12, y: by - 11, w: 24, h: 22, act });
     };
@@ -823,38 +873,15 @@ export function drawFocusCard(
       L(0, al.hint[0], 'rgba(255,255,255,0.92)');
       if (al.hint[1]) L(1, al.hint[1], T_MUTED);
     } else
-      al.rows.slice(0, 3).forEach((h, i) => {
-        const y = y0 + 40 + i * 18,
-          hov = hovering(s, tx - 2, y - 8, tmax, 16);
-        checkBox(c, tx, y, h.done);
-        c.save();
-        c.font = '400 11px Onest, system-ui, sans-serif';
-        const pw = h.progress ? c.measureText(h.progress).width + 6 : 0;
-        c.font = '400 11.5px Onest, system-ui, sans-serif';
-        const label = fit(c, h.name, c.font, tmax - 16 - pw),
-          nw = c.measureText(label).width;
-        c.restore();
-        textAt(c, label, tx + 16, y + 0.5, {
-          size: 11.5,
-          weight: 400,
-          color: h.done ? T_MUTED : hov ? '#FFFFFF' : 'rgba(255,255,255,0.85)',
-        });
-        if (h.progress) textAt(c, h.progress, tx + 22 + nw, y + 0.5, { size: 11, weight: 400, color: T_MUTED });
-        addHit(s, c, { x: tx - 2, y: y - 8, w: tmax, h: 16, act: 'almanac:' + h.id });
-      });
+      al.rows
+        .slice(0, 3)
+        .forEach((h, i) =>
+          habitRow(s, c, h.name, h.done, h.progress ?? '', 'almanac:' + h.id, tx, y0 + ROW0 + i * ROW_STEP, tmax),
+        );
   } else {
-    s.habits.slice(0, 3).forEach((h, i) => {
-      const y = y0 + 40 + i * 18,
-        hov = hovering(s, tx - 2, y - 8, tmax, 16);
-      checkBox(c, tx, y, h[1]);
-      textAt(c, tr(s, h[0]), tx + 16, y + 0.5, {
-        size: 11.5,
-        weight: 400,
-        color: h[1] ? T_MUTED : hov ? '#FFFFFF' : 'rgba(255,255,255,0.85)',
-        max: tmax - 16,
-      });
-      addHit(s, c, { x: tx - 2, y: y - 8, w: tmax, h: 16, act: 'habit:' + i });
-    });
+    s.habits
+      .slice(0, 3)
+      .forEach((h, i) => habitRow(s, c, tr(s, h[0]), h[1], '', 'habit:' + i, tx, y0 + ROW0 + i * ROW_STEP, tmax));
   }
 }
 

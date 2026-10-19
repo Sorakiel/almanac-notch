@@ -89,6 +89,7 @@ export const EN: Readonly<Record<string, string>> = {
   'Коммиты за 7 дней': 'Commits, 7 days',
   'через {0} мин': 'in {0} min',
   Лекция: 'Lecture',
+  'на паузе': 'paused',
   // the agent's session line under its current step (plural forms; English builds its own)
   шаг: 'step',
   шага: 'steps',

@@ -119,7 +119,7 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   c.beginPath();
   c.arc(tx + 3, ay + 11, 3, 0, Math.PI * 2);
   c.fill();
-  textAt(c, trk[0], tx + 12, ay + 11.5, { size: 13, weight: 600, max: right - tx - 12 });
+  textAt(c, trk[0], tx + 12, ay + 11.5, { size: 12.5, weight: 600, color: '#F5F6F8', max: right - tx - 12 });
   textAt(c, md ? trk[1] : trk[1] + ' · ' + (trk[0].split(' ')[0] as string), tx, ay + 29, {
     size: 11.5,
     weight: 400,

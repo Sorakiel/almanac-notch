@@ -429,7 +429,10 @@ export function drawOpenBody(
     layer(s, c, 0);
     c.globalAlpha *= k;
     c.translate((1 - k) * 8, 0);
-    drawMusicWide(s, c, X0, X1 - RAIL_W - gap, cy0, cy1);
+    // the player grows with the island like the other cards, instead of spreading its rows apart
+    withScale(s, c, X0, cy0, CARD_K, () =>
+      drawMusicWide(s, c, X0, X0 + (X1 - RAIL_W - gap - X0) / CARD_K, cy0, cy0 + (cy1 - cy0) / CARD_K),
+    );
     c.restore();
     c.save();
     layer(s, c, 1);

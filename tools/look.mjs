@@ -10,6 +10,8 @@ mkdirSync(out, { recursive: true });
 const STATES = [
   ['home', null],
   ['working', 'ev:working'],
+  ['almanac', 'focus:almanac'],
+  ['music', 'focus:music'],
   ['chat', 'tab:chat'],
   ['attention', 'ev:attention'],
   ['question', 'ev:question'],
@@ -30,7 +32,8 @@ for (const [name, act] of STATES) {
     window.__debug('nstate:open');
   });
   await p.clock.runFor(1500);
-  if (act?.startsWith('tab:')) await p.evaluate((t) => (window.__state.tab = t), act.slice(4));
+  if (act?.startsWith('focus:')) await p.evaluate((f) => (window.__state.focusId = f), act.slice(6));
+  else if (act?.startsWith('tab:')) await p.evaluate((t) => (window.__state.tab = t), act.slice(4));
   else if (act) await p.evaluate((a) => window.__debug(a), act);
   await p.clock.runFor(1500);
   await p.screenshot({ path: `${out}/${name}.png`, clip: { x: 30, y: 0, width: 620, height: 190 } });
@@ -40,7 +43,7 @@ await b.close();
 execFileSync('ffmpeg', [
   '-v', 'error', '-y',
   ...STATES.flatMap(([n]) => ['-i', `${out}/${n}.png`]),
-  '-filter_complex', `${STATES.map((_, i) => `[${i}]pad=iw+8:ih+8:4:4:white[p${i}]`).join(';')};${STATES.map((_, i) => `[p${i}]`).join('')}xstack=inputs=${STATES.length}:layout=0_0|w0_0|0_h0|w0_h0|0_h0+h0|w0_h0+h0|0_h0+h0+h0`,
+  '-filter_complex', `${STATES.map((_, i) => `[${i}]pad=iw+8:ih+8:4:4:white[p${i}]`).join(';')};${STATES.map((_, i) => `[p${i}]`).join('')}xstack=inputs=${STATES.length}:layout=0_0|w0_0|0_h0|w0_h0|0_h0+h0|w0_h0+h0|0_h0+h0+h0|w0_h0+h0+h0|0_h0+h0+h0+h0`,
   `${out}/sheet.png`,
 ]);
 console.log(`${out}/sheet.png`);
