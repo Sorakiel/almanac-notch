@@ -79,7 +79,7 @@ export function createMascot(opts: MascotOptions) {
     update: (dt: number, now: number) => update(s, dt, now),
     renderStage: (c: CanvasRenderingContext2D, dpr: number) => renderStage(s, c, dpr),
     stageCursor: () => stageCursor(s),
-    /** oc: offscreen context of an IW·2 × IH·2 canvas; ic: island canvas; lc: loupe canvas (none in the real window) */
+    /** oc: offscreen context of an IW·k × IH·k canvas (k = the drawing scale, 2 in the harness); ic: island canvas; lc: loupe canvas (none in the real window) */
     renderIsland: (ic: CanvasRenderingContext2D, oc: CanvasRenderingContext2D, lc?: CanvasRenderingContext2D) =>
       renderIsland(s, ic, oc, lc),
     trigger: (type: EventType | 'sleep', opts?: { keepView?: boolean }) => trigger(s, type, opts),

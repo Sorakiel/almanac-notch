@@ -84,7 +84,7 @@ export function islandFlash(s: IslandState, c: Ctx, path: () => void): void {
   c.save();
   path();
   c.shadowColor = hexA(col, a);
-  c.shadowBlur = 10;
+  c.shadowBlur = 10 * (c.getTransform().a / 2);
   c.strokeStyle = hexA(col, a);
   c.lineWidth = 1.6;
   c.stroke();
@@ -113,7 +113,7 @@ export function bootTrace(s: IslandState, c: Ctx, path: () => void, per: number)
   c.lineDashOffset = -k * per * 1.18;
   c.strokeStyle = 'rgba(124,196,255,' + (0.95 * a).toFixed(3) + ')';
   c.shadowColor = '#7CC4FF';
-  c.shadowBlur = 8;
+  c.shadowBlur = 8 * (c.getTransform().a / 2);
   c.lineWidth = 1.6;
   c.stroke();
   c.restore();

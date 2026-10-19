@@ -10,14 +10,16 @@ import { drawHalf } from './half';
 import { drawOpen } from './open';
 
 /**
- * proto: renderIsland. Draws at 2× into the offscreen context `oc` (canvas IW·2 × IH·2), then scales it
- * into the island canvas `ic` and copies the loupe region pixel for pixel into `lc`.
+ * proto: renderIsland. Draws into the offscreen context `oc`, then copies it into the island canvas `ic` and
+ * the loupe region pixel for pixel into `lc`. The prototype drew at a fixed 2×; the scale now comes from
+ * `oc`'s size, so a 125% or 150% Windows screen gets its own density instead of a blurry 2× downscale.
  */
 export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
   const { IW, IH, S, sp } = s;
   const MB = s.mb;
-  const c = oc;
-  c.setTransform(2, 0, 0, 2, 0, 0);
+  const c = oc,
+    k = oc.canvas.width / IW;
+  c.setTransform(k, 0, 0, k, 0, 0);
   if (s.bare) c.clearRect(0, 0, IW, IH);
   else {
     const wall = c.createLinearGradient(0, 0, IW, IH);
@@ -152,5 +154,5 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
   lc.fillStyle = '#000';
   lc.fillRect(0, 0, loupe.width, loupe.height);
   const L = s.loupeRect;
-  lc.drawImage(off, Math.max(0, L.x * 2), Math.max(0, L.y * 2), L.w * 2, L.h * 2, 0, 0, loupe.width, loupe.height);
+  lc.drawImage(off, Math.max(0, L.x * k), Math.max(0, L.y * k), L.w * k, L.h * k, 0, 0, loupe.width, loupe.height);
 }

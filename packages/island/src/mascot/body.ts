@@ -86,7 +86,7 @@ export function drawSeed(s: IslandState, c: Ctx, P: Pose, col: MascotColor, ring
     const a = clamp(gl.a, 0, 1);
     c.save();
     c.shadowColor = hexA(gl.c, a);
-    c.shadowBlur = P.R * (P.mini ? 0.5 : 0.4);
+    c.shadowBlur = P.R * (P.mini ? 0.5 : 0.4) * (c.getTransform().a / 2);
     eyesOrSpin(s, c, E0, hexA(gl.c, a), true, spinK);
     c.restore();
   }

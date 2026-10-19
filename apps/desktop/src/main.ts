@@ -235,8 +235,9 @@ function resize(): void {
   s.IH = geo.winH;
   island.width = Math.round(s.IW * dpr);
   island.height = Math.round(s.IH * dpr);
-  off.width = Math.round(s.IW * 2);
-  off.height = Math.round(s.IH * 2);
+  // drawn at the screen's own density: a fixed 2x scaled down to 1.25 or 1.5 blurs (Windows)
+  off.width = Math.round(s.IW * dpr);
+  off.height = Math.round(s.IH * dpr);
 }
 
 function applyGeometry(g: Geometry): void {
@@ -508,6 +509,18 @@ if (inTauri) {
   Object.assign(window, { __debug: debug, __state: s });
 }
 window.addEventListener('resize', resize);
+// a display-scale change keeps the window's CSS size, so 'resize' may not fire: watch the density itself
+const watchDpr = (): void => {
+  matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(
+    'change',
+    () => {
+      resize();
+      watchDpr();
+    },
+    { once: true },
+  );
+};
+watchDpr();
 
 // ---------- frame loop (proto: frame) ----------
 // Idle = closed, settled, no event, cursor away. Then the sim keeps ticking on a 10 Hz timer

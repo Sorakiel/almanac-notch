@@ -560,9 +560,9 @@ function modulePill(
   c.scale(sc, sc);
   c.translate(-(x + w / 2), -(y + h / 2));
   pillPlate(c, x, y, w, h, col, hot, ka);
-  const mx = x + 8 + h * 0.25,
+  const mx = x + 8 + h * 0.27,
     my = y + h / 2 + 0.5,
-    mR = h * 0.25,
+    mR = h * 0.27,
     mini = { ...miniFor(it), body: deepCol(col) },
     // the module that just left focus: its mascot shrinks in from the card, its pill comes up under it
     fl = flyMascot(s, c, it.id, mx, my, mR);
@@ -598,7 +598,8 @@ function pillPlate(c: Ctx, x: number, y: number, w: number, h: number, col: stri
 }
 
 function pillName(c: Ctx, name: string, x: number, y: number, w: number, h: number, col: string, ka: number): void {
-  const tx = x + 12 + h * 0.5;
+  // the mascot's right edge (x + 8 + 0.54 h) plus a gap, so the name never touches it
+  const tx = x + 16 + h * 0.54;
   textAt(c, name, tx, y + h / 2 + 0.5, {
     size: 12.5,
     color: mixWhite(col, 0.45 + 0.25 * ka),
@@ -635,10 +636,12 @@ function grid(X0: number, X1: number, cy0: number, cy1: number, n: number) {
     x0 = X0 + (X1 - X0) * SPLIT + gap / 2,
     w = X1 - x0,
     pad = 10,
-    pg = 8,
-    pw = (w - pad * 2 - pg) / 2,
-    // the pills fill their card (they floated in it at 34 px, with 40 px of nothing above and below)
-    ph = Math.min(48, (cy1 - cy0 - pad * 2 - pg) / 2),
+    pg = 12,
+    pw = (w - pad * 2 - 8) / 2,
+    // a pill is a label to read and press: about 3 x its text (12.5 px) reads as a chip; at 48 px it
+    // read as a slab with the name lost in it (owner, 2026-10-20). The rows and the card's margins
+    // keep one rhythm (gap ~ margin ~ a third of the pill) instead of hugging the edges
+    ph = Math.min(38, (cy1 - cy0 - pad * 2 - pg) / 2),
     rows = Math.ceil(n / 2),
     py0 = cy0 + (cy1 - cy0 - (rows * ph + (rows - 1) * pg)) / 2;
   return {
@@ -646,7 +649,7 @@ function grid(X0: number, X1: number, cy0: number, cy1: number, n: number) {
     w,
     pw,
     ph,
-    pill: (i: number) => ({ x: x0 + pad + (i % 2) * (pw + pg), y: py0 + Math.floor(i / 2) * (ph + pg) }),
+    pill: (i: number) => ({ x: x0 + pad + (i % 2) * (pw + 8), y: py0 + Math.floor(i / 2) * (ph + pg) }),
   };
 }
 

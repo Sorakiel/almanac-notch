@@ -119,7 +119,7 @@ export function stateMarks(s: IslandState, c: Ctx, mx: number, my: number, R: nu
     c.strokeStyle = g;
     c.lineWidth = big ? 2.4 : 1.6;
     c.shadowColor = '#38BDF8';
-    c.shadowBlur = big ? 10 : 5;
+    c.shadowBlur = (big ? 10 : 5) * (c.getTransform().a / 2);
     c.beginPath();
     c.moveTo(x, y0);
     c.lineTo(x, y1);
