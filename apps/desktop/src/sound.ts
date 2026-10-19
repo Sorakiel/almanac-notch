@@ -1,39 +1,12 @@
-// The island's sounds (stage 9a, docs/CHANGES.md): our own samples (tools/sounds.mjs) on the
+// The island's sounds (stage 9a, docs/CHANGES.md): synthesized in the app (src/synth.ts) on the
 // island's events, the mascot's life and the controls. The island package never plays anything -
 // the harness stays the silent prototype; the app watches the state and plays here. No click is
 // needed first: wry turns autoplay on by default (WKWebView: no media needs a user action;
 // WebView2: --autoplay-policy=no-user-gesture-required) and Tauri keeps that default.
 import { notchState, type IslandState, type NotchState } from '@almanac-notch/island';
 
-const FILES = import.meta.glob<string>('./sounds/*.wav', { eager: true, query: '?url', import: 'default' });
-export const SOUND_NAMES = [
-  'attention',
-  'question',
-  'success',
-  'error',
-  'ratelimit',
-  'dance',
-  'nudge',
-  'work',
-  'think',
-  'search',
-  'greeting',
-  'poke',
-  'grumpy',
-  'overload',
-  'joy',
-  'pet',
-  'sleep',
-  'wake',
-  'open',
-  'close',
-  'peek',
-  'tap',
-  'toggle',
-  'approve',
-  'check',
-] as const;
-export type SoundName = (typeof SOUND_NAMES)[number];
+import { SOUND_NAMES, TIER, varies, type SoundName, type Tier } from './synth';
+export { SOUND_NAMES, TIER, type SoundName, type Tier };
 
 /** Events that call: one sound at the start of each. */
 const CALLS: Partial<Record<string, SoundName>> = {
@@ -180,43 +153,92 @@ export function clickSound(s: IslandState, act: string): SoundName | null {
   return null;
 }
 
-/** WebAudio player: decoded buffers, one master gain, the context suspended when idle. */
+/** What decides how loud a sound plays, besides the volume. */
+export interface SoundMood {
+  muted: boolean;
+  /** the settings window's three switches */
+  tiers: Record<Tier, boolean>;
+  /** a call: the microphone or camera is in use, or Windows' Do not disturb / presentation */
+  quiet: boolean;
+  /** music is playing in a real player */
+  music: boolean;
+  /** local hour, 0-23 */
+  hour: number;
+}
+export const ALL_TIERS: Record<Tier, boolean> = { events: true, mascot: true, ui: true };
+
+/**
+ * A sound's gain on top of the volume, 0 - silent. A call silences everything (the island still
+ * shows it); under music the clicks are silent and the rest half as loud, so the track isn't
+ * cut; at night (22-8) a third quieter.
+ */
+export function moodGain(name: SoundName, m: SoundMood): number {
+  const tier = TIER[name];
+  if (m.muted || m.quiet || !m.tiers[tier]) return 0;
+  let g = 1;
+  if (m.music) {
+    if (tier === 'ui') return 0;
+    g *= 0.5;
+  }
+  if (m.hour >= 22 || m.hour < 8) g *= 2 / 3;
+  return g;
+}
+
+/** WebAudio player: sounds rendered in a worker at the device rate (fixed ones once, ahead;
+ *  varying ones fresh on every play), one master gain, the context suspended when idle. */
 export class SoundPlayer {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  private buffers = new Map<SoundName, AudioBuffer>();
-  private loading: Promise<void> | null = null;
+  private worker: Worker | null = null;
+  private asks = new Map<number, (ch: Float32Array[]) => void>();
+  private nextAsk = 1;
+  private buffers = new Map<SoundName, Promise<AudioBuffer>>();
   private idleTimer: number | null = null;
   private volume = DEFAULT_VOLUME;
   private voices = new Map<SoundName, Set<{ src: AudioBufferSourceNode; gain: GainNode }>>();
 
-  private load(): Promise<void> {
-    this.loading ??= (async () => {
-      const ctx = new AudioContext();
-      this.ctx = ctx;
-      this.master = ctx.createGain();
+  private context(): AudioContext {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      this.master = this.ctx.createGain();
       this.master.gain.value = this.volume * MAX_GAIN;
-      this.master.connect(ctx.destination);
-      await Promise.all(
-        SOUND_NAMES.map(async (n) => {
-          const url = FILES[`./sounds/${n}.wav`];
-          if (!url) return;
-          try {
-            const res = await fetch(url);
-            this.buffers.set(n, await ctx.decodeAudioData(await res.arrayBuffer()));
-          } catch {
-            // a missing sound must never break the island
-          }
-        }),
-      );
+      this.master.connect(this.ctx.destination);
       this.sleepSoon();
-    })();
-    return this.loading;
+    }
+    return this.ctx;
   }
 
-  /** decode up front so the first event sounds on time */
+  private render(name: SoundName, seed: number): Promise<AudioBuffer> {
+    const ctx = this.context();
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./synth-worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (e: MessageEvent<{ id: number; channels: Float32Array[] }>) => {
+        this.asks.get(e.data.id)?.(e.data.channels);
+        this.asks.delete(e.data.id);
+      };
+    }
+    const id = this.nextAsk++;
+    return new Promise((done) => {
+      this.asks.set(id, (ch) => {
+        const buf = ctx.createBuffer(ch.length, ch[0]?.length ?? 1, ctx.sampleRate);
+        ch.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+        done(buf);
+      });
+      this.worker?.postMessage({ id, name, sampleRate: ctx.sampleRate, seed });
+    });
+  }
+
+  /** a varying sound gets a new seed each time; seed 0 is a sound's base form */
+  private buffer(name: SoundName): Promise<AudioBuffer> {
+    if (varies(name)) return this.render(name, 1 + Math.floor(Math.random() * 1e9));
+    let b = this.buffers.get(name);
+    if (!b) this.buffers.set(name, (b = this.render(name, 0)));
+    return b;
+  }
+
+  /** renders the fixed sounds ahead, so the first event sounds on time */
   preload(): void {
-    void this.load();
+    for (const n of SOUND_NAMES) if (!varies(n)) void this.buffer(n);
   }
 
   setVolume(v: number): void {
@@ -224,31 +246,33 @@ export class SoundPlayer {
     if (this.master) this.master.gain.value = this.volume * MAX_GAIN;
   }
 
-  /** rate - playback speed: a poke shifts its pitch a little each time so repeats aren't mechanical */
-  play(name: SoundName, rate = 1): void {
-    void this.load().then(() => {
-      const ctx = this.ctx,
-        buf = this.buffers.get(name);
-      if (!ctx || !this.master || !buf || this.volume === 0) return;
+  /** gain - this play's level on top of the volume (moodGain) */
+  play(name: SoundName, gain = 1): void {
+    if (this.volume === 0 || gain <= 0) return;
+    const asked = performance.now();
+    void this.buffer(name).then((buf) => {
+      const ctx = this.context(),
+        master = this.master as GainNode;
       if (this.idleTimer !== null) clearTimeout(this.idleTimer);
       this.idleTimer = null;
       void ctx.resume();
       const src = ctx.createBufferSource(),
-        gain = ctx.createGain();
+        g = ctx.createGain();
       src.buffer = buf;
-      src.playbackRate.value = rate;
-      src.connect(gain);
-      gain.connect(this.master);
-      const voice = { src, gain };
+      g.gain.value = gain;
+      src.connect(g);
+      g.connect(master);
+      const voice = { src, gain: g };
       let set = this.voices.get(name);
       if (!set) this.voices.set(name, (set = new Set()));
       set.add(voice);
       src.onended = () => {
         set.delete(voice);
-        gain.disconnect();
+        g.disconnect();
         this.sleepSoon();
       };
-      src.start();
+      // the greeting is scored to its animation: if it came late, it starts where the animation is
+      src.start(0, name === 'greeting' ? Math.min((performance.now() - asked) / 1000, buf.duration) : 0);
     });
   }
 

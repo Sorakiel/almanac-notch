@@ -29,7 +29,16 @@ import {
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
-import { DEFAULT_VOLUME, SOUND_NAMES, SoundPlayer, SoundWatch } from './sound';
+import {
+  ALL_TIERS,
+  DEFAULT_VOLUME,
+  moodGain,
+  SOUND_NAMES,
+  SoundPlayer,
+  SoundWatch,
+  type SoundMood,
+  type Tier,
+} from './sound';
 import {
   CalDriver,
   GithubDriver,
@@ -125,8 +134,45 @@ function playSounds(): void {
   for (const n of stop) player.fadeOut(n);
   if (s.muted || !s.host) return;
   player.setVolume(s.host.volume);
-  // a poke shifts its pitch a little each time, so a run of them isn't a machine gun
-  for (const n of [...play, ...clicks]) player.play(n, n === 'poke' ? 0.92 + Math.random() * 0.16 : 1);
+  pollQuiet();
+  const mood: SoundMood = {
+    muted: s.muted,
+    tiers: soundTiers,
+    quiet: callQuiet,
+    music: !!s.media && !s.media.idle && s.musicPlaying,
+    hour: new Date().getHours(),
+  };
+  for (const n of [...play, ...clicks]) player.play(n, moodGain(n, mood));
+}
+
+// the settings window's three switches (events, mascot, island and buttons): kept in the storage
+// both windows share; a change there reaches this window through the "storage" event
+const TIERS_KEY = 'almanac-notch.sound-tiers';
+let soundTiers: Record<Tier, boolean> = { ...ALL_TIERS };
+function readTiers(): void {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TIERS_KEY) ?? '{}') as Partial<Record<Tier, unknown>>;
+    soundTiers = { ...ALL_TIERS };
+    for (const k of Object.keys(ALL_TIERS) as Tier[]) if (typeof saved[k] === 'boolean') soundTiers[k] = saved[k];
+  } catch {
+    // unreadable: every tier on
+  }
+}
+readTiers();
+window.addEventListener('storage', (e) => {
+  if (e.key === TIERS_KEY) readTiers();
+});
+
+// a call: asked from the app every few seconds, only while sound is on (src-tauri sound.rs)
+let callQuiet = false,
+  quietAsked = 0;
+function pollQuiet(): void {
+  const now = performance.now();
+  if (!inTauri || now - quietAsked < 3000) return;
+  quietAsked = now;
+  void invoke<boolean>('sound_quiet')
+    .then((q) => (callQuiet = q))
+    .catch(() => (callQuiet = false));
 }
 /** a sample at the chosen level: after the slider, and when sound is switched on; switching it
  *  off silences what is still playing (the greeting is long) */

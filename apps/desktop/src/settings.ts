@@ -525,6 +525,30 @@ for (const t of toggles)
   });
 chatOn.addEventListener('change', () => void saveModules({ ...modCfg, chat: chatOn.checked }));
 
+// sound tiers (stage 9a): kept in the storage this window shares with the island's, which hears
+// the change through the "storage" event (src/main.ts)
+const TIERS_KEY = 'almanac-notch.sound-tiers';
+const tierBoxes = [...document.querySelectorAll<HTMLInputElement>('input[data-tier]')];
+function readTiers(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(TIERS_KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+for (const box of tierBoxes) {
+  box.checked = readTiers()[box.dataset.tier ?? ''] !== false;
+  box.addEventListener('change', () => {
+    const t = readTiers();
+    for (const b of tierBoxes) t[b.dataset.tier ?? ''] = b.checked;
+    try {
+      localStorage.setItem(TIERS_KEY, JSON.stringify(t));
+    } catch {
+      // not saved: the island keeps its choice
+    }
+  });
+}
+
 // ---------- music ----------
 interface MediaNow {
   none?: boolean;

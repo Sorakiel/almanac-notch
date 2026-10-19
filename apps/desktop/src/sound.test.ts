@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMascot, defaultSettings, type EventType } from '@almanac-notch/island';
-import { clickSound, gapOf, SOUND_NAMES, SoundWatch } from './sound';
-import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { ALL_TIERS, clickSound, gapOf, moodGain, SOUND_NAMES, SoundWatch, TIER, type SoundMood } from './sound';
+import { synth, varies } from './synth';
 
 function make() {
   const s = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null }).state;
@@ -14,9 +13,44 @@ function make() {
 const ev = (type: EventType, start: number) => ({ type, start, until: start + 10, nextHop: 0 });
 
 describe('which island moments sound (stage 9a)', () => {
-  it('every sound has its file, and no file is unused', () => {
-    const files = readdirSync(join(__dirname, 'sounds')).map((f) => f.replace('.wav', ''));
-    expect(files.sort()).toEqual([...SOUND_NAMES].sort());
+  it('every sound synthesizes: a fixed one the same each time, a varying one a little different', () => {
+    const rms = (c: Float32Array) => Math.sqrt(c.reduce((a, v) => a + v * v, 0) / c.length);
+    for (const n of SOUND_NAMES) {
+      const a = synth(n, 16000),
+        ch = a.channels[0] as Float32Array;
+      expect(ch.length).toBeGreaterThan(1000);
+      expect(Math.max(...ch.map(Math.abs))).toBeLessThanOrEqual(0.951);
+      expect(rms(ch)).toBeGreaterThan(0.005);
+      const b = synth(n, 16000, 7).channels[0] as Float32Array;
+      if (varies(n)) expect(b).not.toEqual(ch);
+      else expect(b).toEqual(ch);
+    }
+    // events are recognized by ear: they never vary
+    for (const n of SOUND_NAMES)
+      if (TIER[n] === 'events' && n !== 'work' && n !== 'think' && n !== 'search') expect(varies(n)).toBe(false);
+  });
+
+  it('events are louder than the mascot, the mascot than the buttons', () => {
+    const rms = (n: (typeof SOUND_NAMES)[number]) => {
+      const c = synth(n, 16000).channels[0] as Float32Array;
+      return Math.sqrt(c.reduce((a, v) => a + v * v, 0) / c.length);
+    };
+    expect(rms('attention')).toBeGreaterThan(rms('poke') * 2);
+    expect(rms('poke')).toBeGreaterThan(rms('tap') * 2);
+  });
+
+  it('mood: a call silences all, music silences buttons and halves the rest, night is a third quieter', () => {
+    const m: SoundMood = { muted: false, tiers: { ...ALL_TIERS }, quiet: false, music: false, hour: 12 };
+    expect(moodGain('attention', m)).toBe(1);
+    expect(moodGain('attention', { ...m, muted: true })).toBe(0);
+    expect(moodGain('greeting', { ...m, quiet: true })).toBe(0);
+    expect(moodGain('tap', { ...m, music: true })).toBe(0);
+    expect(moodGain('success', { ...m, music: true })).toBe(0.5);
+    expect(moodGain('success', { ...m, hour: 23 })).toBeCloseTo(2 / 3);
+    expect(moodGain('success', { ...m, hour: 7 })).toBeCloseTo(2 / 3);
+    expect(moodGain('success', { ...m, hour: 8 })).toBe(1);
+    expect(moodGain('poke', { ...m, tiers: { ...ALL_TIERS, mascot: false } })).toBe(0);
+    expect(moodGain('error', { ...m, tiers: { ...ALL_TIERS, mascot: false } })).toBe(1);
   });
 
   it('each calling event once, at its start', () => {

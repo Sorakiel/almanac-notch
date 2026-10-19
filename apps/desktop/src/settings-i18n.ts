@@ -88,6 +88,17 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   Открыто: 'Open',
   Вкладки: 'Tabs',
   'Чат в острове': 'Chat in the island',
+  // sounds (stage 9a)
+  Звук: 'Sound',
+  События: 'Events',
+  'Разрешения, вопросы, готово, ошибки, начало работы агента':
+    'Permissions, questions, done, errors, an agent starting work',
+  Маскот: 'Mascot',
+  'Приветствие, клики, поглаживание, сон': 'The greeting, clicks, stroking, sleep',
+  'Остров и кнопки': 'Island and buttons',
+  'Открытие, закрытие, вкладки, переключатели': 'Opening, closing, tabs, switches',
+  'Громкость и общий выключатель - в карточке настроек острова. Во время звонка звуки молчат, под музыку кнопки молчат, а остальное тише; ночью (с 22 до 8) всё на треть тише.':
+    "The volume and the main switch are in the island's settings card. During a call sounds stay silent, under music the buttons are silent and the rest quieter; at night (10 pm to 8 am) everything is a third quieter.",
   Язык: 'Language',
   'Язык интерфейса': 'Interface language',
   'Как в системе': 'System',

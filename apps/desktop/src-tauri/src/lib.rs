@@ -23,6 +23,7 @@ mod outlook;
 mod platform;
 mod prefs;
 mod settings;
+mod sound;
 mod tray;
 mod uninstall;
 mod update;
@@ -697,6 +698,7 @@ pub fn run() {
         .manage(feeds.clone())
         .manage(usage.clone())
         .invoke_handler(tauri::generate_handler![
+            sound::sound_quiet,
             island_geometry,
             set_interactive,
             agent_answer,
