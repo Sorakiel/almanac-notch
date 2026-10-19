@@ -309,9 +309,11 @@ export function drawRail(
     st.last = t;
     return { it, y, k: st.k, hy0, hy1 };
   });
-  // bottom first: the upper one sits in front, as in a stack
-  // bottom first: the upper one sits in front; the hovered one comes to the very front
-  const order = [...rows].reverse().sort((a, b) => a.k - b.k);
+  // bottom first: the upper one sits in front, as in a stack; only a mascot visibly lifted by the
+  // hover comes to the front. Sorting every row by k let a spring settling around 0 (-0.03, +4e-4,
+  // -2e-6...) flip a mascot from under all the others to over them frame after frame
+  const lifted = (r: (typeof rows)[number]) => r.k > 0.02;
+  const order = [...[...rows].reverse().filter((r) => !lifted(r)), ...rows.filter(lifted).sort((a, b) => a.k - b.k)];
   for (const { it, y, k } of order) {
     const i = items.indexOf(it);
     slime(s, c, it, cx, y, d * (1 + 0.1 * k), k, seqDt === null ? 1 : evSlideK(seqDt, i), i * 0.04);
