@@ -1,5 +1,6 @@
 // Stage 9 filmstrip: the app page on a virtual clock, one action, then the island every 1/60 s.
-// node tools/strip.mjs <scene> [out-dir]  - scenes: open, focus, ev-error, ev-attention, focus-back, tab-chat, tab-settings, tab-home
+// node tools/strip.mjs <scene> [out-dir]  - scenes: open, focus, ev-error, ev-attention, focus-back, tab-chat, tab-settings, tab-home,
+//   rail-sweep (the pointer down the focus card's mascot stack and back up), autoclose (click-open, leave, fold)
 // Writes frames to <out-dir>/<scene>/NNN.png and a contact sheet <out-dir>/<scene>.png (ffmpeg).
 import { chromium } from 'playwright';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -83,6 +84,47 @@ if (scene === 'hover-mascot') {
   await p.mouse.up();
   // off the pills, so hover does not colour the frames
   await p.mouse.move(340, 12);
+  await shoot();
+} else if (scene === 'rail-sweep') {
+  // focus a module, then slide the pointer over every mascot of the rail, down and back up, at
+  // about a hand's speed (0.9 s each way), and let it rest off the rail
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  // RAIL=music: the player with the stack beside it; RAIL=ev-<type>: an event card with the stack
+  const via = process.env.RAIL ?? 'music';
+  if (via.startsWith('ev-')) await p.evaluate((e) => window.__debug('ev:' + e), via.slice(3));
+  else {
+    const h = await p.evaluate((id) => window.__state.hits.find((x) => x.act === 'focus:' + id), via);
+    await p.mouse.move(h.x + h.w / 2, h.y + h.h / 2);
+    await p.mouse.down();
+    await p.mouse.up();
+  }
+  await p.clock.runFor(1500);
+  const rail = await p.evaluate(() => {
+    const r = window.__state.hits.filter((x) => x.act.startsWith('focus:'));
+    return { x: r[0].x + r[0].w / 2, y0: r[0].y + 4, y1: r[r.length - 1].y + r[r.length - 1].h - 4 };
+  });
+  const steps = 54;
+  for (const [a, z] of [[rail.y0, rail.y1], [rail.y1, rail.y0]]) {
+    for (let n = 0; n <= steps; n++) {
+      await p.mouse.move(rail.x, a + ((z - a) * n) / steps);
+      const i = frame++;
+      await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png`, clip: { x: 30, y: 0, width: 620, height: 190 } });
+      await p.clock.runFor(1000 / 60);
+    }
+  }
+  await p.mouse.move(rail.x - 200, 12);
+  await shoot();
+} else if (scene === 'autoclose') {
+  // the island opened by a click, then the pointer leaves: the countdown, then the fold
+  await p.evaluate(() => (window.__state.host.openOnHover = false));
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(800);
+  await p.mouse.down();
+  await p.mouse.up();
+  await p.clock.runFor(1500);
+  await p.mouse.move(5, 225);
+  await p.clock.runFor(1500);
   await shoot();
 } else if (scene.startsWith('ev-')) {
   // an event on the open island: ev-error, ev-success, ev-attention, ev-question
