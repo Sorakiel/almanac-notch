@@ -37,6 +37,29 @@ pub fn init_process() {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
+    // WebView2 paints its default white before wry's transparent colour reaches the controller
+    // (older runtimes have no ControllerOptions3); this variable makes the very first fill clear.
+    // Set before any webview exists, while the process has one thread.
+    std::env::set_var("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0");
+}
+
+/// The page has drawn its first frame. Until then the window stays hidden: WebView2 needs a moment
+/// to load the page, and a window shown earlier is a white or empty 680x230 box over the screen.
+static READY: AtomicBool = AtomicBool::new(false);
+
+fn may_show() -> bool {
+    READY.load(Ordering::Relaxed) && !FS_HIDDEN.load(Ordering::Relaxed)
+}
+
+/// The frontend's first frame is on screen (or the fallback timer ran out): show the island.
+pub fn ready(window: &WebviewWindow) {
+    if READY.swap(true, Ordering::Relaxed) || FS_HIDDEN.load(Ordering::Relaxed) {
+        return;
+    }
+    // SAFETY: `h` is a live window owned by Tauri; the async call only posts to its thread.
+    unsafe {
+        let _ = ShowWindowAsync(hwnd(window), SW_SHOWNOACTIVATE);
+    }
 }
 
 /// Click-through as last asked; re-applied whenever the styles are rebuilt.
@@ -119,7 +142,7 @@ pub fn place(window: &WebviewWindow) -> Placement {
             r.top,
             r.right - r.left,
             r.bottom - r.top,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            SWP_NOACTIVATE | if may_show() { SWP_SHOWWINDOW } else { Default::default() },
         );
         let mut got = RECT::default();
         let _ = GetWindowRect(h, &mut got);
@@ -250,9 +273,12 @@ pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
     if FS_HIDDEN.swap(want, Ordering::Relaxed) == want {
         return None;
     }
-    // SAFETY: `h` is a live window owned by Tauri; the async call only posts to its thread.
-    unsafe {
-        let _ = ShowWindowAsync(h, if want { SW_HIDE } else { SW_SHOWNOACTIVATE });
+    // a page that has not drawn yet stays hidden after the game too (ready shows it)
+    if want || READY.load(Ordering::Relaxed) {
+        // SAFETY: `h` is a live window owned by Tauri; the async call only posts to its thread.
+        unsafe {
+            let _ = ShowWindowAsync(h, if want { SW_HIDE } else { SW_SHOWNOACTIVATE });
+        }
     }
     Some(want)
 }

@@ -83,6 +83,12 @@ fn set_interactive(window: WebviewWindow, state: State<'_, SharedState>, on: boo
     }
 }
 
+/// The island page has drawn its first frame: the window may show (platform::ready).
+#[tauri::command]
+fn island_ready(window: WebviewWindow) {
+    platform::ready(&window);
+}
+
 /// Answer from the island to a held hook ("approve", "deny", "opt:N", "none").
 #[tauri::command]
 fn agent_answer(hub: State<'_, Arc<Hub>>, id: u64, answer: String) {
@@ -767,6 +773,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             sound::sound_quiet,
             island_geometry,
+            island_ready,
             set_interactive,
             agent_answer,
             claude_usage,
@@ -841,6 +848,13 @@ pub fn run() {
             platform::setup_window(&window);
             platform::set_ignore(&window, true);
             place_and_publish(app.handle(), &window, &state);
+            // the page says when it has drawn (island_ready); a page that never does - a script
+            // error, a stuck load - must not leave the island hidden for good
+            let late = window.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_secs(8));
+                platform::ready(&late);
+            });
             tray::create(app.handle())?;
             let handle = app.handle().clone();
             let hub = Arc::new(Hub::new(Arc::new(move |name: &str, v| {

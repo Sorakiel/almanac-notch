@@ -288,3 +288,7 @@ pub fn yield_activation() {
         _ => app.deactivate(),
     }
 }
+
+/// The page drew its first frame. Nothing to do here: the window is shown when placed, and a
+/// transparent WKWebView has no white fill to hide (Windows waits for this, platform/windows.rs).
+pub fn ready(_window: &WebviewWindow) {}
