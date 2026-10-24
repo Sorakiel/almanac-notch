@@ -837,11 +837,14 @@ export function notionFeed(n: NoState | null, now: number, lang: Lang = 'ru'): N
   const p = n.pages[0];
   return {
     auth: 'ok',
-    rows: n.pages.slice(0, 3).map((x) => ({
+    // every page kept: the card scrolls them (stage 10)
+    rows: n.pages.slice(0, 12).map((x) => ({
       id: x.id,
-      title: clip(title(x), 20),
+      title: clip(title(x), 40),
       emoji: x.emoji,
       ago: agoText(x.edited, now, lang),
+      // who touched it last, by the name Notion gives (stage 10: the list's quiet line)
+      by: (x.by && n.people.find((u) => u.id === x.by)?.name) || '',
     })),
     short: p ? clip(title(p), 16) : tr(L, 'нет страниц'),
     hint: p ? ['', ''] : [tr(L, 'страниц пока нет'), tr(L, 'дайте интеграции доступ к странице')],
@@ -1030,9 +1033,10 @@ export function grafanaFeed(g: GfState | null, now: number, lang: Lang = 'ru'): 
     state: firing ? 'fail' : 'run',
     total: g.alerts.length,
     board,
-    rows: g.alerts.slice(0, 3).map((a) => ({
+    // every rule firing or pending: the card scrolls them (stage 10)
+    rows: g.alerts.map((a) => ({
       id: a.id,
-      name: clip(a.name, 16),
+      name: clip(a.name, 40),
       state: a.state === 'firing' ? 'fail' : 'run',
       ago: a.since === null ? '' : agoText(a.since, now, lang),
     })),

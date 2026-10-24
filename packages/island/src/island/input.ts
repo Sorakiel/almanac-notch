@@ -72,6 +72,14 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   s.pressAt = s.t;
   // levels inside a module card (island/depth.ts)
   if (depthAct(s, act)) return;
+  // a PR's "Одобрить" cannot be taken back: the first click asks, a second within 3 s does it
+  if (act.startsWith('ghok:')) {
+    if (s.confirm && s.confirm.act === act && s.t < s.confirm.until) {
+      s.confirm = null;
+      s.requests.push('gh:approve:' + act.slice(5));
+    } else s.confirm = { act, until: s.t + 3 };
+    return;
+  }
   if (act === 'mascot') {
     const R = h.R ?? 1;
     poke(s, clamp((p.x - (h.cx ?? 0)) / R, -1, 1), clamp((p.y - (h.cy ?? 0)) / (R * 0.92), -1, 1));

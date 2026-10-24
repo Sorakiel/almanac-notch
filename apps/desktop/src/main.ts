@@ -127,6 +127,19 @@ function rerunCi(repo: string): void {
   );
 }
 
+/** a PR's "Одобрить" (after the island's second click): the result shows on the PR's level */
+function approvePr(url: string): void {
+  const note = (text: string, err = false): void => {
+    s.ciNote = { key: url, text, at: s.t, err };
+  };
+  note(tr(s, 'Одобряю…'));
+  invoke('github_approve', { url }).then(
+    () => note(tr(s, 'Одобрено')),
+    // the error is already in the interface language (src-tauri github.rs)
+    (e: unknown) => note(String(e), true),
+  );
+}
+
 function saveCard(): void {
   if (!s.host) return;
   try {
@@ -627,6 +640,7 @@ function tick(now: number, id: number): void {
     else if (r.startsWith('vcredo:')) vercel?.redeploy(r.slice(7), (id) => invoke('vercel_redeploy', { id }));
     else if (r.startsWith('gh:open:')) void invoke('github_open', { name: r.slice(8) });
     else if (r.startsWith('gh:url:')) void invoke('github_open_url', { url: r.slice(7) });
+    else if (r.startsWith('gh:approve:')) approvePr(r.slice(11));
     else if (r.startsWith('gh:rerun:')) rerunCi(r.slice(9));
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });

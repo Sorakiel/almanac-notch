@@ -196,7 +196,7 @@ export interface NotionFeed {
   /** "off" no token, "bad" the token was refused, "ok" data is shown */
   auth: 'off' | 'bad' | 'ok';
   /** the card's rows, newest first (at most three): icon, title, "5 мин" */
-  rows: { id: string; title: string; emoji: string | null; ago: string }[];
+  rows: { id: string; title: string; emoji: string | null; ago: string; by?: string }[];
   /** the rail's, chips' and ears' short text */
   short: string;
   /** the card's two lines while there is nothing to show (no token, refused, no pages) */
@@ -409,6 +409,8 @@ export interface IslandState {
   almanac: AlmanacFeed | null;
   /** levels inside a module card: list -> item -> back (island/depth.ts, stage 10) */
   depth: DepthState;
+  /** an action that asks for a second click (a PR's "Одобрить"): which, until when (s.t) */
+  confirm: { act: string; until: number } | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
@@ -572,6 +574,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     notion: null,
     grafana: null,
     almanac: null,
+    confirm: null,
     depth: { mod: null, stack: [], from: null, dir: 1, at: -1, scroll: {}, swipe: { dx: 0, at: -1 } },
     requests: [],
     settingsLink: false,

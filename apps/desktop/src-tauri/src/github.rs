@@ -621,6 +621,47 @@ pub fn rerun(full: &str, run_id: u64) -> Result<(), String> {
 }
 
 /// Open a GitHub page in the browser.
+/// A PR's "Одобрить": an approving review, as the owner asked for (2026-10-25); the island asks
+/// for a second click first. `full` is "owner/name".
+pub fn approve(full: &str, number: u64) -> Result<(), String> {
+    let t = token().ok_or_else(|| {
+        crate::lang::t("GitHub не подключён", "GitHub is not connected").to_owned()
+    })?;
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .build(),
+        )
+        .build()
+        .into();
+    let url = format!("https://api.github.com/repos/{full}/pulls/{number}/reviews");
+    let r = agent
+        .post(&url)
+        .header("Authorization", format!("Bearer {t}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "almanac-notch")
+        .send_json(json!({"event": "APPROVE"}));
+    match r {
+        Ok(_) => {
+            poke();
+            Ok(())
+        }
+        Err(ureq::Error::StatusCode(403 | 404)) => Err(crate::lang::t(
+            "Токену нужен доступ Pull requests: запись",
+            "The token needs Pull requests: write access",
+        )
+        .to_owned()),
+        Err(ureq::Error::StatusCode(422)) => Err(crate::lang::t(
+            "GitHub не принял одобрение (свой PR?)",
+            "GitHub refused the approval (your own PR?)",
+        )
+        .to_owned()),
+        Err(_) => Err(crate::lang::t("Нет связи с GitHub", "No connection to GitHub").to_owned()),
+    }
+}
+
 pub fn open(url: &str) {
     if !url.starts_with("https://github.com/") {
         return;

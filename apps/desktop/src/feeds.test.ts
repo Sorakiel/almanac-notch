@@ -478,7 +478,7 @@ describe('notion feed', () => {
       rows: [],
     });
   });
-  it('the three pages edited last: icon, title, compact age; untitled is named', () => {
+  it('the pages edited last, newest first (the card scrolls): icon, title, compact age; untitled is named', () => {
     const f = notionFeed(
       no([
         page(),
@@ -489,10 +489,10 @@ describe('notion feed', () => {
       T0,
     );
     expect(f.short).toBe('План релиза');
-    expect(f.rows.map((r) => [r.emoji, r.title, r.ago])).toEqual([
+    expect(f.rows.slice(0, 3).map((r) => [r.emoji, r.title, r.ago])).toEqual([
       ['📝', 'План релиза', '5 мин'],
       [null, 'Без названия', '2 ч'],
-      ['📝', 'Заметки со встречи…', '3 дн'],
+      ['📝', 'Заметки со встречи с дизайнером', '3 дн'],
     ]);
     expect(notionFeed(no([page({ title: null })]), T0, 'en').rows[0]?.title).toBe('Untitled');
   });
@@ -550,7 +550,7 @@ describe('grafana feed', () => {
       hint: ['Всё спокойно', 'правил: 12'],
     });
   });
-  it('firing rows first, red; pending amber; at most three, the total kept', () => {
+  it('firing rows first, red; pending amber; every rule kept (the card scrolls)', () => {
     const f = grafanaFeed(
       gf([
         al(),
@@ -563,9 +563,9 @@ describe('grafana feed', () => {
     expect(f.state).toBe('fail');
     expect(f.short).toBe('горит 2');
     expect(f.total).toBe(4);
-    expect(f.rows.map((r) => [r.name, r.state, r.ago])).toEqual([
+    expect(f.rows.slice(0, 3).map((r) => [r.name, r.state, r.ago])).toEqual([
       ['CPU > 90%', 'fail', '12 мин'],
-      ['Ошибки 5xx на ш…', 'fail', '3 мин'],
+      ['Ошибки 5xx на шлюзе платежей', 'fail', '3 мин'],
       ['Disk', 'run', ''],
     ]);
     expect(grafanaFeed(gf([al({ state: 'pending' })]), T0, 'en')).toMatchObject({ state: 'run', short: '1 pending' });

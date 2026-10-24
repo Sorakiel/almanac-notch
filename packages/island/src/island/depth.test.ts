@@ -70,3 +70,23 @@ describe('the wheel', () => {
     expect(depthTop(s, 'almanac')).toBe('');
   });
 });
+
+describe('an action that asks twice', () => {
+  it('a PR is approved only on a second click within 3 s', async () => {
+    const { islandPointerDown } = await import('./input');
+    const s = make();
+    const zone = { x: 0, y: 0, w: 50, h: 20, act: 'ghok:https://github.com/me/app/pull/7' };
+    const click = () => {
+      s.hits = [zone];
+      islandPointerDown(s, { x: 5, y: 5 });
+    };
+    click();
+    expect(s.requests).toEqual([]);
+    s.t += 4;
+    click();
+    expect(s.requests).toEqual([]);
+    s.t += 1;
+    click();
+    expect(s.requests).toEqual(['gh:approve:https://github.com/me/app/pull/7']);
+  });
+});

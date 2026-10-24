@@ -494,12 +494,20 @@ function ghPr(s: IslandState, c: Ctx, p: GhPr, tx: number, y0: number, tmax: num
   itemHead(s, c, `${p.repo} #${p.num}`, p.draft ? L_FAINT : '#8AB4F8', shortAgo(s, p.at), '#6B7079', tx, y0, tmax);
   subjLine(c, p.title, tx, y0 + IT_SUBJ, tmax);
   const who = [p.author ? '@' + p.author : '', p.draft ? tr(s, 'черновик') : ''].filter(Boolean).join(' · ');
-  if (who) bodyLine(c, who, tx, y0 + IT_BODY, tmax);
+  // how the approval went, in place of who opened it
+  const note = s.ciNote && s.ciNote.key === p.url ? s.ciNote : null;
+  if (note) bodyLine(c, note.text, tx, y0 + IT_BODY, tmax, note.err ? '#F5B94A' : L_SUBJ);
+  else if (who) bodyLine(c, who, tx, y0 + IT_BODY, tmax);
+  const ask = !!s.confirm && s.confirm.act === 'ghok:' + p.url && s.t < s.confirm.until;
   actionRow(
     s,
     c,
-    [{ label: tr(s, 'Открыть на GitHub'), act: 'gh:url:' + p.url, tone: 'lead', out: true }],
-    '#8AB4F8',
+    [
+      // approving cannot be taken back: the word asks once more before it goes
+      { label: tr(s, ask ? 'Точно одобрить?' : 'Одобрить'), act: 'ghok:' + p.url, tone: 'lead' },
+      { label: tr(s, 'Открыть на GitHub'), short: tr(s, 'Открыть'), act: 'gh:url:' + p.url, tone: 'plain', out: true },
+    ],
+    ask ? '#F5B94A' : '#34C759',
     tx,
     y0 + IT_ACT,
     tmax,
@@ -1501,6 +1509,61 @@ export function drawFocusCard(
   if (it.kind === 'deploy' && s.vercel && s.vercel.auth === 'ok' && s.vercel.rows.length) {
     const vc = s.vercel;
     drawDepth(s, c, 'vercel', (key) => vercelLevel(s, c, it, vc, key, tx, y0, x1, y1, tmax));
+    return;
+  }
+  // Notion and Grafana: every page / rule a scroll away; a row opens it where it lives - their
+  // items say no more than the row does, so there is no level of their own (stage 10)
+  if (it.kind === 'pages' && s.notion && s.notion.auth === 'ok' && s.notion.rows.length) {
+    const no = s.notion;
+    brandHead(s, c, it.id, it.name, tx, y0, x1);
+    levelList(s, c, 'notion', no.rows.length, tx, y0, y1, tmax, (i, cy) => {
+      const r = no.rows[i] as (typeof no.rows)[number];
+      listLine(
+        s,
+        c,
+        {
+          id: 'no:' + r.id,
+          act: 'notion:' + r.id,
+          mark: r.emoji
+            ? (x, y) => textAt(c, r.emoji as string, x, y + 0.5, { size: 9.5, weight: 400, align: 'center' })
+            : (x, y) => pageMark(c, x, y, 3.2, L_SUB),
+          name: r.title,
+          meta: r.ago,
+          sub: r.by ?? '',
+          strong: i === 0,
+          wash: '#F5F6F8',
+        },
+        cy,
+        tx,
+        tmax,
+      );
+    });
+    return;
+  }
+  if (it.kind === 'alerts' && s.grafana && s.grafana.auth === 'ok' && !s.grafana.board && s.grafana.rows.length) {
+    const gf = s.grafana;
+    brandHead(s, c, it.id, it.name, tx, y0, x1);
+    levelList(s, c, 'grafana', gf.rows.length, tx, y0, y1, tmax, (i, cy) => {
+      const r = gf.rows[i] as (typeof gf.rows)[number];
+      listLine(
+        s,
+        c,
+        {
+          id: 'gf:' + r.id,
+          // a rule with a uid opens its own page, any other the alert list
+          act: /^[A-Za-z0-9_-]{1,64}$/.test(r.id) ? 'grafana:rule:' + r.id : 'grafana:alerts',
+          mark: (x, y) => alertDot(c, x, y, r.state, s.t),
+          name: r.name,
+          meta: r.ago,
+          sub: tr(s, r.state === 'fail' ? 'горит' : 'ждёт'),
+          strong: r.state === 'fail',
+          wash: '#F4505E',
+        },
+        cy,
+        tx,
+        tmax,
+      );
+    });
     return;
   }
   // the calendar: the next meeting and the day open further - where it is, join the call (stage 10)

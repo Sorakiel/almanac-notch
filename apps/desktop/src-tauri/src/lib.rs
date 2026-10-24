@@ -167,6 +167,28 @@ fn github_open(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) {
     }
 }
 
+/// A PR's "Одобрить": the PR is looked up among the ones waiting for my review, not taken from
+/// the page.
+#[tauri::command]
+async fn github_approve(feeds: State<'_, Arc<Mutex<Feeds>>>, url: String) -> Result<(), String> {
+    let pr = feeds
+        .lock()
+        .unwrap()
+        .github
+        .as_ref()
+        .and_then(|g| g.review.iter().find(|p| p.url == url).cloned())
+        .ok_or_else(|| {
+            lang::t(
+                "Этот PR уже не ждёт ревью",
+                "This PR no longer waits for review",
+            )
+            .to_owned()
+        })?;
+    tauri::async_runtime::spawn_blocking(move || github::approve(&pr.full, pr.number))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// A PR or another GitHub page from the card's lists (github::open keeps to github.com).
 #[tauri::command]
 fn github_open_url(url: String) {
@@ -829,6 +851,7 @@ pub fn run() {
             github_disconnect,
             github_open,
             github_open_url,
+            github_approve,
             github_rerun,
             vercel_connect,
             vercel_disconnect,
