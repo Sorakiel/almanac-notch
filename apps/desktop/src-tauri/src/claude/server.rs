@@ -8,6 +8,7 @@
 //! - headers are capped at 16 KB, bodies at 1 MB, reads time out after 5 s, and at most
 //!   64 connections are served at once.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -15,9 +16,9 @@ use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use almanac_hook::{paths, TOKEN_HEADER};
+use almanac_hook::{paths, HEARTBEAT_SECS, TOKEN_HEADER};
 use serde_json::{json, Value};
 
 const MAX_HEAD: usize = 16 * 1024;
@@ -193,13 +194,46 @@ fn serve(stream: TcpStream, port: u16, token: &str, handler: &Handler) {
         let _ = respond(stream, 400, "");
         return;
     };
-    let answer = handler(payload, &|| client_alive(&stream));
-    let _ = respond(stream, 200, &answer);
+    // A held hook probes `alive` while it waits. The probe also sends the status line early
+    // and then a space every HEARTBEAT_SECS: the hook client gives up after 33 s of silence,
+    // and a prompt held behind a full-screen app waits far longer. Spaces before the JSON
+    // are trimmed by every client build. If the app dies, the socket closes and the client
+    // lets the question go to the terminal at once; if it hangs, the beats stop.
+    let beat: Cell<Option<Instant>> = Cell::new(None);
+    let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
+    let alive = || {
+        if !client_alive(&stream) {
+            return false;
+        }
+        if beat
+            .get()
+            .is_some_and(|t| t.elapsed() < Duration::from_secs(HEARTBEAT_SECS))
+        {
+            return true;
+        }
+        let head = beat.get().is_none();
+        beat.set(Some(Instant::now()));
+        let mut w = &stream;
+        (!head || w.write_all(OPEN_HEAD.as_bytes()).is_ok()) && w.write_all(b" ").is_ok()
+    };
+    let answer = handler(payload, &alive);
+    if beat.get().is_some() {
+        let _ = (&stream).write_all(answer.as_bytes());
+    } else {
+        let _ = respond(stream, 200, &answer);
+    }
 }
+
+/// Head of a 200 whose length is not known yet: the body ends when we close the socket.
+const OPEN_HEAD: &str =
+    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Both tests point HOME at their own dir to find the connection file.
+    static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn send(port: u16, extra: &str, body: &str) -> String {
         let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
@@ -215,7 +249,46 @@ mod tests {
     }
 
     #[test]
+    fn held_hook_gets_heartbeats_then_the_answer() {
+        let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("almanac-srv-hb-{}", std::process::id()));
+        std::env::set_var("HOME", &dir);
+        std::env::set_var("APPDATA", &dir);
+        // a hold as long as two beats, probing like Hub::handle does
+        let srv = start(Arc::new(|_: Value, alive: &dyn Fn() -> bool| {
+            let t0 = Instant::now();
+            while t0.elapsed() < Duration::from_secs(HEARTBEAT_SECS * 2 + 1) {
+                assert!(alive());
+                thread::sleep(Duration::from_millis(200));
+            }
+            r#"{"ok":1}"#.to_string()
+        }))
+        .unwrap();
+        let conn: Value =
+            serde_json::from_str(&fs::read_to_string(paths::connection_file()).unwrap()).unwrap();
+        let tok = conn["token"].as_str().unwrap().to_string();
+        let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, srv.port)).unwrap();
+        // shorter than the hold: only the beats keep this read going
+        s.set_read_timeout(Some(Duration::from_secs(HEARTBEAT_SECS + 1)))
+            .unwrap();
+        write!(
+            s,
+            "POST /hook HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n{TOKEN_HEADER}: {tok}\r\nContent-Length: 2\r\n\r\n{{}}",
+            srv.port
+        )
+        .unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        assert!(out.starts_with("HTTP/1.1 200"), "{out}");
+        let (_, body) = out.split_once("\r\n\r\n").unwrap();
+        assert!(body.starts_with("  "), "beats before the answer: {body:?}");
+        assert_eq!(body.trim(), r#"{"ok":1}"#);
+        remove_connection_file(srv.port);
+    }
+
+    #[test]
     fn token_origin_and_body_checks() {
+        let _env = ENV.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("almanac-srv-{}", std::process::id()));
         std::env::set_var("HOME", &dir);
         std::env::set_var("APPDATA", &dir);

@@ -612,6 +612,20 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     }))
 }
 
+/// Hooks installed by an older build: bring our timeouts up to date (install::plan_refresh),
+/// so a prompt held behind a full-screen app is not killed by Claude Code at 45 s.
+fn refresh_hooks() {
+    let settings = almanac_hook::paths::claude_settings();
+    match almanac_hook::install::plan_refresh(&settings) {
+        Ok(plan) if plan.changed() => match almanac_hook::install::apply(&plan) {
+            Ok(b) => eprintln!("[claude] hook timeouts updated, backup: {b:?}"),
+            Err(e) => eprintln!("[claude] hook timeouts not updated: {e}"),
+        },
+        Ok(_) => {}
+        Err(e) => eprintln!("[claude] hook timeouts not checked: {e}"),
+    }
+}
+
 /// Hook server + plan usage watcher. A failure here leaves the island working without
 /// Claude Code (the hook client finds no connection file and stays silent).
 fn start_claude(app: &AppHandle, hub: Arc<Hub>, usage: Arc<Mutex<Usage>>) -> Option<u16> {
@@ -627,6 +641,7 @@ fn start_claude(app: &AppHandle, hub: Arc<Hub>, usage: Arc<Mutex<Usage>>) -> Opt
             let _ = app2.emit("island://usage", u);
         })
     });
+    refresh_hooks();
     let h = hub.clone();
     match claude::server::start(Arc::new(move |p, alive: &dyn Fn() -> bool| {
         h.handle(p, alive)
@@ -652,7 +667,7 @@ fn place_and_publish(app: &AppHandle, window: &WebviewWindow, state: &SharedStat
     let _ = app.emit("island://geometry", placement.geometry);
 }
 
-fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState) {
+fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState, hub: Arc<Hub>) {
     thread::spawn(move || {
         let mut last_watch = Instant::now();
         let mut last_fs = Instant::now();
@@ -663,6 +678,7 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
                     platform::fullscreen_tick(&window, prefs::get().fullscreen_hide)
                 {
                     eprintln!("[island] full-screen app in front: {hidden}");
+                    hub.set_hidden(hidden);
                     let _ = app.emit("island://fullscreen", hidden);
                 }
             }
@@ -831,10 +847,10 @@ pub fn run() {
                 let _ = handle.emit(name, v);
             })));
             app.manage(hub.clone());
-            *port_slot.lock().unwrap() = start_claude(app.handle(), hub, usage.clone());
+            *port_slot.lock().unwrap() = start_claude(app.handle(), hub.clone(), usage.clone());
             let media = start_feeds(app.handle(), feeds.clone());
             app.manage(media);
-            spawn_cursor_poller(app.handle().clone(), window, state.clone());
+            spawn_cursor_poller(app.handle().clone(), window, state.clone(), hub);
             update::start(app.handle());
             // first run: the guide (language, Claude Code, calendar, modules, launch at login)
             if !prefs::get().onboarded {

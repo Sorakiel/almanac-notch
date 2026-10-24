@@ -69,6 +69,8 @@ fn forward(input: &str) -> Option<String> {
         .get("tool_name")
         .and_then(Value::as_str)
         .unwrap_or("");
+    // Longest silence we accept, not the whole wait: while the app holds a prompt it sends
+    // a space every HEARTBEAT_SECS (a prompt behind a full-screen app waits for hours).
     let wait = if tool == "AskUserQuestion" && is_blocking(event, tool) {
         Duration::from_secs(ANSWER_WAIT_SECS * MAX_QUESTIONS + 3)
     } else if is_blocking(event, tool) {

@@ -415,6 +415,7 @@ if (inTauri) {
   await listen<boolean>('island://fullscreen', (e) => {
     fullscreen = e.payload;
     if (fullscreen) for (const n of SOUND_NAMES) player.fadeOut(n, 0.1);
+    agent?.setHidden(fullscreen);
   });
   agent = new AgentDriver({
     m,

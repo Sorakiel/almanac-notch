@@ -312,6 +312,8 @@ export class AgentDriver {
   private cur: { ask: Ask; ev: MascotEvent; sent: boolean; idx: number; picks: number[] } | null = null;
   /** when the last tool ended, while no new hook has come */
   private afterTool: number | null = null;
+  /** a full-screen app hides the island: prompts wait for the user (Rust Hub::set_hidden) */
+  private hidden = false;
 
   constructor(private readonly host: AgentHost) {
     this.attach();
@@ -425,13 +427,33 @@ export class AgentDriver {
     }
   }
 
+  /**
+   * The island hid behind a full-screen app or came back. An open prompt must not run out
+   * while nobody can see it: its card goes down unanswered and comes back first in line,
+   * with its full 30 s, once the user is back. Rust holds the hook meanwhile.
+   */
+  setHidden(on: boolean): void {
+    if (on === this.hidden) return;
+    this.hidden = on;
+    const c = this.cur;
+    if (on && c && !c.sent) {
+      this.cur = null;
+      this.queue.unshift(c.ask);
+      if (this.s.event === c.ev) {
+        this.s.event = null;
+        this.s.notify();
+      }
+    }
+    if (!on) this.next();
+  }
+
   private enqueue(a: Ask): void {
     this.queue.push(a);
     this.next();
   }
 
   private next(): void {
-    if (this.cur) return;
+    if (this.cur || this.hidden) return;
     const a = this.queue.shift();
     if (!a) return;
     this.feed.cmd = a.cmd;

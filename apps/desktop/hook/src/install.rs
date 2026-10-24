@@ -11,16 +11,23 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
 
+use crate::HOLD_MAX_SECS;
+
 /// Marker of our entries in a hook command.
 const MARK: &str = "almanac-hook";
 
-/// (event, timeout in seconds). Answering hooks wait for the island (30 s) plus slack;
-/// the rest return in milliseconds and get a short cap in case the app hangs.
+/// Slack over the app's own limit, so the app always releases a held prompt before Claude Code
+/// kills the hook.
+const HOLD_SLACK: u64 = 60;
+
+/// (event, timeout in seconds). Answering hooks wait for the island: 30 s a question while it
+/// is visible, up to HOLD_MAX_SECS while a full-screen app hides it. The rest return in
+/// milliseconds and get a short cap in case the app hangs.
 pub const EVENTS: [(&str, u64); 9] = [
     ("UserPromptSubmit", 10),
-    // a held AskUserQuestion: up to 4 questions, 30 s each
-    ("PreToolUse", 130),
-    ("PermissionRequest", 45),
+    // a held AskUserQuestion
+    ("PreToolUse", HOLD_MAX_SECS + HOLD_SLACK),
+    ("PermissionRequest", HOLD_MAX_SECS + HOLD_SLACK),
     ("PostToolUse", 10),
     ("PostToolUseFailure", 10),
     ("Notification", 10),
@@ -141,6 +148,40 @@ pub fn plan_uninstall(path: &Path) -> Result<Plan, String> {
     // Do not reformat a file that has none of our hooks.
     let after = if installed_in(&before) {
         after
+    } else {
+        before.clone()
+    };
+    Ok(make_plan(path, before, after))
+}
+
+/// Hooks installed by an older build keep their old timeouts (45 s for PermissionRequest),
+/// and Claude Code would kill a prompt held behind a full-screen app. This only brings the
+/// timeouts of our own entries to EVENTS; nothing else in the file changes, and a file
+/// without our hooks is left alone. Running sessions pick the edit up (Claude Code watches
+/// its settings files).
+pub fn plan_refresh(path: &Path) -> Result<Plan, String> {
+    let (before, mut root) = read(path)?;
+    let mut changed = false;
+    if let Some(Value::Object(hooks)) = root.get_mut("hooks") {
+        for (event, timeout) in EVENTS {
+            let Some(Value::Array(groups)) = hooks.get_mut(event) else {
+                continue;
+            };
+            for g in groups.iter_mut() {
+                let Some(Value::Array(list)) = g.get_mut("hooks") else {
+                    continue;
+                };
+                for h in list.iter_mut().filter(|h| is_ours(h)) {
+                    if h.get("timeout").and_then(Value::as_u64) != Some(timeout) {
+                        h["timeout"] = timeout.into();
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    let after = if changed {
+        render(&root, &before)
     } else {
         before.clone()
     };
@@ -354,6 +395,35 @@ mod tests {
         assert!(apply(&plan).is_err());
         fs::write(&p, "{ not json").unwrap();
         assert!(plan_install(&p, Path::new("/x/almanac-hook")).is_err());
+    }
+
+    #[test]
+    fn refresh_updates_only_our_timeouts() {
+        let p = tmp("refresh", OTHER);
+        assert!(!plan_refresh(&p).unwrap().changed(), "no hooks of ours");
+        apply(&plan_install(&p, Path::new("/x/almanac-hook")).unwrap()).unwrap();
+        // an install by an older build: 45 s on PermissionRequest
+        let old = fs::read_to_string(&p).unwrap().replacen(
+            &format!("\"timeout\": {}", HOLD_MAX_SECS + HOLD_SLACK),
+            "\"timeout\": 45",
+            2,
+        );
+        fs::write(&p, &old).unwrap();
+        let plan = plan_refresh(&p).unwrap();
+        assert!(plan.changed());
+        apply(&plan).unwrap();
+        let v: Value = serde_json::from_str(&fs::read_to_string(&p).unwrap()).unwrap();
+        assert_eq!(
+            v["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"],
+            HOLD_MAX_SECS + HOLD_SLACK
+        );
+        let other = &v["hooks"]["PreToolUse"][0]["hooks"][0];
+        assert_eq!(other["command"], "/usr/local/bin/other-hook");
+        assert!(
+            other.get("timeout").is_none(),
+            "other hooks are not touched"
+        );
+        assert!(!plan_refresh(&p).unwrap().changed());
     }
 
     #[test]

@@ -167,6 +167,28 @@ describe('AgentDriver', () => {
     expect(questionView('Раннер?', undefined, 0, 1, ['Vitest'])).toEqual(['Раннер?', ['Vitest']]);
   });
 
+  it('behind a full-screen app a prompt waits and comes back with its full time', () => {
+    const { m, s, sent, run, d, hook } = make();
+    hook({ hook_event_name: 'PermissionRequest', session_id: 'a', tool_name: 'Bash', tool_input: { command: 'x' } }, 5);
+    run(20);
+    d.setHidden(true);
+    expect(s.event).toBeNull();
+    // a prompt that comes while hidden waits in line too
+    hook({ hook_event_name: 'PermissionRequest', session_id: 'b', tool_name: 'Bash', tool_input: { command: 'y' } }, 6);
+    expect(s.event).toBeNull();
+    run(120);
+    expect(sent).toEqual([]);
+    d.setHidden(false);
+    expect(s.event?.type).toBe('attention');
+    expect(s.agent?.cmd).toBe('x');
+    run(25);
+    expect(s.event?.type).toBe('attention');
+    m.answer('approve');
+    run(1);
+    expect(sent).toEqual([[5, 'approve']]);
+    expect(s.agent?.cmd).toBe('y');
+  });
+
   it('answered in the terminal: the card goes away; timeout: "none"', () => {
     const { s, sent, run, d, hook } = make();
     hook({ hook_event_name: 'PermissionRequest', session_id: 'a', tool_name: 'Bash', tool_input: { command: 'x' } }, 3);
