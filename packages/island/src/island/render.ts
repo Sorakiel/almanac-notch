@@ -3,7 +3,7 @@ import { clamp } from '../util/math';
 import { rrect, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { statusOf } from '../sim/events';
-import { notchState } from './focus';
+import { closeCountdown, notchState } from './focus';
 import { islandShape, islandTargets } from './geometry';
 import { bootTrace, drawShine, islandFlash, shakeX, workFx } from './fx';
 import { drawHalf } from './half';
@@ -133,6 +133,7 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
       drawOpen(s, c, x0, x1, MB, h, st, fx, 16);
       c.restore();
     }
+    drawCountdown(s, c, cx, h, openA);
     c.restore();
     s.islandBox = { x0, x1, y0: 0, y1: h };
   }
@@ -155,4 +156,31 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
   lc.fillRect(0, 0, loupe.width, loupe.height);
   const L = s.loupeRect;
   lc.drawImage(off, Math.max(0, L.x * k), Math.max(0, L.y * k), L.w * k, L.h * k, 0, 0, loupe.width, loupe.height);
+}
+
+/** the auto-close countdown's line and its fade, per island */
+const countdowns = new WeakMap<IslandState, { a: number; w: number; t: number }>();
+
+/**
+ * A short quiet line on the open island's bottom edge that shrinks to the middle while the auto-close
+ * runs out (closeCountdown). It fades in and out rather than popping, so a pointer coming back only
+ * dims it away.
+ */
+function drawCountdown(s: IslandState, c: Ctx, cx: number, h: number, openA: number): void {
+  let cd = countdowns.get(s);
+  if (!cd) countdowns.set(s, (cd = { a: 0, w: 1, t: s.t }));
+  const left = closeCountdown(s);
+  const dt = clamp(s.t - cd.t, 0, 0.1);
+  cd.t = s.t;
+  cd.a += ((left == null ? 0 : 1) - cd.a) * (1 - Math.exp(-dt / 0.12));
+  if (left != null) cd.w = left;
+  if (cd.a < 0.01 || openA < 0.01) return;
+  const W = 56 * cd.w;
+  if (W < 0.5) return;
+  c.save();
+  c.globalAlpha *= cd.a * openA * 0.32;
+  c.fillStyle = '#fff';
+  rrect(c, cx - W / 2, h - 5, W, 2, 1);
+  c.fill();
+  c.restore();
 }

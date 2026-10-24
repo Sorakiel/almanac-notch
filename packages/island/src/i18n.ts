@@ -143,9 +143,9 @@ export const EN: Readonly<Record<string, string>> = {
   'Все настройки': 'All settings',
   // the app's settings card (stage 8g)
   'Автозакрытие · {0} с': 'Auto-close · {0} s',
+  '3 с': '3 s',
+  '5 с': '5 s',
   '10 с': '10 s',
-  '15 с': '15 s',
-  '30 с': '30 s',
   Выйти: 'Quit',
   'Настройки…': 'Settings…',
   Звуки: 'Sounds',

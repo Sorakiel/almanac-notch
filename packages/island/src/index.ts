@@ -31,7 +31,7 @@ export {
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { tr, plural, EN, type Lang } from './i18n';
 export { update } from './sim/behavior';
-export { notchState, type NotchState } from './island/focus';
+export { AUTO_CLOSE, AUTO_CLOSE_DEFAULT, autoCloseFrom, notchState, type NotchState } from './island/focus';
 export { renderIsland } from './island/render';
 export { MB, NOTCH_W, islandShape, islandTargets, type IslandInputs, type IslandTargets } from './island/geometry';
 export {

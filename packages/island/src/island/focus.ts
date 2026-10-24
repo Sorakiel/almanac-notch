@@ -8,6 +8,30 @@ import { ciWantsFocus } from './ci';
 
 export type NotchState = 'closed' | 'half' | 'open';
 
+/** the auto-close choices, seconds after the pointer leaves an island opened by a click (owner 2026-10-24) */
+export const AUTO_CLOSE = [3, 5, 10] as const;
+export const AUTO_CLOSE_DEFAULT = 5;
+
+/** a saved delay -> one of AUTO_CLOSE: the old 15 and 30 become 10, anything unknown the default */
+export function autoCloseFrom(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return AUTO_CLOSE_DEFAULT;
+  if ((AUTO_CLOSE as readonly number[]).includes(v)) return v;
+  return v > 10 ? 10 : AUTO_CLOSE_DEFAULT;
+}
+
+/**
+ * How much of the auto-close countdown is left, 1 -> 0, or null while there is none to show. It shows
+ * only in the last 60% of the delay, so the island warns before it folds and the pointer can come back
+ * in time; a whole-delay bar would be on all the time (after coucou's countdown, docs/CHANGES.md).
+ */
+export function closeCountdown(s: IslandState): number | null {
+  if (!s.host || !s.clickOpen || s.islandHover || s.hoverLeftAt <= 0) return null;
+  const left = s.host.autoClose - (s.t - s.hoverLeftAt);
+  const span = s.host.autoClose * 0.6;
+  if (left <= 0 || left >= span) return null;
+  return left / span;
+}
+
 /** proto: notchState - the "auto" rules in order */
 export function notchState(s: IslandState): NotchState {
   const { S, event, t } = s;

@@ -11,7 +11,9 @@ import '@fontsource/unbounded/600.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
+  AUTO_CLOSE_DEFAULT,
   EVENT_TYPES,
+  autoCloseFrom,
   createMascot,
   defaultSettings,
   hitTest,
@@ -95,11 +97,12 @@ s.settingsLink = true;
 // the settings tab is the app's own card, after coucou's (stage 8g, docs/CHANGES.md); its
 // choices are this window's own, kept in its storage
 const CARD_KEY = 'almanac-notch.card';
-s.host = { openOnHover: true, autoClose: 15, status: [], version: '', volume: DEFAULT_VOLUME };
+s.host = { openOnHover: true, autoClose: AUTO_CLOSE_DEFAULT, status: [], version: '', volume: DEFAULT_VOLUME };
 try {
   const saved = JSON.parse(localStorage.getItem(CARD_KEY) ?? '{}') as Partial<HostPrefs> & { sound?: boolean };
   if (typeof saved.openOnHover === 'boolean') s.host.openOnHover = saved.openOnHover;
-  if (saved.autoClose === 10 || saved.autoClose === 15 || saved.autoClose === 30) s.host.autoClose = saved.autoClose;
+  // 10/15/30 s until 2026-10-24: a saved 15 or 30 becomes 10
+  s.host.autoClose = autoCloseFrom(saved.autoClose);
   if (typeof saved.volume === 'number' && saved.volume >= 0 && saved.volume <= 1) s.host.volume = saved.volume;
   if (typeof saved.sound === 'boolean') s.muted = !saved.sound;
 } catch {
@@ -561,7 +564,17 @@ function draw(): void {
     const b = s.islandBox;
     ic.clearRect((b.x0 - 6) * dpr, 0, (b.x1 - b.x0 + 12) * dpr, b.y1 * dpr);
   }
+  if (!shown) {
+    shown = true;
+    // The window stays hidden until the page has drawn (on Windows WebView2 shows a white box
+    // before that): wait for the fonts, so the first text is not a fallback, and for one frame
+    // to reach the screen, then let the host show it (island_ready, platform/windows.rs).
+    void document.fonts.ready.then(() =>
+      requestAnimationFrame(() => requestAnimationFrame(() => inTauri && void invoke('island_ready'))),
+    );
+  }
 }
+let shown = false;
 
 function tick(now: number, id: number): void {
   if (id !== loop) return;

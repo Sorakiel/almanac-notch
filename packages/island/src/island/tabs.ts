@@ -6,6 +6,7 @@ import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { card, cardMascot } from './card';
 import { inLayer, layer, shared } from './reveal';
+import { AUTO_CLOSE } from './focus';
 
 /** proto: drawChat */
 export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
@@ -282,11 +283,7 @@ function drawHostSettings(
     c,
     R,
     r1,
-    [
-      ['10 с', '10'],
-      ['15 с', '15'],
-      ['30 с', '30'],
-    ],
+    AUTO_CLOSE.map((n) => [`${n} с`, String(n)] as [string, string]),
     String(host.autoClose),
     'host:close',
   );
