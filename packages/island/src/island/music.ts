@@ -302,6 +302,8 @@ export function drawRail(
   const rows = items.map((it, i) => {
     const y = top + i * step,
       st = s.railK[it.id] || (s.railK[it.id] = { k: 0, last: t });
+    // the hover zones stay on the resting stack: zones that moved with the fan would slide out from
+    // under a still pointer and rock the stack back and forth
     const hy0 = i === 0 ? cy0 : y - step / 2,
       hy1 = i === n - 1 ? cy1 : y + step / 2;
     const hov = hovering(s, rx0, hy0, rw, hy1 - hy0);
@@ -309,12 +311,17 @@ export function drawRail(
     st.last = t;
     return { it, y, k: st.k, hy0, hy1 };
   });
-  // bottom first: the upper one sits in front, as in a stack; only a mascot visibly lifted by the
-  // hover comes to the front. Sorting every row by k let a spring settling around 0 (-0.03, +4e-4,
-  // -2e-6...) flip a mascot from under all the others to over them frame after frame
-  const lifted = (r: (typeof rows)[number]) => r.k > 0.02;
-  const order = [...[...rows].reverse().filter((r) => !lifted(r)), ...rows.filter(lifted).sort((a, b) => a.k - b.k)];
-  for (const { it, y, k } of order) {
+  // The hovered mascot shows its whole face by the stack fanning open around it, not by jumping in
+  // front: the ones above slide up, the rest down, by what the one above covers of it (grown by the
+  // hover), as far as the card's free space allows. The order never changes, so nothing flips over
+  // an overlapping neighbour mid-way - lifting to the front did, twice per hover change, in one frame
+  // (strip rail-sweep, 2026-10-24, docs/CHANGES.md).
+  const free = cy1 - cy0 - pad * 2 - d - step * (n - 1);
+  const gap = Math.max(0, Math.min(d * 1.05 - step, free));
+  const fan = rows.map((_, i) => rows.reduce((a, r, j) => a + (j === i ? 0 : r.k * gap * (i < j ? -0.5 : 0.5)), 0));
+  rows.forEach((r, i) => (r.y += fan[i] as number));
+  // bottom first: the upper one sits in front, as in a stack
+  for (const { it, y, k } of [...rows].reverse()) {
     const i = items.indexOf(it);
     slime(s, c, it, cx, y, d * (1 + 0.1 * k), k, seqDt === null ? 1 : evSlideK(seqDt, i), i * 0.04);
   }
