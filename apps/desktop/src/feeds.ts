@@ -394,6 +394,19 @@ export interface GhState {
   prs: number;
   /** my commits of 7 days, epoch ms */
   commits: number[];
+  /** the PRs waiting for my review (absent from an older app build) */
+  review?: GhPr[];
+}
+
+export interface GhPr {
+  repo: string;
+  full: string;
+  number: number;
+  title: string;
+  author: string | null;
+  created: number;
+  url: string;
+  draft: boolean;
 }
 
 /** characters of the CI line that stay readable next to the glyph (the prototype's longest is 20) */
@@ -444,6 +457,7 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
     hint: [tr(L, hint[0]), tr(L, hint[1])],
     runs: [],
     fail: null,
+    review: [],
   });
   if (!g || g.auth === 'off') return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена');
   if (g.auth === 'bad') return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят');
@@ -453,6 +467,15 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
   const commits = commitDays(g.commits, now);
   const runs = withCi.map(ciRunOf).sort((a, b) => b.at - a.at),
     fail = runs.find((r) => r.state === 'fail') ?? null;
+  const review = (g.review ?? []).map((p) => ({
+    repo: p.repo,
+    num: p.number,
+    title: p.title,
+    author: p.author ?? '',
+    at: p.created,
+    url: p.url,
+    draft: p.draft,
+  }));
   if (!latest)
     return {
       auth: 'ok',
@@ -465,6 +488,7 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
       hint: ['', ''],
       runs,
       fail,
+      review,
     };
   // the card line is narrow: the status is short, the repository gets what is left
   const st =
@@ -488,6 +512,7 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
     hint: ['', ''],
     runs,
     fail,
+    review,
   };
 }
 

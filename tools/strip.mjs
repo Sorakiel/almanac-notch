@@ -165,6 +165,65 @@ if (scene === 'hover-mascot') {
   await p.mouse.down();
   await p.mouse.up();
   await shoot();
+} else if (scene === 'github-depth') {
+  // GitHub's card on its levels: the CI of every repository, a red one inside, back, the PRs
+  await p.evaluate(() => {
+    const s = window.__state,
+      now = s.date().getTime();
+    const run = (repo, state, check, mins, title) => ({
+      key: repo + '#a1b2c3d', state, repo, branch: 'main', check, sha: 'a1b2c3d', title,
+      done: state === 'ok' ? 5 : 3, total: 5, at: now - mins * 60000, rerun: state === 'fail',
+    });
+    const runs = [
+      run('almanac-notch', 'fail', 'build', 4, 'Fan the rail stack open'),
+      run('almanac-app', 'ok', '', 26, 'Add habit history'),
+      run('portfolio', 'run', '', 2, 'Tune the hero'),
+      run('parkovich', 'ok', '', 180, 'Map pins'),
+      run('foa', 'ok', '', 1500, 'Bump deps'),
+    ];
+    const pr = (num, repo, title, author, h, draft = false) => ({
+      repo, num, title, author, at: now - h * 3600000, url: `https://github.com/me/${repo}/pull/${num}`, draft,
+    });
+    s.github = {
+      auth: 'ok', ci: 'fail', ciText: 'almanac-notch · упал: build', short: 'CI упал', prs: 4, prText: '',
+      commits: [4, 0, 6, 9, 3, 7, 5], hint: ['', ''], runs, fail: runs[0],
+      review: [
+        pr(31, 'almanac-app', 'Streaks in the integration API', 'ann', 2),
+        pr(12, 'portfolio', 'Case study: Grok Bot', 'max', 20),
+        pr(7, 'parkovich', 'Offline map tiles', 'lee', 50, true),
+        pr(5, 'foa', 'Typo in README', 'kim', 90),
+      ],
+    };
+  });
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  // the red CI was seen already: the card is its summary, not the alert (island/ci.ts)
+  await p.evaluate(() => {
+    const s = window.__state;
+    s.focusId = 'github';
+    s.ciSeen = s.ciHidden = s.github.runs[0].key;
+  });
+  await p.clock.runFor(1500);
+  const click = async (act) => {
+    const h = await p.evaluate((a) => window.__state.hits.find((x) => x.act === a || x.act.startsWith(a)), act);
+    if (!h) throw new Error('no zone ' + act + ' in ' + (await p.evaluate(() => window.__state.hits.map((x) => x.act).join(' '))));
+    await p.mouse.move(h.x + h.w * 0.5, h.y + h.h / 2);
+    await shoot();
+    await p.mouse.down();
+    await p.mouse.up();
+  };
+  await click('depth:github:ci');
+  await shoot();
+  await click('depth:github:run:almanac-notch');
+  await shoot();
+  await click('depth:back');
+  await shoot();
+  await click('depth:back');
+  await shoot();
+  await click('depth:github:prs');
+  await shoot();
+  await click('depth:github:pr:');
+  await shoot();
 } else if (scene === 'autoclose') {
   // the island opened by a click, then the pointer leaves: the countdown, then the fold
   await p.evaluate(() => (window.__state.host.openOnHover = false));

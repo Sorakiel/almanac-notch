@@ -167,6 +167,12 @@ fn github_open(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) {
     }
 }
 
+/// A PR or another GitHub page from the card's lists (github::open keeps to github.com).
+#[tauri::command]
+fn github_open_url(url: String) {
+    github::open(&url);
+}
+
 #[tauri::command]
 async fn github_rerun(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) -> Result<(), String> {
     let r = gh_repo(&feeds, &name)
@@ -789,6 +795,7 @@ pub fn run() {
             github_connect,
             github_disconnect,
             github_open,
+            github_open_url,
             github_rerun,
             vercel_connect,
             vercel_disconnect,

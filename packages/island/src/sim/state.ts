@@ -152,6 +152,8 @@ export interface GithubFeed {
   runs: CiRun[];
   /** the newest failing head, null when nothing is red */
   fail: CiRun | null;
+  /** the PRs waiting for my review, newest first (the card's list; absent in the harness) */
+  review?: { repo: string; num: number; title: string; author: string; at: number; url: string; draft: boolean }[];
 }
 
 /**

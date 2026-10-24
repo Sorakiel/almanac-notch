@@ -61,6 +61,46 @@ pub struct State {
     pub prs: u32,
     /// my commits of the last 7 days, epoch ms
     pub commits: Vec<f64>,
+    /// the open PRs that wait for my review, newest first (the card's list, stage 10)
+    pub review: Vec<Pr>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Pr {
+    /// short repository name and "owner/name"
+    pub repo: String,
+    pub full: String,
+    pub number: u64,
+    pub title: String,
+    pub author: Option<String>,
+    /// opened, epoch ms
+    pub created: f64,
+    /// the PR's page; only https://github.com/ links are kept
+    pub url: String,
+    pub draft: bool,
+}
+
+/// The PRs of the review search; anything without a GitHub link is left out.
+fn parse_review(v: &Value) -> Vec<Pr> {
+    v["data"]["prs"]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| {
+            let url = n["url"].as_str().filter(|u| u.starts_with("https://github.com/"))?;
+            let full = n["repository"]["nameWithOwner"].as_str()?.to_owned();
+            Some(Pr {
+                repo: full.rsplit('/').next().unwrap_or(&full).to_owned(),
+                full,
+                number: n["number"].as_u64()?,
+                title: n["title"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" "),
+                author: n["author"]["login"].as_str().map(str::to_owned),
+                created: n["createdAt"].as_str().and_then(parse_time).unwrap_or(0.0),
+                url: url.to_owned(),
+                draft: n["isDraft"].as_bool().unwrap_or(false),
+            })
+        })
+        .collect()
 }
 
 impl State {
@@ -72,6 +112,7 @@ impl State {
             repo_count: 0,
             prs: 0,
             commits: Vec::new(),
+            review: Vec::new(),
         }
     }
 }
@@ -113,7 +154,10 @@ const QUERY: &str = "query($since: GitTimestamp!, $author: ID) {
       }
     }
   }
-  prs: search(query: \"is:pr is:open review-requested:@me archived:false\", type: ISSUE, first: 1) { issueCount }
+  prs: search(query: \"is:pr is:open review-requested:@me archived:false sort:created-desc\", type: ISSUE, first: 20) {
+    issueCount
+    nodes { ... on PullRequest { number title url isDraft createdAt author { login } repository { nameWithOwner } } }
+  }
 }";
 
 /// Step 2: the checks of the chosen commits.
@@ -272,6 +316,7 @@ fn parse_branches(v: &Value, me: &str) -> Option<(State, Vec<Pick>)> {
         repo_count: repos["totalCount"].as_u64().unwrap_or(0) as u32,
         prs: v["data"]["prs"]["issueCount"].as_u64().unwrap_or(0) as u32,
         commits: Vec::new(),
+        review: parse_review(v),
     };
     let mut picks: Vec<Pick> = Vec::new();
     for r in repos["nodes"].as_array()? {
@@ -591,6 +636,23 @@ pub fn disconnect() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_list_keeps_github_links_only() {
+        let v = json!({"data": {"prs": {"issueCount": 3, "nodes": [
+            {"number": 7, "title": "Fix   the\nrail", "url": "https://github.com/me/app/pull/7", "isDraft": false,
+             "createdAt": "2026-10-20T10:00:00Z", "author": {"login": "ann"}, "repository": {"nameWithOwner": "me/app"}},
+            {"number": 8, "title": "x", "url": "https://evil.example/pull/8", "repository": {"nameWithOwner": "me/app"}},
+            {"number": 9, "title": "Draft", "url": "https://github.com/org/lib/pull/9", "isDraft": true,
+             "author": null, "repository": {"nameWithOwner": "org/lib"}}
+        ]}}});
+        let r = parse_review(&v);
+        assert_eq!(r.len(), 2);
+        assert_eq!((r[0].repo.as_str(), r[0].number, r[0].title.as_str()), ("app", 7, "Fix the rail"));
+        assert_eq!(r[0].author.as_deref(), Some("ann"));
+        assert!(r[0].created > 0.0);
+        assert!(r[1].draft && r[1].author.is_none());
+    }
 
     #[test]
     fn time_roundtrip() {

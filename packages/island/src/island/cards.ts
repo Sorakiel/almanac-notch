@@ -73,6 +73,288 @@ function habitRow(
   addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
 }
 
+/** "5 мин", "3 ч", "2 дн": the age in a list's right column */
+function shortAgo(s: IslandState, at: number): string {
+  if (!at) return '';
+  const min = Math.floor((s.date().getTime() - at) / 60000);
+  if (min < 1) return tr(s, 'сейчас');
+  if (min < 60) return tr(s, '{0} мин', min);
+  const h = Math.floor(min / 60);
+  return h < 24 ? tr(s, '{0} ч', h) : tr(s, '{0} дн', Math.floor(h / 24));
+}
+
+/** a chevron at (x, y): the row goes further */
+function chevron(c: Ctx, x: number, y: number, col: string): void {
+  c.save();
+  c.strokeStyle = col;
+  c.lineWidth = 1.4;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(x - 1.75, y - 3.5);
+  c.lineTo(x + 1.75, y);
+  c.lineTo(x - 1.75, y + 3.5);
+  c.stroke();
+  c.restore();
+}
+
+/** the plate of a row that is a button: lit on a spring under the pointer; returns the light 0..1 */
+function rowPlate(s: IslandState, c: Ctx, id: string, tx: number, y: number, tmax: number, base = 0.03): number {
+  const k = clamp(hoverK(s, 'row:' + id, hovering(s, tx - 6, y - 10, tmax + 6, 20), 0.16, 1), 0, 1);
+  c.fillStyle = `rgba(255,255,255,${(base + 0.045 * k).toFixed(3)})`;
+  rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
+  c.fill();
+  return k;
+}
+
+/**
+ * One row of a list inside a card (stage 10): a mark (a state dot), an optional mono lead
+ * ("app#12", "15:00"), the name, a quiet note on the right; the row opens `act`, a chevron shows
+ * under the pointer where the note gives way.
+ */
+function listLine(
+  s: IslandState,
+  c: Ctx,
+  id: string,
+  act: string,
+  y: number,
+  tx: number,
+  tmax: number,
+  mark: (x: number, y: number) => void,
+  name: string,
+  meta: string,
+  lead = '',
+  dim = false,
+): void {
+  const k = rowPlate(s, c, id, tx, y, tmax);
+  mark(tx + 3, y);
+  let x = tx + 12;
+  if (lead) {
+    textAt(c, lead, x, y + 0.5, { size: 11, weight: 500, mono: true, color: DIM });
+    c.save();
+    c.font = '500 11px "JetBrains Mono", monospace';
+    x += c.measureText(lead).width + 6;
+    c.restore();
+  }
+  c.save();
+  c.font = '400 11px Onest, system-ui, sans-serif';
+  const mw = meta ? c.measureText(meta).width + 8 : 0;
+  c.restore();
+  textAt(c, name, x, y + 0.5, {
+    size: 11.5,
+    weight: 500,
+    color: dim ? DIM3 : k > 0.5 ? INK : VAL,
+    max: Math.max(20, tx + tmax - x - mw - 12),
+  });
+  if (meta) textAt(c, meta, tx + tmax - 12 * k, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  if (k > 0.01) {
+    c.save();
+    c.globalAlpha *= k;
+    chevron(c, tx + tmax - 3, y, DIM);
+    c.restore();
+  }
+  addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
+}
+
+/** a small dot of a colour: the mark of a list row */
+const dotMark =
+  (c: Ctx, col: string, r = 2.6) =>
+  (x: number, y: number): void => {
+    c.fillStyle = col;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fill();
+  };
+
+type GhFeed = NonNullable<IslandState['github']>;
+
+/** GitHub's levels: '' the summary, 'ci' every repository's CI, 'run:<repo>' one of them,
+ * 'prs' the PRs waiting for review, 'pr:<n>@<repo>' one of them */
+function githubLevel(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  gh: GhFeed,
+  key: string,
+  tx: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  tmax: number,
+): void {
+  const review = gh.review ?? [];
+  const listTop = y0 + ROW0 - ROW_STEP / 2,
+    listH = y1 - listTop + 9;
+  if (key === 'ci' && gh.runs.length) {
+    backHead(s, c, tr(s, 'Проверки'), tx, y0 + 18, tmax - 40);
+    textAt(c, String(gh.runs.length), tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: DIM, align: 'right' });
+    scrollList(s, c, 'github:ci', tx - 6, listTop, tmax + 6, listH, gh.runs.length, ROW_STEP, (i, cy) => {
+      const r = gh.runs[i] as CiRun;
+      listLine(
+        s,
+        c,
+        'ci:' + r.repo,
+        'depth:github:run:' + r.repo,
+        cy,
+        tx,
+        tmax,
+        (x, y) => deployDot(c, x, y + 0.5, 2.6, r.state, s.t),
+        r.repo,
+        shortAgo(s, r.at),
+      );
+    });
+    return;
+  }
+  if (key.startsWith('run:')) {
+    const r = gh.runs.find((x) => x.repo === key.slice(4));
+    if (r) return ghRun(s, c, r, tx, y0, tmax);
+  }
+  if (key === 'prs' && review.length) {
+    backHead(s, c, tr(s, 'Ждут ревью'), tx, y0 + 18, tmax - 40);
+    textAt(c, String(gh.prs), tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: DIM, align: 'right' });
+    scrollList(s, c, 'github:prs', tx - 6, listTop, tmax + 6, listH, review.length, ROW_STEP, (i, cy) => {
+      const p = review[i] as GhPr;
+      listLine(
+        s,
+        c,
+        `pr:${p.num}@${p.repo}`,
+        `depth:github:pr:${p.num}@${p.repo}`,
+        cy,
+        tx,
+        tmax,
+        dotMark(c, p.draft ? DIM3 : '#8AB4F8'),
+        p.title,
+        shortAgo(s, p.at),
+        '#' + p.num,
+        p.draft,
+      );
+    });
+    return;
+  }
+  if (key.startsWith('pr:')) {
+    const p = review.find((x) => `pr:${x.num}@${x.repo}` === key);
+    if (p) return ghPr(s, c, p, tx, y0, tmax);
+  }
+  // the summary, its first two rows lead further
+  brandHead(s, c, 'github', it.name, tx, y0, x1);
+  const ci = gh.ci,
+    repo = gh.ciText.includes(' · ') ? (gh.ciText.split(' · ')[0] as string) : '';
+  const ciWord =
+    ci === 'ok'
+      ? tr(s, 'зелёный')
+      : ci === 'fail'
+        ? tr(s, 'упал')
+        : ci === 'run'
+          ? tr(s, 'идёт')
+          : tr(s, 'нет проверок');
+  const nav = (id: string, act: string | null, y: number, draw: (tm: number) => void): void => {
+    if (!act) return draw(tmax);
+    const k = rowPlate(s, c, id, tx, y, tmax, 0);
+    draw(tmax - 12 * k);
+    if (k > 0.01) {
+      c.save();
+      c.globalAlpha *= k;
+      chevron(c, tx + tmax - 3, y, DIM);
+      c.restore();
+    }
+    addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
+  };
+  nav('gh:ci', gh.runs.length ? 'depth:github:ci' : null, y0 + ROW0, (tm) =>
+    statRow(
+      c,
+      (x, y) => stateDisc(c, x, y, ci),
+      repo ? tr(s, 'CI · {0}', repo) : tr(s, 'CI основной ветки'),
+      ciWord,
+      tx,
+      y0 + ROW0,
+      tm,
+      ci === 'fail' ? '#F4505E' : VAL,
+    ),
+  );
+  nav('gh:prs', review.length ? 'depth:github:prs' : null, y0 + ROW0 + ROW_STEP, (tm) =>
+    statRow(c, (x, y) => prIcon(c, x, y), tr(s, 'Ждут ревью'), String(gh.prs), tx, y0 + ROW0 + ROW_STEP, tm),
+  );
+  statRow(
+    c,
+    (x, y) => rowIcon(c, 'commits', x, y),
+    tr(s, 'Коммиты за 7 дней'),
+    String(gh.commits.reduce((a, b) => a + b, 0)),
+    tx,
+    y0 + ROW0 + ROW_STEP * 2,
+    tmax,
+  );
+}
+
+type GhPr = NonNullable<GhFeed['review']>[number];
+
+/** one repository's CI inside the card: what broke and where, open the run, re-run it */
+function ghRun(s: IslandState, c: Ctx, r: CiRun, tx: number, y0: number, tmax: number): void {
+  backHead(s, c, r.repo, tx, y0 + 18, tmax - 50);
+  textAt(c, shortAgo(s, r.at), tx + tmax, y0 + 18.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  const fail = r.state === 'fail',
+    of = r.total ? ` · ${r.done}/${r.total}` : '';
+  const lead = fail
+    ? r.check
+      ? tr(s, 'Упала проверка {0}', r.check)
+      : tr(s, 'CI упал')
+    : r.state === 'ok'
+      ? tr(s, 'Все проверки прошли') + of
+      : tr(s, 'Проверки идут') + of;
+  let y = y0 + ROW0;
+  stateDisc(c, tx + 6, y, r.state);
+  textAt(c, lead, tx + 18, y + 0.5, { size: 11.5, weight: 600, color: fail ? '#F4505E' : VAL, max: tmax - 18 });
+  y += ROW_STEP;
+  // the commit: its branch and short sha in mono, then its title; or how the re-run went
+  const note = s.ciNote && s.ciNote.key === r.key ? s.ciNote : null;
+  if (note) textAt(c, note.text, tx, y + 0.5, { size: 11, weight: 500, color: note.err ? '#F5B94A' : VAL, max: tmax });
+  else {
+    const ref = `${r.branch} ${r.sha}`;
+    textAt(c, ref, tx, y + 0.5, { size: 10.5, weight: 500, mono: true, color: DIM3 });
+    c.save();
+    c.font = '500 10.5px "JetBrains Mono", monospace';
+    const rw = c.measureText(ref).width + 7;
+    c.restore();
+    textAt(c, r.title, tx + rw, y + 0.5, { size: 11, weight: 400, color: DIM, max: tmax - rw });
+  }
+  y += ROW_STEP + 3;
+  let x = tx - 2;
+  if (fail && r.rerun) {
+    const label = tr(s, 'Перезапустить');
+    c.save();
+    c.font = '500 11.5px Onest, system-ui, sans-serif';
+    const w = c.measureText(label).width + 22;
+    c.restore();
+    button(s, c, x, y - 10, w, 20, label, 'gh:rerun:' + r.repo, true);
+    x += w + 10;
+  }
+  // the run's page on GitHub: the full label where it fits, else the short one
+  const full = tr(s, 'Открыть прогон');
+  c.save();
+  c.font = '500 11.5px Onest, system-ui, sans-serif';
+  const fits = x + c.measureText(full).width + 26 <= tx + tmax + 4;
+  c.restore();
+  linkOut(s, c, fits ? full : tr(s, 'Открыть'), 'gh:open:' + r.repo, x, y, tx + tmax);
+}
+
+/** one PR waiting for review: whose, how old, open it on GitHub to read the change */
+function ghPr(s: IslandState, c: Ctx, p: GhPr, tx: number, y0: number, tmax: number): void {
+  // the number first: it is what a cut title would lose
+  backHead(s, c, `#${p.num} · ${p.repo}`, tx, y0 + 18, tmax - 50);
+  textAt(c, shortAgo(s, p.at), tx + tmax, y0 + 18.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  let y = y0 + ROW0;
+  textAt(c, p.title, tx, y + 0.5, { size: 11.5, weight: 600, color: VAL, max: tmax });
+  y += ROW_STEP;
+  const who = [p.author ? '@' + p.author : '', p.draft ? tr(s, 'черновик') : ''].filter(Boolean).join(' · ');
+  if (who) textAt(c, who, tx, y + 0.5, { size: 11, weight: 400, color: DIM, max: tmax });
+  y += ROW_STEP + 3;
+  const label = tr(s, 'Открыть на GitHub');
+  c.save();
+  c.font = '500 11.5px Onest, system-ui, sans-serif';
+  const w = c.measureText(label).width + 22;
+  c.restore();
+  button(s, c, tx - 2, y - 10, w, 20, label, 'gh:url:' + p.url, true);
+}
+
 type AlFeed = NonNullable<IslandState['almanac']>;
 type AlRow = AlFeed['rows'][number];
 
@@ -855,6 +1137,13 @@ export function drawFocusCard(
         ? habitLevel(s, c, al, key.slice(5), tx, y0, tmax)
         : habitList(s, c, it, al, tx, y0, x1, y1, tmax),
     );
+    return;
+  }
+  // GitHub: the summary's rows open the CI of every repository and the PRs waiting for review
+  // (stage 10); the wide card of a red CI stays as it was (island/ci.ts)
+  if (it.kind === 'ci' && s.github && s.github.auth === 'ok' && !(tmax > 300 && ciRun(s))) {
+    const gh = s.github;
+    drawDepth(s, c, 'github', (key) => githubLevel(s, c, it, gh, key, tx, y0, x1, y1, tmax));
     return;
   }
   // one head for every card; the calendar's says how soon the next meeting is (amber when close)

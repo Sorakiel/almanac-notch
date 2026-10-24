@@ -624,6 +624,7 @@ function tick(now: number, id: number): void {
     if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
     else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
     else if (r.startsWith('gh:open:')) void invoke('github_open', { name: r.slice(8) });
+    else if (r.startsWith('gh:url:')) void invoke('github_open_url', { url: r.slice(7) });
     else if (r.startsWith('gh:rerun:')) rerunCi(r.slice(9));
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
