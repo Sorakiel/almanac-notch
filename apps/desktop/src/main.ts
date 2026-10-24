@@ -139,6 +139,9 @@ function saveCard(): void {
   }
 }
 
+/** a full-screen app is in front and the island is hidden (src-tauri platform, `fullscreen_tick`) */
+let fullscreen = false;
+
 // sounds (stage 9a): on by default and quiet; the speaker and the card's switch turn them off
 const player = new SoundPlayer(),
   sounds = new SoundWatch();
@@ -150,7 +153,9 @@ function playSounds(): void {
   const { play, stop } = sounds.step(s),
     clicks = sounds.takeClicks(s.t);
   for (const n of stop) player.fadeOut(n);
-  if (s.muted || !s.host) return;
+  // hidden behind a full-screen game or film: the island keeps quiet (owner, 2026-10-24); the
+  // frame's sounds are still taken, so nothing plays late when it comes back
+  if (s.muted || !s.host || fullscreen) return;
   player.setVolume(s.host.volume);
   pollQuiet();
   const mood: SoundMood = {
@@ -407,6 +412,10 @@ if (inTauri) {
   await listen<Geometry>('island://geometry', (e) => applyGeometry(e.payload));
   await listen<IslandPoint | null>('island://cursor', (e) => pointer(e.payload));
   await listen<string>('island://debug', (e) => debug(e.payload));
+  await listen<boolean>('island://fullscreen', (e) => {
+    fullscreen = e.payload;
+    if (fullscreen) for (const n of SOUND_NAMES) player.fadeOut(n, 0.1);
+  });
   agent = new AgentDriver({
     m,
     send: (id, answer) => void invoke('agent_answer', { id, answer }),
