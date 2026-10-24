@@ -120,18 +120,18 @@ if (scene === 'hover-mascot') {
   // Almanac's card on its levels: the list of the day, the wheel down and up, into a habit, back
   await p.evaluate(() => {
     const s = window.__state;
-    const h = (id, name, done, count, goal, streak, week) => ({
+    const h = (id, name, done, count, goal, streak, week, slot) => ({
       id: `00000000-0000-4000-8000-00000000000${id}`, name, done, progress: goal > 1 && !done ? `${count}/${goal}` : '',
-      count, goal, streak, week,
+      count, goal, streak, week, slot,
     });
     const rows = [
-      h(1, 'Зарядка', false, 0, 1, 12, '1111110'),
-      h(2, 'Вода', false, 3, 8, 5, '1101110'),
-      h(3, 'Читать 20 минут', false, 0, 1, 0, '0010000'),
-      h(4, 'Английский', false, 0, 1, 3, '0f01110'),
-      h(5, 'Прогулка', false, 0, 1, 1, '1000010'),
-      h(6, 'Медитация', true, 1, 1, 9, '1111111'),
-      h(7, 'Без сахара', true, 1, 1, 21, '1111111'),
+      h(1, 'Зарядка', false, 0, 1, 12, '1111110', 'утро'),
+      h(2, 'Вода', false, 3, 8, 5, '1101110', 'в течение дня'),
+      h(3, 'Читать 20 минут', false, 0, 1, 0, '0010000', 'вечер'),
+      h(4, 'Английский', false, 0, 1, 3, '0f01110', 'вечер'),
+      h(5, 'Прогулка', false, 0, 1, 1, '1000010', 'день'),
+      h(6, 'Медитация', true, 1, 1, 9, '1111111', 'утро'),
+      h(7, 'Без сахара', true, 1, 1, 21, '1111111', 'в течение дня'),
     ];
     s.almanac = { auth: 'ok', rows, done: 2, total: 7, short: 'привычки 2 из 7', hint: ['', ''], note: '' };
   });

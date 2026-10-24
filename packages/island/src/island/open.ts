@@ -7,6 +7,7 @@ import type { Status } from '../sim/events';
 import type { WorkFx } from './fx';
 import { effectiveFocus } from './focus';
 import { addHit, hovering, withScale } from './hits';
+import { depthTop } from './depth';
 import { card, cardTint, haloTint } from './card';
 import { ciAlert } from './ci';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
@@ -343,6 +344,12 @@ export function drawOpen(
   }
 }
 
+/** The card's state tint (a red CI) belongs to its summary: inside a list or an item it would
+ * colour things it says nothing about, so it fades out on a spring while a level is open. */
+function levelTint(s: IslandState, f: ModuleId | null): number {
+  return f ? clamp(hoverK(s, 'level-tint', depthTop(s, f) === '', 0.3, 1), 0, 1) : 1;
+}
+
 /** the focus card takes this share of home: the active module says more than the others together */
 const SPLIT = 0.53;
 /** the module rail beside a big event card, as Grok Bot's */
@@ -443,7 +450,7 @@ function drawBody(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, c
     } else {
       if (!shared.card) card(c, X0, cy0, bw, cy1 - cy0, false);
       const tintC = focusTint(s, f);
-      if (tintC) cardTint(c, X0, cy0, bw, cy1 - cy0, tintC.c, tintC.a * seq.tintA);
+      if (tintC) cardTint(c, X0, cy0, bw, cy1 - cy0, tintC.c, tintC.a * seq.tintA * levelTint(s, f));
       if (seq.on) {
         cardFade.a = c.globalAlpha;
         c.globalAlpha *= seq.textA;
@@ -499,7 +506,7 @@ function drawBody(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, c
   layer(s, c, 0);
   if (!shared.card) card(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, false);
   const tintC = focusTint(s, f);
-  if (tintC) cardTint(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, tintC.c, tintC.a);
+  if (tintC) cardTint(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, tintC.c, tintC.a * levelTint(s, f));
   c.save();
   cardFade.a = c.globalAlpha;
   c.globalAlpha *= k;

@@ -2,7 +2,7 @@
 // scrolls -> one item -> an action -> back. One mechanism for every module: a module only says
 // what a level shows; the levels, their transition, the scroll and the way back live here.
 import { clamp, ss } from '../util/math';
-import { rrect, textAt, type Ctx } from '../util/draw';
+import { textAt, type Ctx } from '../util/draw';
 import type { IslandState, ModuleId } from '../sim/state';
 import { addHit, hovering, withShift } from './hits';
 import { hoverK } from './hover';
@@ -105,35 +105,49 @@ export function drawDepth(s: IslandState, c: Ctx, mod: ModuleId, draw: (key: str
   c.restore();
 }
 
-/** a level's head: a back chevron and the title, the whole pair a button; returns the right edge */
-export function backHead(s: IslandState, c: Ctx, title: string, x: number, y: number, max: number): number {
+/**
+ * A level's head, as coucou's mail message head: a quiet grey chevron (the way out), a dot of the
+ * item's colour, the title in 11.5 semibold; chevron, dot and title are one button. `dot` null
+ * leaves the dot out. Returns the right edge.
+ */
+export function backHead(
+  s: IslandState,
+  c: Ctx,
+  title: string,
+  x: number,
+  y: number,
+  max: number,
+  dot: string | null = null,
+): number {
+  const tx = x + 14 + (dot ? 10 : 0);
   c.save();
-  c.font = '600 12.5px Onest, system-ui, sans-serif';
-  const tw = Math.min(c.measureText(title).width, max - 18);
+  c.font = '600 11.5px Onest, system-ui, sans-serif';
+  const tw = Math.min(c.measureText(title).width, Math.max(10, x + max - tx));
   c.restore();
-  const w = tw + 24,
-    hov = hoverK(s, 'depth:back', hovering(s, x - 6, y - 10, w, 20), 0.2, 1);
-  if (hov > 0.01) {
-    c.fillStyle = `rgba(255,255,255,${(0.07 * hov).toFixed(3)})`;
-    rrect(c, x - 6, y - 10, w, 20, 10);
-    c.fill();
-  }
+  const w = tx - x + tw + 6,
+    hov = clamp(hoverK(s, 'depth:back', hovering(s, x - 6, y - 10, w + 6, 20), 0.16, 1), 0, 1);
   c.save();
-  c.strokeStyle = hov > 0.5 ? '#F5F6F8' : '#8E939C';
-  c.lineWidth = 1.6;
+  // grey at rest, it lights up and leans left a touch under the pointer: it is the way out
+  c.strokeStyle = hov > 0.5 ? '#C5C8CD' : '#6B7079';
+  c.lineWidth = 1.5;
   c.lineCap = 'round';
   c.lineJoin = 'round';
   c.beginPath();
-  // the chevron leans left a touch under the pointer: it is the way out
   const nx = x + 3 - 1.2 * hov;
-  c.moveTo(nx + 3, y - 4.5);
+  c.moveTo(nx + 2.5, y - 4);
   c.lineTo(nx - 1.5, y);
-  c.lineTo(nx + 3, y + 4.5);
+  c.lineTo(nx + 2.5, y + 4);
   c.stroke();
   c.restore();
-  textAt(c, title, x + 13, y + 0.5, { size: 12.5, weight: 600, color: '#F5F6F8', max: max - 18 });
-  addHit(s, c, { x: x - 6, y: y - 10, w, h: 20, act: 'depth:back' });
-  return x - 6 + w;
+  if (dot) {
+    c.fillStyle = dot;
+    c.beginPath();
+    c.arc(x + 17, y, 3, 0, Math.PI * 2);
+    c.fill();
+  }
+  textAt(c, title, tx, y + 0.5, { size: 11.5, weight: 600, color: '#F5F6F8', max: Math.max(10, x + max - tx) });
+  addHit(s, c, { x: x - 6, y: y - 10, w: w + 6, h: 20, act: 'depth:back' });
+  return x + w;
 }
 
 /**

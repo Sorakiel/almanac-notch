@@ -248,6 +248,8 @@ export interface AlmanacFeed {
     streak?: number | null;
     /** the last 7 days, today last: '1' done, 'f' frozen, '0' else; null without the history */
     week?: string | null;
+    /** when in the day, a word ("утро"); '' when Almanac does not say */
+    slot?: string;
   }[];
   /** a short line after a tap that did not reach Almanac: the row has gone back; '' none */
   note?: string;

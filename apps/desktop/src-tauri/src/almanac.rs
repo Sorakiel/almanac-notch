@@ -50,6 +50,8 @@ pub struct Habit {
     pub done: bool,
     /// the schedule and the last 64 days ('1' done, 'f' frozen, '0' else, today last), from
     /// Almanac's migration 0041; None from an Almanac without it - then no streak is shown
+    /// when in the day: "morning" | "afternoon" | "evening" | "anytime" | "week"
+    pub slot: Option<String>,
     pub frequency: Option<String>,
     pub target: Option<i64>,
     pub history: Option<String>,
@@ -311,6 +313,12 @@ fn parse(v: &Value) -> State {
                 count,
                 goal,
                 done: h["done"].as_bool().unwrap_or(count >= goal),
+                slot: h["slot"]
+                    .as_str()
+                    .filter(|s| {
+                        matches!(*s, "morning" | "afternoon" | "evening" | "anytime" | "week")
+                    })
+                    .map(str::to_owned),
                 frequency: h["frequency"].as_str().map(str::to_owned),
                 target: h["target"].as_i64(),
                 history: h["history"]

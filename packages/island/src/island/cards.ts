@@ -1,6 +1,6 @@
 // Cards of the home tab: the focus card, approvals and questions, the overload alert, the launch warp.
 import { plural, tr } from '../i18n';
-import { clamp, hexA, ss } from '../util/math';
+import { clamp, hexA, mixHex, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { CiRun, IslandState, ModuleId } from '../sim/state';
 import { ciRun } from './ci';
@@ -9,8 +9,8 @@ import { drawMascot } from '../mascot/body';
 import { propFor } from '../mascot/props';
 import { TRACKS, type ToolKind } from '../stub';
 import type { WorkFx } from './fx';
-import { addHit, button, hovering } from './hits';
-import { hoverK } from './hover';
+import { addHit, hovering } from './hits';
+import { hoverK, pressScale } from './hover';
 import { backHead, drawDepth, scrollList } from './depth';
 import { T_MUTED } from './half';
 import { MODULE_COL, minsText } from './focus';
@@ -73,7 +73,26 @@ function habitRow(
   addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
 }
 
-/** "5 мин", "3 ч", "2 дн": the age in a list's right column */
+// ---------- levels inside a card (stage 10) ----------
+// One quiet system for every module's lists and items, coucou's mail card's (NotchBuddy
+// MailViews.swift): rows of 11 / 10 px, a 5 px dot, the rows that want attention on a wash of the
+// module's colour, the rest on nothing; an item is its head, one line in 11, a body in 10.5, and
+// its actions as words - the first in the module's colour, the others grey. No filled buttons
+// inside a card: a white pill shouted over everything around it (owner, 2026-10-25).
+
+/** the tones of a level (coucou's mail): a lead line, the body, a quiet line, the quietest */
+const L_LEAD = '#E8E9EC',
+  L_SUBJ = '#C5C8CD',
+  L_BODY = '#9398A1',
+  L_SUB = '#8E939C',
+  L_FAINT = '#4D5159';
+/** an item's lines under its head */
+const IT_SUBJ = 38,
+  IT_BODY = 55,
+  IT_BODY2 = 69,
+  IT_ACT = 88;
+
+/** "5 мин", "3 ч", "2 дн": an age in a row */
 function shortAgo(s: IslandState, at: number): string {
   if (!at) return '';
   const min = Math.floor((s.date().getTime() - at) / 60000);
@@ -98,75 +117,214 @@ function chevron(c: Ctx, x: number, y: number, col: string): void {
   c.restore();
 }
 
-/** the plate of a row that is a button: lit on a spring under the pointer; returns the light 0..1 */
-function rowPlate(s: IslandState, c: Ctx, id: string, tx: number, y: number, tmax: number, base = 0.03): number {
-  const k = clamp(hoverK(s, 'row:' + id, hovering(s, tx - 6, y - 10, tmax + 6, 20), 0.16, 1), 0, 1);
-  c.fillStyle = `rgba(255,255,255,${(base + 0.045 * k).toFixed(3)})`;
-  rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
-  c.fill();
-  return k;
-}
-
-/**
- * One row of a list inside a card (stage 10): a mark (a state dot), an optional mono lead
- * ("app#12", "15:00"), the name, a quiet note on the right; the row opens `act`, a chevron shows
- * under the pointer where the note gives way.
- */
-function listLine(
+/** the plate of a row that is a button: lit on a spring under the pointer (white 5%), a row that
+ * wants attention on a wash of `wash` (8%, 14% lit); returns the light 0..1 */
+function rowPlate(
   s: IslandState,
   c: Ctx,
   id: string,
-  act: string,
-  y: number,
   tx: number,
+  y: number,
   tmax: number,
-  mark: (x: number, y: number) => void,
-  name: string,
-  meta: string,
-  lead = '',
-  dim = false,
-): void {
-  const k = rowPlate(s, c, id, tx, y, tmax);
-  mark(tx + 3, y);
-  let x = tx + 12;
-  if (lead) {
-    textAt(c, lead, x, y + 0.5, { size: 11, weight: 500, mono: true, color: DIM });
-    c.save();
-    c.font = '500 11px "JetBrains Mono", monospace';
-    x += c.measureText(lead).width + 6;
-    c.restore();
+  wash: string | null = null,
+): number {
+  const k = clamp(hoverK(s, 'row:' + id, hovering(s, tx - 6, y - 10, tmax + 6, 20), 0.16, 1), 0, 1);
+  if (wash) c.fillStyle = hexA(wash, 0.08 + 0.06 * k);
+  else c.fillStyle = `rgba(255,255,255,${(0.05 * k).toFixed(3)})`;
+  if (wash || k > 0.01) {
+    rrect(c, tx - 6, y - 9.5, tmax + 6, 19, 5);
+    c.fill();
   }
+  return k;
+}
+
+/** a small dot of a colour: the mark of a row; hollow (a grey ring) when it is quiet */
+const dotMark =
+  (c: Ctx, col: string | null, r = 2.5) =>
+  (x: number, y: number): void => {
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    if (col) {
+      c.fillStyle = col;
+      c.fill();
+    } else {
+      c.strokeStyle = L_FAINT;
+      c.lineWidth = 1;
+      c.stroke();
+    }
+  };
+
+interface Line {
+  /** the hover spring's key and what a click does */
+  id: string;
+  act: string;
+  /** draws the row's mark centred at (x, y) */
+  mark: (x: number, y: number) => void;
+  /** a mono lead before the name ("15:00"), the name, its age, then a quieter line cut to fit */
+  lead?: string;
+  name: string;
+  meta?: string;
+  sub?: string;
+  /** wants attention: the name in semibold, the row on a wash of `wash` */
+  strong?: boolean;
+  wash?: string | null;
+}
+
+/** one row of a list inside a card, as coucou's mail row: mark, name, age, the rest quieter */
+function listLine(s: IslandState, c: Ctx, L: Line, y: number, tx: number, tmax: number): void {
+  const k = rowPlate(s, c, L.id, tx, y, tmax, L.strong ? (L.wash ?? null) : null);
+  L.mark(tx + 2, y);
+  let x = tx + 10;
+  const right = tx + tmax - 10 * k;
+  const put = (str: string, font: string, opts: Parameters<typeof textAt>[4], gap: number): void => {
+    if (!str || x >= right - 8) return;
+    textAt(c, str, x, y + 0.5, { ...opts, max: right - x });
+    c.save();
+    c.font = font;
+    x += Math.min(c.measureText(str).width, right - x) + gap;
+    c.restore();
+  };
+  put(
+    L.lead ?? '',
+    '500 10.5px "JetBrains Mono", monospace',
+    { size: 10.5, weight: 500, mono: true, color: L.strong ? L_SUBJ : L_BODY },
+    6,
+  );
+  // the name keeps at most two thirds of the row, so its age and the quiet line still show
   c.save();
-  c.font = '400 11px Onest, system-ui, sans-serif';
-  const mw = meta ? c.measureText(meta).width + 8 : 0;
+  c.font = `${L.strong ? 600 : 400} 11px Onest, system-ui, sans-serif`;
+  const nw = Math.min(c.measureText(L.name).width, (right - x) * (L.sub || L.meta ? 0.66 : 1));
   c.restore();
-  textAt(c, name, x, y + 0.5, {
-    size: 11.5,
-    weight: 500,
-    color: dim ? DIM3 : k > 0.5 ? INK : VAL,
-    max: Math.max(20, tx + tmax - x - mw - 12),
-  });
-  if (meta) textAt(c, meta, tx + tmax - 12 * k, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  textAt(c, L.name, x, y + 0.5, { size: 11, weight: L.strong ? 600 : 400, color: L.strong ? L_LEAD : L_BODY, max: nw });
+  x += nw + 5;
+  put(L.meta ?? '', '400 10px Onest, system-ui, sans-serif', { size: 10, weight: 400, color: '#6B7079' }, 5);
+  put(
+    L.sub ?? '',
+    '400 10px Onest, system-ui, sans-serif',
+    { size: 10, weight: 400, color: L.strong ? L_SUB : L_FAINT },
+    0,
+  );
   if (k > 0.01) {
     c.save();
     c.globalAlpha *= k;
-    chevron(c, tx + tmax - 3, y, DIM);
+    chevron(c, tx + tmax - 3, y, L_SUB);
     c.restore();
   }
-  addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
+  addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act: L.act });
 }
 
-/** a small dot of a colour: the mark of a list row */
-const dotMark =
-  (c: Ctx, col: string, r = 2.6) =>
-  (x: number, y: number): void => {
-    c.fillStyle = col;
-    c.beginPath();
-    c.arc(x, y, r, 0, Math.PI * 2);
-    c.fill();
-  };
+/** a list window under a card's head: the next row peeks out through the fade at the bottom */
+function levelList(
+  s: IslandState,
+  c: Ctx,
+  key: string,
+  n: number,
+  tx: number,
+  y0: number,
+  y1: number,
+  tmax: number,
+  row: (i: number, cy: number) => void,
+): void {
+  const top = y0 + ROW0 - ROW_STEP / 2;
+  scrollList(s, c, key, tx - 6, top, tmax + 6, y1 - top + 9, n, ROW_STEP, row);
+}
+
+/** an item's head: chevron, dot, title; a quiet note on the right (age, how soon, a streak) */
+function itemHead(
+  s: IslandState,
+  c: Ctx,
+  title: string,
+  dot: string | null,
+  note: string,
+  noteCol: string,
+  tx: number,
+  y0: number,
+  tmax: number,
+): void {
+  let nw = 0;
+  if (note) {
+    c.save();
+    c.font = '400 10px Onest, system-ui, sans-serif';
+    nw = c.measureText(note).width + 10;
+    c.restore();
+    textAt(c, note, tx + tmax, y0 + 18.5, { size: 10, weight: 400, color: noteCol, align: 'right' });
+  }
+  backHead(s, c, title, tx, y0 + 18, tmax - nw, dot);
+}
+
+/** an item's lines: the subject in 11 medium, the body in 10.5 */
+function subjLine(c: Ctx, str: string, tx: number, y: number, tmax: number, color = L_SUBJ): void {
+  textAt(c, str, tx, y + 0.5, { size: 11, weight: 500, color, max: tmax });
+}
+function bodyLine(c: Ctx, str: string, tx: number, y: number, tmax: number, color = L_BODY): void {
+  textAt(c, str, tx, y + 0.5, { size: 10.5, weight: 400, color, max: tmax });
+}
+
+interface Act {
+  label: string;
+  act: string;
+  /** 'lead' the module's colour, 'plain' light grey, 'quiet' grey */
+  tone: 'lead' | 'plain' | 'quiet';
+  /** an arrow after the word: it leaves for an app or a site */
+  out?: boolean;
+  /** a shorter word for a narrow card */
+  short?: string;
+}
+
+/**
+ * An item's actions as words in one row, 12 apart, as coucou's mail detail ("Open in Mail ·
+ * Reply · Mark as read"): the first in the module's colour, the others grey; each lights a touch
+ * under the pointer and dips when pressed. What does not fit is left out, from the end.
+ */
+function actionRow(s: IslandState, c: Ctx, acts: Act[], accent: string, tx: number, y: number, tmax: number): void {
+  let x = tx;
+  for (const a0 of acts) {
+    c.save();
+    c.font = '500 11px Onest, system-ui, sans-serif';
+    const width = (l: string): number => c.measureText(l).width + (a0.out ? 11 : 0);
+    const a = a0.short && x + width(a0.label) > tx + tmax + 2 ? { ...a0, label: a0.short } : a0;
+    const w = width(a.label);
+    c.restore();
+    if (x + w > tx + tmax + 2) break;
+    const hov = clamp(hoverK(s, 'act:' + a.act, hovering(s, x - 5, y - 9, w + 10, 18), 0.16, 1), 0, 1),
+      sc = pressScale(s, a.act);
+    const base = a.tone === 'lead' ? accent : a.tone === 'plain' ? L_SUBJ : L_SUB;
+    const col = a.tone === 'lead' ? hexA(base, 0.9 + 0.1 * hov) : mixHex(base, '#F5F6F8', 0.6 * hov);
+    c.save();
+    c.translate(x + w / 2, y);
+    c.scale(sc, sc);
+    c.translate(-(x + w / 2), -y);
+    textAt(c, a.label, x, y + 0.5, { size: 11, weight: 500, color: col });
+    if (a.out) {
+      const ax = x + w - 4;
+      c.strokeStyle = col;
+      c.lineWidth = 1.2;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.beginPath();
+      c.moveTo(ax - 2.5, y + 2.5);
+      c.lineTo(ax + 2.5, y - 2.5);
+      c.moveTo(ax - 1.2, y - 2.5);
+      c.lineTo(ax + 2.5, y - 2.5);
+      c.lineTo(ax + 2.5, y + 1.2);
+      c.stroke();
+    }
+    c.restore();
+    addHit(s, c, { x: x - 5, y: y - 9, w: w + 10, h: 18, act: a.act });
+    x += w + 12;
+  }
+}
+
+/** a level's head with a count on the right, for a list */
+function listHead(s: IslandState, c: Ctx, title: string, count: number, tx: number, y0: number, tmax: number): void {
+  itemHead(s, c, title, null, String(count), '#6B7079', tx, y0, tmax);
+}
+
+// ----- GitHub -----
 
 type GhFeed = NonNullable<IslandState['github']>;
+type GhPr = NonNullable<GhFeed['review']>[number];
+const CI_COL = { fail: '#F4505E', run: '#F5A524', ok: '#34C759' } as const;
 
 /** GitHub's levels: '' the summary, 'ci' every repository's CI, 'run:<repo>' one of them,
  * 'prs' the PRs waiting for review, 'pr:<n>@<repo>' one of them */
@@ -183,24 +341,26 @@ function githubLevel(
   tmax: number,
 ): void {
   const review = gh.review ?? [];
-  const listTop = y0 + ROW0 - ROW_STEP / 2,
-    listH = y1 - listTop + 9;
   if (key === 'ci' && gh.runs.length) {
-    backHead(s, c, tr(s, 'Проверки'), tx, y0 + 18, tmax - 40);
-    textAt(c, String(gh.runs.length), tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: DIM, align: 'right' });
-    scrollList(s, c, 'github:ci', tx - 6, listTop, tmax + 6, listH, gh.runs.length, ROW_STEP, (i, cy) => {
+    listHead(s, c, tr(s, 'Проверки'), gh.runs.length, tx, y0, tmax);
+    levelList(s, c, 'github:ci', gh.runs.length, tx, y0, y1, tmax, (i, cy) => {
       const r = gh.runs[i] as CiRun;
       listLine(
         s,
         c,
-        'ci:' + r.repo,
-        'depth:github:run:' + r.repo,
+        {
+          id: 'ci:' + r.repo,
+          act: 'depth:github:run:' + r.repo,
+          mark: dotMark(c, CI_COL[r.state]),
+          name: r.repo,
+          meta: shortAgo(s, r.at),
+          sub: r.state === 'fail' && r.check ? r.check : r.branch,
+          strong: r.state !== 'ok',
+          wash: CI_COL[r.state],
+        },
         cy,
         tx,
         tmax,
-        (x, y) => deployDot(c, x, y + 0.5, 2.6, r.state, s.t),
-        r.repo,
-        shortAgo(s, r.at),
       );
     });
     return;
@@ -210,23 +370,25 @@ function githubLevel(
     if (r) return ghRun(s, c, r, tx, y0, tmax);
   }
   if (key === 'prs' && review.length) {
-    backHead(s, c, tr(s, 'Ждут ревью'), tx, y0 + 18, tmax - 40);
-    textAt(c, String(gh.prs), tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: DIM, align: 'right' });
-    scrollList(s, c, 'github:prs', tx - 6, listTop, tmax + 6, listH, review.length, ROW_STEP, (i, cy) => {
+    listHead(s, c, tr(s, 'Ждут ревью'), gh.prs, tx, y0, tmax);
+    levelList(s, c, 'github:prs', review.length, tx, y0, y1, tmax, (i, cy) => {
       const p = review[i] as GhPr;
       listLine(
         s,
         c,
-        `pr:${p.num}@${p.repo}`,
-        `depth:github:pr:${p.num}@${p.repo}`,
+        {
+          id: `pr:${p.num}@${p.repo}`,
+          act: `depth:github:pr:${p.num}@${p.repo}`,
+          mark: dotMark(c, p.draft ? null : '#8AB4F8'),
+          name: p.title,
+          meta: shortAgo(s, p.at),
+          sub: `${p.repo}#${p.num}`,
+          strong: !p.draft,
+          wash: '#8AB4F8',
+        },
         cy,
         tx,
         tmax,
-        dotMark(c, p.draft ? DIM3 : '#8AB4F8'),
-        p.title,
-        shortAgo(s, p.at),
-        '#' + p.num,
-        p.draft,
       );
     });
     return;
@@ -235,7 +397,7 @@ function githubLevel(
     const p = review.find((x) => `pr:${x.num}@${x.repo}` === key);
     if (p) return ghPr(s, c, p, tx, y0, tmax);
   }
-  // the summary, its first two rows lead further
+  // the summary: its first two rows lead further
   brandHead(s, c, 'github', it.name, tx, y0, x1);
   const ci = gh.ci,
     repo = gh.ciText.includes(' · ') ? (gh.ciText.split(' · ')[0] as string) : '';
@@ -249,12 +411,12 @@ function githubLevel(
           : tr(s, 'нет проверок');
   const nav = (id: string, act: string | null, y: number, draw: (tm: number) => void): void => {
     if (!act) return draw(tmax);
-    const k = rowPlate(s, c, id, tx, y, tmax, 0);
+    const k = rowPlate(s, c, id, tx, y, tmax);
     draw(tmax - 12 * k);
     if (k > 0.01) {
       c.save();
       c.globalAlpha *= k;
-      chevron(c, tx + tmax - 3, y, DIM);
+      chevron(c, tx + tmax - 3, y, L_SUB);
       c.restore();
     }
     addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
@@ -285,10 +447,70 @@ function githubLevel(
   );
 }
 
-type GhPr = NonNullable<GhFeed['review']>[number];
+/** one repository's CI: what broke and where, re-run it, open the run */
+function ghRun(s: IslandState, c: Ctx, r: CiRun, tx: number, y0: number, tmax: number): void {
+  itemHead(s, c, r.repo, CI_COL[r.state], shortAgo(s, r.at), '#6B7079', tx, y0, tmax);
+  const fail = r.state === 'fail',
+    of = r.total ? ` · ${r.done}/${r.total}` : '';
+  subjLine(
+    c,
+    fail
+      ? r.check
+        ? tr(s, 'Упала проверка {0}', r.check)
+        : tr(s, 'CI упал')
+      : r.state === 'ok'
+        ? tr(s, 'Все проверки прошли') + of
+        : tr(s, 'Проверки идут') + of,
+    tx,
+    y0 + IT_SUBJ,
+    tmax,
+  );
+  // the commit, or how the re-run went
+  const note = s.ciNote && s.ciNote.key === r.key ? s.ciNote : null;
+  if (note) bodyLine(c, note.text, tx, y0 + IT_BODY, tmax, note.err ? '#F5B94A' : L_SUBJ);
+  else {
+    const ref = `${r.branch} ${r.sha}`;
+    textAt(c, ref, tx, y0 + IT_BODY + 0.5, { size: 10, weight: 500, mono: true, color: '#6B7079' });
+    c.save();
+    c.font = '500 10px "JetBrains Mono", monospace';
+    const rw = c.measureText(ref).width + 6;
+    c.restore();
+    bodyLine(c, r.title, tx + rw, y0 + IT_BODY, tmax - rw);
+  }
+  const acts: Act[] = [];
+  if (fail && r.rerun) acts.push({ label: tr(s, 'Перезапустить'), act: 'gh:rerun:' + r.repo, tone: 'lead' });
+  acts.push({
+    label: tr(s, 'Открыть прогон'),
+    short: tr(s, 'Открыть'),
+    act: 'gh:open:' + r.repo,
+    tone: acts.length ? 'plain' : 'lead',
+    out: true,
+  });
+  actionRow(s, c, acts, fail ? '#F4505E' : MODULE_COL.github.body, tx, y0 + IT_ACT, tmax);
+}
+
+/** one PR waiting for review: whose and how old; it is read on GitHub */
+function ghPr(s: IslandState, c: Ctx, p: GhPr, tx: number, y0: number, tmax: number): void {
+  itemHead(s, c, `${p.repo} #${p.num}`, p.draft ? L_FAINT : '#8AB4F8', shortAgo(s, p.at), '#6B7079', tx, y0, tmax);
+  subjLine(c, p.title, tx, y0 + IT_SUBJ, tmax);
+  const who = [p.author ? '@' + p.author : '', p.draft ? tr(s, 'черновик') : ''].filter(Boolean).join(' · ');
+  if (who) bodyLine(c, who, tx, y0 + IT_BODY, tmax);
+  actionRow(
+    s,
+    c,
+    [{ label: tr(s, 'Открыть на GitHub'), act: 'gh:url:' + p.url, tone: 'lead', out: true }],
+    '#8AB4F8',
+    tx,
+    y0 + IT_ACT,
+    tmax,
+  );
+}
+
+// ----- Vercel -----
 
 type VcFeed = NonNullable<IslandState['vercel']>;
 type VcRow = VcFeed['rows'][number];
+const VC_COL = { fail: '#F4505E', run: '#F5A524', ok: '#34C759', off: null } as const;
 
 function vercelLevel(
   s: IslandState,
@@ -307,83 +529,93 @@ function vercelLevel(
     if (r) return vercelDeploy(s, c, vc, r, tx, y0, tmax);
   }
   brandHead(s, c, it.id, it.name, tx, y0, x1);
-  const top = y0 + ROW0 - ROW_STEP / 2;
-  scrollList(s, c, 'vercel', tx - 6, top, tmax + 6, y1 - top + 9, vc.rows.length, ROW_STEP, (i, cy) => {
+  levelList(s, c, 'vercel', vc.rows.length, tx, y0, y1, tmax, (i, cy) => {
     const r = vc.rows[i] as VcRow;
     listLine(
       s,
       c,
-      'vc:' + r.id,
-      'depth:vercel:dep:' + r.id,
+      {
+        id: 'vc:' + r.id,
+        act: 'depth:vercel:dep:' + r.id,
+        mark: dotMark(c, VC_COL[r.state]),
+        name: r.name,
+        meta: r.ago,
+        sub: r.branch || r.target || '',
+        strong: r.state === 'fail' || r.state === 'run',
+        wash: VC_COL[r.state],
+      },
       cy,
       tx,
       tmax,
-      (x, y) => deployDot(c, x, y + 0.5, 2.6, r.state, s.t),
-      r.name,
-      r.ago,
-      '',
-      r.state === 'off',
     );
   });
 }
 
-/** one deployment inside the card: how it went, from what, and the one thing to do next */
+/** one deployment: how it went, from what, and the one thing to do next */
 function vercelDeploy(s: IslandState, c: Ctx, vc: VcFeed, r: VcRow, tx: number, y0: number, tmax: number): void {
-  backHead(s, c, r.name, tx, y0 + 18, tmax - 44);
-  textAt(c, r.ago, tx + tmax, y0 + 18.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
-  let y = y0 + ROW0;
-  const word = { ok: 'Готов', fail: 'Упал', run: 'Собирается', off: 'Отменён' }[r.state];
-  deployDot(c, tx + 3, y + 0.5, 3, r.state, s.t);
-  textAt(c, tr(s, word), tx + 12, y + 0.5, { size: 11.5, weight: 600, color: r.state === 'fail' ? '#F4505E' : VAL });
-  c.save();
-  c.font = '600 11.5px Onest, system-ui, sans-serif';
-  const ww = c.measureText(tr(s, word)).width;
-  c.restore();
-  if (r.target) textAt(c, '· ' + r.target, tx + 18 + ww, y + 0.5, { size: 11, weight: 400, color: DIM });
-  y += ROW_STEP;
+  itemHead(s, c, r.name, VC_COL[r.state] ?? L_FAINT, r.ago, '#6B7079', tx, y0, tmax);
+  const word = tr(s, { ok: 'Готов', fail: 'Упал', run: 'Собирается', off: 'Отменён' }[r.state]);
+  subjLine(c, r.target ? `${word} · ${r.target}` : word, tx, y0 + IT_SUBJ, tmax);
   const note = vc.note && vc.note.id === r.id ? vc.note : null;
-  if (note) textAt(c, note.text, tx, y + 0.5, { size: 11, weight: 500, color: note.err ? '#F5B94A' : VAL, max: tmax });
+  if (note) bodyLine(c, note.text, tx, y0 + IT_BODY, tmax, note.err ? '#F5B94A' : L_SUBJ);
   else if (r.branch || r.commit) {
     let x = tx;
     if (r.branch) {
-      textAt(c, r.branch, x, y + 0.5, { size: 10.5, weight: 500, mono: true, color: DIM3, max: tmax * 0.45 });
+      textAt(c, r.branch, x, y0 + IT_BODY + 0.5, {
+        size: 10,
+        weight: 500,
+        mono: true,
+        color: '#6B7079',
+        max: tmax * 0.45,
+      });
       c.save();
-      c.font = '500 10.5px "JetBrains Mono", monospace';
-      x += Math.min(c.measureText(r.branch).width, tmax * 0.45) + 7;
+      c.font = '500 10px "JetBrains Mono", monospace';
+      x += Math.min(c.measureText(r.branch).width, tmax * 0.45) + 6;
       c.restore();
     }
-    if (r.commit) textAt(c, r.commit, x, y + 0.5, { size: 11, weight: 400, color: DIM, max: tx + tmax - x });
+    if (r.commit) bodyLine(c, r.commit, x, y0 + IT_BODY, tx + tmax - x);
   }
-  y += ROW_STEP + 3;
-  // the next step: a failed build is built again, a ready one is looked at
-  let x = tx - 2;
-  const primary =
+  // a failed build is built again, a ready one is looked at
+  const acts: Act[] =
     r.state === 'fail'
-      ? ['Повторить', 'vcredo:' + r.id]
+      ? [
+          { label: tr(s, 'Повторить'), act: 'vcredo:' + r.id, tone: 'lead' },
+          { label: tr(s, 'Логи'), act: 'vercel:' + r.id, tone: 'plain', out: true },
+        ]
       : r.state === 'ok' && r.site
-        ? ['Открыть сайт', 'vcsite:' + r.id]
-        : null;
-  if (primary) {
-    const label = tr(s, primary[0] as string);
-    c.save();
-    c.font = '500 11.5px Onest, system-ui, sans-serif';
-    const w = c.measureText(label).width + 22;
-    c.restore();
-    button(s, c, x, y - 10, w, 20, label, primary[1] as string, true);
-    x += w + 10;
-  }
-  linkOut(s, c, r.state === 'fail' ? tr(s, 'Логи') : 'Vercel', 'vercel:' + r.id, x, y, tx + tmax);
+        ? [
+            { label: tr(s, 'Открыть сайт'), act: 'vcsite:' + r.id, tone: 'lead', out: true },
+            { label: 'Vercel', act: 'vercel:' + r.id, tone: 'quiet', out: true },
+          ]
+        : [{ label: 'Vercel', act: 'vercel:' + r.id, tone: 'lead', out: true }];
+  actionRow(s, c, acts, r.state === 'fail' ? '#F4505E' : '#F5F6F8', tx, y0 + IT_ACT, tmax);
 }
+
+// ----- calendar -----
 
 type CalFeed = NonNullable<IslandState['cal']>;
 type CalEv = NonNullable<CalFeed['events']>[number];
 
-/** "через 20 мин", "сейчас", "завтра 10:00": how soon, as the card head says it */
+/** "через 20 мин", "сейчас", "завтра 10:00": how soon */
 function soonText(s: IslandState, e: CalEv): string {
   const min = Math.ceil((e.start - s.date().getTime()) / 60000);
   if (min <= 0) return tr(s, 'сейчас');
   if (min < 60 * 12) return tr(s, 'через {0}', minsText(s, min));
   return e.at;
+}
+
+/** a small camera: the mark of a meeting that is a call */
+function camMark(c: Ctx, x: number, y: number, col: string): void {
+  c.fillStyle = col;
+  rrect(c, x - 3.5, y - 2.5, 5, 5, 1.2);
+  c.fill();
+  c.beginPath();
+  c.moveTo(x + 1.5, y - 0.6);
+  c.lineTo(x + 3.8, y - 2.2);
+  c.lineTo(x + 3.8, y + 2.2);
+  c.lineTo(x + 1.5, y + 0.6);
+  c.closePath();
+  c.fill();
 }
 
 /** the calendar's levels: '' the next meeting and what comes after, 'day' every meeting ahead,
@@ -404,10 +636,8 @@ function calLevel(
     now = s.date().getTime(),
     col = MODULE_COL.cal.body;
   if (key === 'day' && events.length > 1) {
-    backHead(s, c, tr(s, 'Встречи'), tx, y0 + 18, tmax - 40);
-    textAt(c, String(events.length), tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: DIM, align: 'right' });
-    const top = y0 + ROW0 - ROW_STEP / 2;
-    scrollList(s, c, 'cal:day', tx - 6, top, tmax + 6, y1 - top + 9, events.length, ROW_STEP, (i, cy) => {
+    listHead(s, c, tr(s, 'Встречи'), events.length, tx, y0, tmax);
+    levelList(s, c, 'cal:day', events.length, tx, y0, y1, tmax, (i, cy) => {
       const e = events[i] as CalEv,
         live = e.start <= now,
         soon = !live && e.start - now <= 5 * 60000;
@@ -416,15 +646,19 @@ function calLevel(
       listLine(
         s,
         c,
-        'cal:' + e.id,
-        'depth:cal:ev:' + e.id,
+        {
+          id: 'cal:' + e.id,
+          act: 'depth:cal:ev:' + e.id,
+          mark: e.link ? (x, y) => camMark(c, x, y, tone) : dotMark(c, tone),
+          lead: e.at,
+          name: e.title,
+          sub: live ? tr(s, 'сейчас') : e.place,
+          strong: live || soon,
+          wash: '#F5B94A',
+        },
         cy,
         tx,
         tmax,
-        e.link ? (x, y) => camMark(c, x, y, tone) : dotMark(c, tone),
-        e.title,
-        live ? tr(s, 'сейчас') : '',
-        e.at,
       );
     });
     return;
@@ -448,12 +682,12 @@ function calLevel(
   );
   const next = events[0] as CalEv;
   const row = (id: string, act: string, y: number, draw: () => void): void => {
-    const k = rowPlate(s, c, id, tx, y, tmax, 0);
+    const k = rowPlate(s, c, id, tx, y, tmax);
     draw();
     if (k > 0.01) {
       c.save();
       c.globalAlpha *= k;
-      chevron(c, tx + tmax - 3, y, DIM);
+      chevron(c, tx + tmax - 3, y, L_SUB);
       c.restore();
     }
     addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
@@ -467,142 +701,61 @@ function calLevel(
     );
 }
 
-/** a small camera: the mark of a meeting that is a call */
-function camMark(c: Ctx, x: number, y: number, col: string): void {
-  c.fillStyle = col;
-  rrect(c, x - 3.5, y - 2.5, 5, 5, 1.2);
-  c.fill();
-  c.beginPath();
-  c.moveTo(x + 1.5, y - 0.6);
-  c.lineTo(x + 3.8, y - 2.2);
-  c.lineTo(x + 3.8, y + 2.2);
-  c.lineTo(x + 1.5, y + 0.6);
-  c.closePath();
-  c.fill();
-}
-
-/** one meeting inside the card: when and how long, where, and the call one click away */
+/** one meeting: when, where, and the call one click away */
 function calEvent(s: IslandState, c: Ctx, e: CalEv, tx: number, y0: number, tmax: number): void {
-  const soon = soonText(s, e),
-    near = e.start - s.date().getTime() <= 5 * 60000;
+  const near = e.start - s.date().getTime() <= 5 * 60000;
   // the title takes the head whole; how soon goes with the time below
-  backHead(s, c, e.title, tx, y0 + 18, tmax);
-  let y = y0 + ROW0;
+  itemHead(s, c, e.title, near ? '#F5B94A' : MODULE_COL.cal.body, '', '#6B7079', tx, y0, tmax);
   const hm = (t: number): string => {
     const d = new Date(t);
     return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
   };
-  const range = `${e.at.replace(/\d{1,2}:\d{2}$/, '')}${hm(e.start)}–${hm(e.end)}`;
-  textAt(c, range, tx, y + 0.5, { size: 11, weight: 500, mono: true, color: VAL });
+  const day = e.at.replace(/\d{1,2}:\d{2}$/, ''),
+    range = `${day}${hm(e.start)}–${hm(e.end)}`;
+  textAt(c, range, tx, y0 + IT_SUBJ + 0.5, { size: 11, weight: 500, mono: true, color: L_SUBJ });
   c.save();
   c.font = '500 11px "JetBrains Mono", monospace';
-  const rw = c.measureText(range).width + 8;
+  const rw = c.measureText(range).width + 6;
   c.restore();
-  // the range says how long; the row keeps room for how soon
-  const lenText = '· ';
-  textAt(c, lenText, tx + rw, y + 0.5, { size: 11, weight: 400, color: DIM });
-  c.save();
-  c.font = '400 11px Onest, system-ui, sans-serif';
-  const lw = c.measureText(lenText).width + 2;
-  c.restore();
-  textAt(c, soon, tx + rw + lw, y + 0.5, { size: 11, weight: 500, color: near ? '#F5B94A' : DIM, max: tmax - rw - lw });
+  textAt(c, '· ' + soonText(s, e), tx + rw, y0 + IT_SUBJ + 0.5, {
+    size: 11,
+    weight: 500,
+    color: near ? '#F5B94A' : L_SUB,
+    max: tmax - rw,
+  });
   if (e.place) {
-    y += ROW_STEP;
     // a pin: where
+    const y = y0 + IT_BODY;
     c.save();
-    c.strokeStyle = DIM;
-    c.lineWidth = 1.3;
+    c.strokeStyle = '#6B7079';
+    c.lineWidth = 1.2;
     c.beginPath();
-    c.arc(tx + 4, y - 1.5, 3, 0, Math.PI * 2);
-    c.moveTo(tx + 4, y + 1.5);
-    c.lineTo(tx + 4, y + 5);
+    c.arc(tx + 3.5, y - 1.5, 2.6, 0, Math.PI * 2);
+    c.moveTo(tx + 3.5, y + 1.1);
+    c.lineTo(tx + 3.5, y + 4.2);
     c.stroke();
     c.restore();
-    textAt(c, e.place, tx + 14, y + 0.5, { size: 11.5, weight: 400, color: DIM, max: tmax - 14 });
+    bodyLine(c, e.place, tx + 12, y, tmax - 12);
   }
-  if (!e.link) return;
-  y += ROW_STEP + 3;
-  const label = tr(s, 'Подключиться');
-  c.save();
-  c.font = '500 11.5px Onest, system-ui, sans-serif';
-  const w = c.measureText(label).width + 22;
-  c.restore();
-  button(s, c, tx - 2, y - 10, w, 20, label, 'caljoin:' + e.link, true);
+  if (e.link)
+    actionRow(
+      s,
+      c,
+      [{ label: tr(s, 'Подключиться'), act: 'caljoin:' + e.link, tone: 'lead', out: true }],
+      '#F5B94A',
+      tx,
+      y0 + IT_ACT,
+      tmax,
+    );
 }
 
-/** one repository's CI inside the card: what broke and where, open the run, re-run it */
-function ghRun(s: IslandState, c: Ctx, r: CiRun, tx: number, y0: number, tmax: number): void {
-  backHead(s, c, r.repo, tx, y0 + 18, tmax - 50);
-  textAt(c, shortAgo(s, r.at), tx + tmax, y0 + 18.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
-  const fail = r.state === 'fail',
-    of = r.total ? ` · ${r.done}/${r.total}` : '';
-  const lead = fail
-    ? r.check
-      ? tr(s, 'Упала проверка {0}', r.check)
-      : tr(s, 'CI упал')
-    : r.state === 'ok'
-      ? tr(s, 'Все проверки прошли') + of
-      : tr(s, 'Проверки идут') + of;
-  let y = y0 + ROW0;
-  stateDisc(c, tx + 6, y, r.state);
-  textAt(c, lead, tx + 18, y + 0.5, { size: 11.5, weight: 600, color: fail ? '#F4505E' : VAL, max: tmax - 18 });
-  y += ROW_STEP;
-  // the commit: its branch and short sha in mono, then its title; or how the re-run went
-  const note = s.ciNote && s.ciNote.key === r.key ? s.ciNote : null;
-  if (note) textAt(c, note.text, tx, y + 0.5, { size: 11, weight: 500, color: note.err ? '#F5B94A' : VAL, max: tmax });
-  else {
-    const ref = `${r.branch} ${r.sha}`;
-    textAt(c, ref, tx, y + 0.5, { size: 10.5, weight: 500, mono: true, color: DIM3 });
-    c.save();
-    c.font = '500 10.5px "JetBrains Mono", monospace';
-    const rw = c.measureText(ref).width + 7;
-    c.restore();
-    textAt(c, r.title, tx + rw, y + 0.5, { size: 11, weight: 400, color: DIM, max: tmax - rw });
-  }
-  y += ROW_STEP + 3;
-  let x = tx - 2;
-  if (fail && r.rerun) {
-    const label = tr(s, 'Перезапустить');
-    c.save();
-    c.font = '500 11.5px Onest, system-ui, sans-serif';
-    const w = c.measureText(label).width + 22;
-    c.restore();
-    button(s, c, x, y - 10, w, 20, label, 'gh:rerun:' + r.repo, true);
-    x += w + 10;
-  }
-  // the run's page on GitHub: the full label where it fits, else the short one
-  const full = tr(s, 'Открыть прогон');
-  c.save();
-  c.font = '500 11.5px Onest, system-ui, sans-serif';
-  const fits = x + c.measureText(full).width + 26 <= tx + tmax + 4;
-  c.restore();
-  linkOut(s, c, fits ? full : tr(s, 'Открыть'), 'gh:open:' + r.repo, x, y, tx + tmax);
-}
-
-/** one PR waiting for review: whose, how old, open it on GitHub to read the change */
-function ghPr(s: IslandState, c: Ctx, p: GhPr, tx: number, y0: number, tmax: number): void {
-  // the number first: it is what a cut title would lose
-  backHead(s, c, `#${p.num} · ${p.repo}`, tx, y0 + 18, tmax - 50);
-  textAt(c, shortAgo(s, p.at), tx + tmax, y0 + 18.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
-  let y = y0 + ROW0;
-  textAt(c, p.title, tx, y + 0.5, { size: 11.5, weight: 600, color: VAL, max: tmax });
-  y += ROW_STEP;
-  const who = [p.author ? '@' + p.author : '', p.draft ? tr(s, 'черновик') : ''].filter(Boolean).join(' · ');
-  if (who) textAt(c, who, tx, y + 0.5, { size: 11, weight: 400, color: DIM, max: tmax });
-  y += ROW_STEP + 3;
-  const label = tr(s, 'Открыть на GitHub');
-  c.save();
-  c.font = '500 11.5px Onest, system-ui, sans-serif';
-  const w = c.measureText(label).width + 22;
-  c.restore();
-  button(s, c, tx - 2, y - 10, w, 20, label, 'gh:url:' + p.url, true);
-}
+// ----- Almanac -----
 
 type AlFeed = NonNullable<IslandState['almanac']>;
 type AlRow = AlFeed['rows'][number];
 
-/** the habits of the day, one list: the open ones first, the done ones below and quieter; the
- * fourth row peeks out under the third, so the list reads as one that goes on */
+/** the habits of the day, as coucou's mail: what is left leads on a wash of Almanac's colour
+ * with its count in the head ("3 осталось" for "3 unread"), what is done follows, quiet */
 function habitList(
   s: IslandState,
   c: Ctx,
@@ -614,6 +767,7 @@ function habitList(
   y1: number,
   tmax: number,
 ): void {
+  const left = al.total - al.done;
   // a tap that did not go through says so in the head, in place of the module's word
   brandHead(
     s,
@@ -623,192 +777,146 @@ function habitList(
     tx,
     y0,
     x1,
-    al.note || undefined,
+    // the count is the head's word, as coucou's "3 unread": a narrow card has no room for both
+    al.note || '',
     al.note ? '#F5B94A' : DIM,
-    `${al.done}/${al.total}`,
+    al.note ? undefined : left > 0 ? tr(s, '{0} осталось', left) : tr(s, 'всё сделано'),
   );
-  // the window runs a little past the content block: the next row shows its top through the fade
-  const top = y0 + ROW0 - ROW_STEP / 2;
-  scrollList(s, c, 'almanac', tx - 6, top, tmax + 6, y1 - top + 9, al.rows.length, ROW_STEP, (i, cy) => {
-    const r = al.rows[i] as AlRow;
-    habitListRow(s, c, r, tx, cy, tmax);
-  });
+  levelList(s, c, 'almanac', al.rows.length, tx, y0, y1, tmax, (i, cy) =>
+    habitListRow(s, c, al.rows[i] as AlRow, tx, cy, tmax),
+  );
 }
 
-/** one habit in the list: its checkbox marks it, the rest of the row opens the habit */
+/** one habit: the box marks it, the rest of the row opens it; name, today's count, when, streak */
 function habitListRow(s: IslandState, c: Ctx, r: AlRow, tx: number, y: number, tmax: number): void {
-  const rowHov = hovering(s, tx - 6, y - 10, tmax + 6, 20),
-    boxHov = hovering(s, tx - 6, y - 10, 22, 20);
-  // the light comes and goes on a spring: a list scrolling under a still pointer must not flick
-  // rows on and off from one frame to the next
-  const rk = hoverK(s, 'alrow:' + r.id, rowHov, 0.16, 1),
-    bk = hoverK(s, 'albox:' + r.id, boxHov, 0.16, 1),
-    ck = clamp(Math.min(rk, 1 - bk), 0, 1);
-  c.fillStyle = `rgba(255,255,255,${(0.03 + 0.04 * clamp(rk, 0, 1)).toFixed(3)})`;
-  rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
-  c.fill();
+  const col = MODULE_COL.almanac.body,
+    open = !r.done;
+  const goal = r.goal ?? 1;
+  const sub = [r.slot ?? '', r.streak ? tr(s, '{0} дн', r.streak) : ''].filter(Boolean).join(' · ');
+  listLine(
+    s,
+    c,
+    {
+      id: 'al:' + r.id,
+      act: 'depth:almanac:item:' + r.id,
+      mark: () => undefined,
+      name: r.name,
+      meta: open && goal > 1 ? `${r.count ?? 0}/${goal}` : '',
+      sub,
+      strong: open,
+      wash: col,
+    },
+    y,
+    tx + 6,
+    tmax - 6,
+  );
+  // the box where the dot is: open a ring of Almanac's colour, done filled with a tick
+  const bk = clamp(hoverK(s, 'albox:' + r.id, hovering(s, tx - 6, y - 10, 20, 20), 0.16, 1), 0, 1);
   if (bk > 0.01) {
-    c.fillStyle = `rgba(255,255,255,${(0.08 * clamp(bk, 0, 1)).toFixed(3)})`;
-    rrect(c, tx - 4, y - 8, 18, 16, 5);
+    c.fillStyle = `rgba(255,255,255,${(0.1 * bk).toFixed(3)})`;
+    c.beginPath();
+    c.arc(tx + 3, y, 7, 0, Math.PI * 2);
     c.fill();
   }
-  checkBox(c, tx, y, r.done);
-  // a chevron under the pointer says the row goes further; the right edge gives way to it
-  c.save();
-  c.font = '400 11px Onest, system-ui, sans-serif';
-  const pw = r.progress ? c.measureText(r.progress).width + 10 : 0;
-  c.restore();
-  const right = 12 * ck;
-  textAt(c, r.name, tx + 16, y + 0.5, {
-    size: 11.5,
-    weight: 500,
-    color: r.done ? DIM3 : rk > 0.5 ? INK : VAL,
-    max: tmax - 16 - pw - 12,
-  });
-  if (r.progress)
-    textAt(c, r.progress, tx + tmax - right, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
-  if (ck > 0.01) {
-    c.save();
-    c.globalAlpha *= ck;
-    c.strokeStyle = DIM;
-    c.lineWidth = 1.4;
+  c.beginPath();
+  c.arc(tx + 3, y, 4, 0, Math.PI * 2);
+  if (r.done) {
+    c.fillStyle = hexA(col, 0.55);
+    c.fill();
+    c.strokeStyle = '#141416';
+    c.lineWidth = 1.3;
     c.lineCap = 'round';
     c.lineJoin = 'round';
     c.beginPath();
-    c.moveTo(tx + tmax - 6, y - 3.5);
-    c.lineTo(tx + tmax - 2.5, y);
-    c.lineTo(tx + tmax - 6, y + 3.5);
+    c.moveTo(tx + 1.2, y);
+    c.lineTo(tx + 2.6, y + 1.5);
+    c.lineTo(tx + 5, y - 1.5);
     c.stroke();
-    c.restore();
+  } else {
+    c.strokeStyle = hexA(col, 0.75 + 0.25 * bk);
+    c.lineWidth = 1.2;
+    c.stroke();
   }
-  addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act: 'depth:almanac:item:' + r.id });
-  addHit(s, c, { x: tx - 6, y: y - 10, w: 22, h: 20, act: 'almanac:' + r.id });
+  addHit(s, c, { x: tx - 6, y: y - 10, w: 20, h: 20, act: 'almanac:' + r.id });
 }
 
-/** one habit inside the card: today, the streak and the week as Almanac counts them, mark it,
- * open it in Almanac. What Almanac does not send (an older Almanac: no history) is not drawn. */
+/** one habit inside the card, as a message: today, when, the streak and the week, and its actions */
 function habitLevel(s: IslandState, c: Ctx, al: AlFeed, id: string, tx: number, y0: number, tmax: number): void {
   const r = al.rows.find((x) => x.id === id) as AlRow,
     col = MODULE_COL.almanac.body;
   const streak = r.streak ?? null;
-  let sw = 0;
-  if (streak !== null) {
-    const st = streak > 0 ? tr(s, 'серия {0} дн', streak) : tr(s, 'серии пока нет');
-    c.save();
-    c.font = '500 11px Onest, system-ui, sans-serif';
-    sw = c.measureText(st).width + 14;
-    c.restore();
-    // a warm dot before a living streak: the one bit of colour on the level
-    if (streak > 0) {
-      c.fillStyle = '#F5B94A';
-      c.beginPath();
-      c.arc(tx + tmax - sw + 4, y0 + 18, 2.6, 0, Math.PI * 2);
-      c.fill();
-    }
-    textAt(c, st, tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: streak > 0 ? VAL : DIM3, align: 'right' });
-  }
-  backHead(s, c, r.name, tx, y0 + 18, tmax - sw - 6);
-  // today
+  itemHead(
+    s,
+    c,
+    r.name,
+    r.done ? L_FAINT : col,
+    streak === null ? '' : streak > 0 ? tr(s, '{0} дн подряд', streak) : tr(s, 'серии пока нет'),
+    streak && streak > 0 ? '#F5B94A' : '#6B7079',
+    tx,
+    y0,
+    tmax,
+  );
   const goal = r.goal ?? 1,
     count = r.count ?? (r.done ? 1 : 0);
-  let y = y0 + ROW0;
-  if (goal > 1) {
-    const bw = tmax - 92,
-      k = clamp(count / goal, 0, 1);
-    c.fillStyle = 'rgba(255,255,255,0.08)';
-    rrect(c, tx, y - 2.5, bw, 5, 2.5);
-    c.fill();
-    if (k > 0) {
-      c.fillStyle = r.done ? col : hexA(col, 0.75);
-      rrect(c, tx, y - 2.5, Math.max(5, bw * k), 5, 2.5);
-      c.fill();
-    }
-    textAt(c, tr(s, '{0} из {1} сегодня', count, goal), tx + tmax, y + 0.5, {
-      size: 11,
-      weight: 500,
-      color: r.done ? VAL : DIM,
-      align: 'right',
-    });
-  } else {
-    checkBox(c, tx, y, r.done);
-    textAt(c, tr(s, r.done ? 'сегодня сделано' : 'сегодня ещё нет'), tx + 16, y + 0.5, {
-      size: 11.5,
-      weight: 500,
-      color: r.done ? VAL : DIM,
-    });
-  }
-  // the week, today last
+  const today = goal > 1 ? tr(s, '{0} из {1} сегодня', count, goal) : r.done ? tr(s, 'Сделано') : tr(s, 'Не сделано');
+  subjLine(c, r.slot ? `${today} · ${r.slot}` : today, tx, y0 + IT_SUBJ, tmax);
+  // the week: a dot a day with its letter under it, today last; done in Almanac's colour,
+  // a frozen day a cool ring, a missed one faint; and how many of seven
   if (r.week) {
-    y += ROW_STEP;
-    textAt(c, tr(s, 'неделя'), tx, y + 0.5, { size: 11, weight: 400, color: DIM3 });
-    const step = 15,
-      x0w = tx + tmax - 4 - step * 6;
+    const now = s.date(),
+      letters = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    const step = 17;
     for (let i = 0; i < 7; i++) {
       const ch = r.week[i],
-        x = x0w + i * step,
-        today = i === 6;
+        x = tx + 4 + i * step,
+        y = y0 + IT_BODY - 1,
+        today6 = i === 6;
       c.beginPath();
-      c.arc(x, y, today ? 4.4 : 3.8, 0, Math.PI * 2);
+      c.arc(x, y, 3.4, 0, Math.PI * 2);
       if (ch === '1') {
         c.fillStyle = col;
         c.fill();
       } else if (ch === 'f') {
-        // a frozen day: kept, not done - a cool ring, as Almanac's freeze
         c.strokeStyle = '#8FB8FF';
-        c.lineWidth = 1.3;
-        c.stroke();
-      } else if (today) {
-        c.strokeStyle = 'rgba(255,255,255,0.45)';
         c.lineWidth = 1.2;
+        c.stroke();
+      } else if (today6) {
+        c.strokeStyle = 'rgba(255,255,255,0.4)';
+        c.lineWidth = 1.1;
         c.stroke();
       } else {
         c.fillStyle = 'rgba(255,255,255,0.1)';
         c.fill();
       }
+      const wd = (now.getDay() - (6 - i) + 7) % 7;
+      textAt(c, tr(s, letters[wd] as string), x, y0 + IT_BODY2 + 0.5, {
+        size: 8.5,
+        weight: today6 ? 600 : 400,
+        color: today6 ? L_SUB : L_FAINT,
+        align: 'center',
+      });
     }
+    const n = [...r.week].filter((ch) => ch === '1').length;
+    bodyLine(c, `${n}/7`, tx + 4 + 6 * step + 14, y0 + IT_BODY, tmax - (6 * step + 18));
   }
-  // the actions: mark (or one more / unmark), open it in Almanac
-  y += ROW_STEP + 3;
-  const mark = r.done ? 'Снять отметку' : goal > 1 && count > 0 ? 'Ещё раз' : 'Отметить';
-  c.save();
-  c.font = '500 11.5px Onest, system-ui, sans-serif';
-  const mw = c.measureText(tr(s, mark)).width + 22;
-  c.restore();
-  button(s, c, tx - 2, y - 10, mw, 20, tr(s, mark), 'almanac:' + r.id, !r.done);
-  // the way to the whole habit: a quiet link with an arrow, as the card heads' ↗
-  linkOut(s, c, tr(s, 'В Almanac'), 'alweb:' + r.id, tx - 2 + mw + 10, y, tx + tmax);
-}
-
-/** a quiet text link that leaves for an app or a site: label and ↗, lit under the pointer */
-function linkOut(s: IslandState, c: Ctx, label: string, act: string, x: number, y: number, xMax: number): void {
-  c.save();
-  c.font = '500 11.5px Onest, system-ui, sans-serif';
-  const w = c.measureText(label).width + 26;
-  c.restore();
-  if (x + w > xMax + 4) return;
-  const hov = hovering(s, x - 4, y - 10, w, 20);
-  if (hov) {
-    c.fillStyle = 'rgba(255,255,255,0.07)';
-    rrect(c, x - 4, y - 10, w, 20, 10);
-    c.fill();
-  }
-  const col = hov ? INK : DIM;
-  textAt(c, label, x + 4, y + 0.5, { size: 11.5, weight: 500, color: col });
-  const ax = x + w - 13;
-  c.save();
-  c.strokeStyle = col;
-  c.lineWidth = 1.3;
-  c.lineCap = 'round';
-  c.lineJoin = 'round';
-  c.beginPath();
-  c.moveTo(ax - 3, y + 3);
-  c.lineTo(ax + 3, y - 3);
-  c.moveTo(ax - 1.5, y - 3);
-  c.lineTo(ax + 3, y - 3);
-  c.lineTo(ax + 3, y + 1.5);
-  c.stroke();
-  c.restore();
-  addHit(s, c, { x: x - 4, y: y - 10, w, h: 20, act });
+  // its actions, as a message's: mark it (one more on the way to the goal), open it in Almanac;
+  // a done habit can be unmarked, quietly
+  const acts: Act[] = r.done
+    ? [
+        { label: tr(s, 'Открыть в Almanac'), short: tr(s, 'В Almanac'), act: 'alweb:' + r.id, tone: 'lead', out: true },
+        { label: tr(s, 'Снять отметку'), short: tr(s, 'Снять'), act: 'almanac:' + r.id, tone: 'quiet' },
+      ]
+    : [
+        { label: tr(s, goal > 1 && count > 0 ? 'Ещё раз' : 'Отметить'), act: 'almanac:' + r.id, tone: 'lead' },
+        {
+          label: tr(s, 'Открыть в Almanac'),
+          short: tr(s, 'В Almanac'),
+          act: 'alweb:' + r.id,
+          tone: 'plain',
+          out: true,
+        },
+      ];
+  actionRow(s, c, acts, col, tx, y0 + IT_ACT, tmax);
 }
 
 /** a "label ... value" row with a small icon, as coucou's stats */

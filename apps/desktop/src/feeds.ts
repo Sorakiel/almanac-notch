@@ -1118,6 +1118,7 @@ export interface AlHabit {
   done: boolean;
   /** Almanac 0041: the schedule and the last 64 days ('1' done, 'f' frozen, '0' else, today last);
    *  absent from an older Almanac - then the card shows no streak and no week */
+  slot?: 'morning' | 'afternoon' | 'evening' | 'anytime' | 'week' | null;
   frequency?: string | null;
   target?: number | null;
   history?: string | null;
@@ -1139,6 +1140,14 @@ const AL_HINT = 'Настройки → Almanac';
 /** the evening reminder: from this hour, once a day, while habits are left */
 export const EVENING_HOUR = 20;
 const AL_NAME_MAX = 28;
+/** when in the day a habit is, as Almanac groups them */
+const SLOT_WORD = {
+  morning: 'утро',
+  afternoon: 'день',
+  evening: 'вечер',
+  anytime: 'в течение дня',
+  week: 'на неделе',
+} as const;
 /** how long the card says a tap did not go through, ms */
 const NOTE_MS = 3500;
 
@@ -1197,6 +1206,7 @@ export function almanacFeed(a: AlState | null, lang: Lang = 'ru'): AlmanacFeed {
         count: h.count,
         goal: h.goal,
         streak: habitStreak(h.frequency, h.target, hist, a.date),
+        slot: h.slot ? tr(L, SLOT_WORD[h.slot]) : '',
         week: hist && hist.length >= 7 ? hist.slice(-7) : null,
       };
     }),
