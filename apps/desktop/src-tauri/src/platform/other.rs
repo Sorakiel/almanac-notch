@@ -35,3 +35,7 @@ pub fn yield_activation() {}
 pub fn set_ignore(window: &WebviewWindow, ignore: bool) {
     let _ = window.set_ignore_cursor_events(ignore);
 }
+
+pub fn fullscreen_tick(_window: &WebviewWindow, _hide: bool) -> Option<bool> {
+    None
+}

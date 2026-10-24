@@ -26,6 +26,9 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   // app and updates (stage 8f)
   'Запускать вместе с системой': 'Launch at login',
   'Проверять обновления': 'Check for updates',
+  'Прятать поверх полноэкранных приложений': 'Hide over full-screen apps',
+  'Игра, видео или презентация во весь экран. Остров вернётся, когда вы из них выйдете.':
+    'A game, a video or a slideshow in full screen. The island comes back when you leave it.',
   'Проверить сейчас': 'Check now',
   'Версия {0}': 'Version {0}',
   'Проверка…': 'Checking…',

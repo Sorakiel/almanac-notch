@@ -734,6 +734,7 @@ interface AppInfo {
   build: string;
   onboarded: boolean;
   updates: boolean;
+  fullscreen_hide: boolean;
   autostart: boolean;
   update: UpdateState;
 }
@@ -744,6 +745,7 @@ function renderApp(a: AppInfo | null): void {
   $('app-version').textContent = a ? t('Версия {0}', a.build ? a.version + ' · ' + a.build : a.version) : '';
   $<HTMLInputElement>('autostart').checked = !!a?.autostart;
   $<HTMLInputElement>('updates').checked = !!a?.updates;
+  $<HTMLInputElement>('fullscreen').checked = a ? a.fullscreen_hide : true;
   if (a) renderUpdate(a.update);
 }
 function renderUpdate(u: UpdateState): void {
@@ -787,6 +789,9 @@ $<HTMLInputElement>('autostart').addEventListener('change', (e) => {
 });
 $<HTMLInputElement>('updates').addEventListener('change', (e) => {
   void appSet('updates', (e.target as HTMLInputElement).checked);
+});
+$<HTMLInputElement>('fullscreen').addEventListener('change', (e) => {
+  void appSet('fullscreen', (e.target as HTMLInputElement).checked);
 });
 
 // ---------- first-run guide (stage 8f): language, Claude Code, calendar, modules, launch at login ----------

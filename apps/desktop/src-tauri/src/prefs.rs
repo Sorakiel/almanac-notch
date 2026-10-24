@@ -1,5 +1,5 @@
-//! App-level preferences (stage 8f): whether the first-run guide was finished and whether to
-//! check for updates. Stored in `<app data>/app.json`. Launch at login lives in the system
+//! App-level preferences (stage 8f): whether the first-run guide was finished, whether to
+//! check for updates and whether the island steps aside for full-screen apps. Stored in `<app data>/app.json`. Launch at login lives in the system
 //! (LaunchAgent / Run key) via tauri-plugin-autostart, so it is read from there, not stored here.
 
 use std::fs;
@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 pub struct Prefs {
     pub onboarded: bool,
     pub updates: bool,
+    /// hide the island while a full-screen app (game, video, slideshow) is in front (2026-10-24)
+    pub fullscreen_hide: bool,
 }
 
 impl Default for Prefs {
@@ -20,6 +22,7 @@ impl Default for Prefs {
         Prefs {
             onboarded: false,
             updates: true,
+            fullscreen_hide: true,
         }
     }
 }

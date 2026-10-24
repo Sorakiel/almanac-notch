@@ -65,6 +65,8 @@ const FAR_PERIOD: Duration = Duration::from_millis(50);
 const NEAR_MARGIN: f64 = 120.0;
 /// How often the main thread re-checks screens and the window frame (sleep, lock, displays).
 const WATCH_PERIOD: Duration = Duration::from_secs(2);
+/// How often to look for a full-screen app in front (Windows; on the Mac AppKit hides the panel).
+const FULLSCREEN_PERIOD: Duration = Duration::from_millis(500);
 
 #[tauri::command]
 fn island_geometry(state: State<'_, SharedState>) -> Geometry {
@@ -453,6 +455,7 @@ struct AppInfo {
     build: &'static str,
     onboarded: bool,
     updates: bool,
+    fullscreen_hide: bool,
     autostart: bool,
     update: update::State,
 }
@@ -465,6 +468,7 @@ fn app_info_of(app: &AppHandle) -> AppInfo {
         build: env!("ALMANAC_BUILD"),
         onboarded: p.onboarded,
         updates: p.updates,
+        fullscreen_hide: p.fullscreen_hide,
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         update: update::state(),
     }
@@ -476,7 +480,7 @@ fn app_info(app: AppHandle) -> AppInfo {
     app_info_of(&app)
 }
 
-/// `key`: "autostart" | "updates" | "onboarded".
+/// `key`: "autostart" | "updates" | "onboarded" | "fullscreen".
 #[tauri::command]
 fn app_set(app: AppHandle, key: String, on: bool) -> Result<AppInfo, String> {
     use tauri_plugin_autostart::ManagerExt;
@@ -501,6 +505,9 @@ fn app_set(app: AppHandle, key: String, on: bool) -> Result<AppInfo, String> {
         }
         "onboarded" => {
             prefs::set(|p| p.onboarded = on)?;
+        }
+        "fullscreen" => {
+            prefs::set(|p| p.fullscreen_hide = on)?;
         }
         _ => return Err(format!("unknown setting {key}")),
     }
@@ -648,7 +655,17 @@ fn place_and_publish(app: &AppHandle, window: &WebviewWindow, state: &SharedStat
 fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState) {
     thread::spawn(move || {
         let mut last_watch = Instant::now();
+        let mut last_fs = Instant::now();
         loop {
+            if last_fs.elapsed() >= FULLSCREEN_PERIOD {
+                last_fs = Instant::now();
+                if let Some(hidden) =
+                    platform::fullscreen_tick(&window, prefs::get().fullscreen_hide)
+                {
+                    eprintln!("[island] full-screen app in front: {hidden}");
+                    let _ = app.emit("island://fullscreen", hidden);
+                }
+            }
             let mut period = FAR_PERIOD;
             if let Some(c) = platform::cursor() {
                 let msg = {
