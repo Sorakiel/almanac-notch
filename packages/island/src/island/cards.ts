@@ -9,7 +9,9 @@ import { drawMascot } from '../mascot/body';
 import { propFor } from '../mascot/props';
 import { TRACKS, type ToolKind } from '../stub';
 import type { WorkFx } from './fx';
-import { addHit, hovering } from './hits';
+import { addHit, button, hovering } from './hits';
+import { hoverK } from './hover';
+import { backHead, drawDepth, scrollList } from './depth';
 import { T_MUTED } from './half';
 import { MODULE_COL, minsText } from './focus';
 import { card, cardMascot, cardTint, kbdButton } from './card';
@@ -69,6 +71,219 @@ function habitRow(
   });
   if (progress) textAt(c, progress, tx + tmax, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
   addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
+}
+
+type AlFeed = NonNullable<IslandState['almanac']>;
+type AlRow = AlFeed['rows'][number];
+
+/** the habits of the day, one list: the open ones first, the done ones below and quieter; the
+ * fourth row peeks out under the third, so the list reads as one that goes on */
+function habitList(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  al: AlFeed,
+  tx: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  tmax: number,
+): void {
+  // a tap that did not go through says so in the head, in place of the module's word
+  brandHead(
+    s,
+    c,
+    'almanac',
+    it.name,
+    tx,
+    y0,
+    x1,
+    al.note || undefined,
+    al.note ? '#F5B94A' : DIM,
+    `${al.done}/${al.total}`,
+  );
+  // the window runs a little past the content block: the next row shows its top through the fade
+  const top = y0 + ROW0 - ROW_STEP / 2;
+  scrollList(s, c, 'almanac', tx - 6, top, tmax + 6, y1 - top + 9, al.rows.length, ROW_STEP, (i, cy) => {
+    const r = al.rows[i] as AlRow;
+    habitListRow(s, c, r, tx, cy, tmax);
+  });
+}
+
+/** one habit in the list: its checkbox marks it, the rest of the row opens the habit */
+function habitListRow(s: IslandState, c: Ctx, r: AlRow, tx: number, y: number, tmax: number): void {
+  const rowHov = hovering(s, tx - 6, y - 10, tmax + 6, 20),
+    boxHov = hovering(s, tx - 6, y - 10, 22, 20);
+  // the light comes and goes on a spring: a list scrolling under a still pointer must not flick
+  // rows on and off from one frame to the next
+  const rk = hoverK(s, 'alrow:' + r.id, rowHov, 0.16, 1),
+    bk = hoverK(s, 'albox:' + r.id, boxHov, 0.16, 1),
+    ck = clamp(Math.min(rk, 1 - bk), 0, 1);
+  c.fillStyle = `rgba(255,255,255,${(0.03 + 0.04 * clamp(rk, 0, 1)).toFixed(3)})`;
+  rrect(c, tx - 6, y - 10, tmax + 6, 20, 6);
+  c.fill();
+  if (bk > 0.01) {
+    c.fillStyle = `rgba(255,255,255,${(0.08 * clamp(bk, 0, 1)).toFixed(3)})`;
+    rrect(c, tx - 4, y - 8, 18, 16, 5);
+    c.fill();
+  }
+  checkBox(c, tx, y, r.done);
+  // a chevron under the pointer says the row goes further; the right edge gives way to it
+  c.save();
+  c.font = '400 11px Onest, system-ui, sans-serif';
+  const pw = r.progress ? c.measureText(r.progress).width + 10 : 0;
+  c.restore();
+  const right = 12 * ck;
+  textAt(c, r.name, tx + 16, y + 0.5, {
+    size: 11.5,
+    weight: 500,
+    color: r.done ? DIM3 : rk > 0.5 ? INK : VAL,
+    max: tmax - 16 - pw - 12,
+  });
+  if (r.progress)
+    textAt(c, r.progress, tx + tmax - right, y + 0.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  if (ck > 0.01) {
+    c.save();
+    c.globalAlpha *= ck;
+    c.strokeStyle = DIM;
+    c.lineWidth = 1.4;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(tx + tmax - 6, y - 3.5);
+    c.lineTo(tx + tmax - 2.5, y);
+    c.lineTo(tx + tmax - 6, y + 3.5);
+    c.stroke();
+    c.restore();
+  }
+  addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act: 'depth:almanac:item:' + r.id });
+  addHit(s, c, { x: tx - 6, y: y - 10, w: 22, h: 20, act: 'almanac:' + r.id });
+}
+
+/** one habit inside the card: today, the streak and the week as Almanac counts them, mark it,
+ * open it in Almanac. What Almanac does not send (an older Almanac: no history) is not drawn. */
+function habitLevel(s: IslandState, c: Ctx, al: AlFeed, id: string, tx: number, y0: number, tmax: number): void {
+  const r = al.rows.find((x) => x.id === id) as AlRow,
+    col = MODULE_COL.almanac.body;
+  const streak = r.streak ?? null;
+  let sw = 0;
+  if (streak !== null) {
+    const st = streak > 0 ? tr(s, 'серия {0} дн', streak) : tr(s, 'серии пока нет');
+    c.save();
+    c.font = '500 11px Onest, system-ui, sans-serif';
+    sw = c.measureText(st).width + 14;
+    c.restore();
+    // a warm dot before a living streak: the one bit of colour on the level
+    if (streak > 0) {
+      c.fillStyle = '#F5B94A';
+      c.beginPath();
+      c.arc(tx + tmax - sw + 4, y0 + 18, 2.6, 0, Math.PI * 2);
+      c.fill();
+    }
+    textAt(c, st, tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: streak > 0 ? VAL : DIM3, align: 'right' });
+  }
+  backHead(s, c, r.name, tx, y0 + 18, tmax - sw - 6);
+  // today
+  const goal = r.goal ?? 1,
+    count = r.count ?? (r.done ? 1 : 0);
+  let y = y0 + ROW0;
+  if (goal > 1) {
+    const bw = tmax - 92,
+      k = clamp(count / goal, 0, 1);
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    rrect(c, tx, y - 2.5, bw, 5, 2.5);
+    c.fill();
+    if (k > 0) {
+      c.fillStyle = r.done ? col : hexA(col, 0.75);
+      rrect(c, tx, y - 2.5, Math.max(5, bw * k), 5, 2.5);
+      c.fill();
+    }
+    textAt(c, tr(s, '{0} из {1} сегодня', count, goal), tx + tmax, y + 0.5, {
+      size: 11,
+      weight: 500,
+      color: r.done ? VAL : DIM,
+      align: 'right',
+    });
+  } else {
+    checkBox(c, tx, y, r.done);
+    textAt(c, tr(s, r.done ? 'сегодня сделано' : 'сегодня ещё нет'), tx + 16, y + 0.5, {
+      size: 11.5,
+      weight: 500,
+      color: r.done ? VAL : DIM,
+    });
+  }
+  // the week, today last
+  if (r.week) {
+    y += ROW_STEP;
+    textAt(c, tr(s, 'неделя'), tx, y + 0.5, { size: 11, weight: 400, color: DIM3 });
+    const step = 15,
+      x0w = tx + tmax - 4 - step * 6;
+    for (let i = 0; i < 7; i++) {
+      const ch = r.week[i],
+        x = x0w + i * step,
+        today = i === 6;
+      c.beginPath();
+      c.arc(x, y, today ? 4.4 : 3.8, 0, Math.PI * 2);
+      if (ch === '1') {
+        c.fillStyle = col;
+        c.fill();
+      } else if (ch === 'f') {
+        // a frozen day: kept, not done - a cool ring, as Almanac's freeze
+        c.strokeStyle = '#8FB8FF';
+        c.lineWidth = 1.3;
+        c.stroke();
+      } else if (today) {
+        c.strokeStyle = 'rgba(255,255,255,0.45)';
+        c.lineWidth = 1.2;
+        c.stroke();
+      } else {
+        c.fillStyle = 'rgba(255,255,255,0.1)';
+        c.fill();
+      }
+    }
+  }
+  // the actions: mark (or one more / unmark), open it in Almanac
+  y += ROW_STEP + 3;
+  const mark = r.done ? 'Снять отметку' : goal > 1 && count > 0 ? 'Ещё раз' : 'Отметить';
+  c.save();
+  c.font = '500 11.5px Onest, system-ui, sans-serif';
+  const mw = c.measureText(tr(s, mark)).width + 22;
+  c.restore();
+  button(s, c, tx - 2, y - 10, mw, 20, tr(s, mark), 'almanac:' + r.id, !r.done);
+  // the way to the whole habit: a quiet link with an arrow, as the card heads' ↗
+  linkOut(s, c, tr(s, 'В Almanac'), 'alweb:' + r.id, tx - 2 + mw + 10, y, tx + tmax);
+}
+
+/** a quiet text link that leaves for an app or a site: label and ↗, lit under the pointer */
+function linkOut(s: IslandState, c: Ctx, label: string, act: string, x: number, y: number, xMax: number): void {
+  c.save();
+  c.font = '500 11.5px Onest, system-ui, sans-serif';
+  const w = c.measureText(label).width + 26;
+  c.restore();
+  if (x + w > xMax + 4) return;
+  const hov = hovering(s, x - 4, y - 10, w, 20);
+  if (hov) {
+    c.fillStyle = 'rgba(255,255,255,0.07)';
+    rrect(c, x - 4, y - 10, w, 20, 10);
+    c.fill();
+  }
+  const col = hov ? INK : DIM;
+  textAt(c, label, x + 4, y + 0.5, { size: 11.5, weight: 500, color: col });
+  const ax = x + w - 13;
+  c.save();
+  c.strokeStyle = col;
+  c.lineWidth = 1.3;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(ax - 3, y + 3);
+  c.lineTo(ax + 3, y - 3);
+  c.moveTo(ax - 1.5, y - 3);
+  c.lineTo(ax + 3, y - 3);
+  c.lineTo(ax + 3, y + 1.5);
+  c.stroke();
+  c.restore();
+  addHit(s, c, { x: x - 4, y: y - 10, w, h: 20, act });
 }
 
 /** a "label ... value" row with a small icon, as coucou's stats */
@@ -632,6 +847,16 @@ export function drawFocusCard(
   cardMascot(s, c, x0, y0, y1, f, f === 'claude' ? fx : null, propFor(s, f));
   const tx = x0 + 84,
     tmax = x1 - tx - 10;
+  // Almanac with habits: every habit of the day in a list, each one a level of its own (stage 10)
+  if (it.kind === 'habits' && s.almanac && s.almanac.auth === 'ok' && s.almanac.rows.length) {
+    const al = s.almanac;
+    drawDepth(s, c, 'almanac', (key) =>
+      key.startsWith('item:') && al.rows.some((r) => r.id === key.slice(5))
+        ? habitLevel(s, c, al, key.slice(5), tx, y0, tmax)
+        : habitList(s, c, it, al, tx, y0, x1, y1, tmax),
+    );
+    return;
+  }
   // one head for every card; the calendar's says how soon the next meeting is (amber when close)
   const calMins = it.kind === 'cal' ? (s.cal ? s.cal.mins : it.mins) : null;
   if (calMins !== null)

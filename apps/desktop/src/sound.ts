@@ -147,7 +147,9 @@ export function clickSound(s: IslandState, act: string): SoundName | null {
     act.startsWith('focus:') ||
     act.startsWith('m:') ||
     act === 'open:settings' ||
-    /^(vercel|notion|grafana):/.test(act)
+    // levels inside a card and their links (stage 10)
+    act.startsWith('depth:') ||
+    /^(vercel|notion|grafana|alweb):/.test(act)
   )
     return 'tap';
   return null;

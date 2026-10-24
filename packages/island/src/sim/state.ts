@@ -220,7 +220,21 @@ export interface AlmanacFeed {
   /** "off" not signed in, "bad" the sign-in expired, "ok" data is shown */
   auth: 'off' | 'bad' | 'ok';
   /** today's habits in card order: id, name, done; "3/8" when a day takes more than one tap */
-  rows: { id: string; name: string; done: boolean; progress: string }[];
+  rows: {
+    id: string;
+    name: string;
+    done: boolean;
+    progress: string;
+    /** taps today and the taps that close the day (the habit's own level) */
+    count?: number;
+    goal?: number;
+    /** days in a row as Almanac counts them; null when Almanac does not send the history */
+    streak?: number | null;
+    /** the last 7 days, today last: '1' done, 'f' frozen, '0' else; null without the history */
+    week?: string | null;
+  }[];
+  /** a short line after a tap that did not reach Almanac: the row has gone back; '' none */
+  note?: string;
   /** habits done today, habits counted today */
   done: number;
   total: number;
@@ -228,6 +242,24 @@ export interface AlmanacFeed {
   short: string;
   /** the card's two lines while there is nothing to show (not signed in, no habits today) */
   hint: [string, string];
+}
+
+/** Levels inside a module card (island/depth.ts). The card itself is level ''. */
+export interface DepthState {
+  /** the module the levels belong to; another focus or a closed island clears them */
+  mod: ModuleId | null;
+  /** the levels below the card, deepest last: "item:<id>" */
+  stack: string[];
+  /** the level the transition leaves ('' = the card), null when none runs */
+  from: string | null;
+  /** 1 going in, -1 coming back */
+  dir: 1 | -1;
+  /** when the last change began (s.t) */
+  at: number;
+  /** scroll of each list: drawn offset, its velocity, where the wheel wants it, the last wheel (s.t) */
+  scroll: Record<string, { y: number; v: number; target: number; max: number; wheelAt: number; t: number }>;
+  /** a sideways two-finger swipe so far, and when it began */
+  swipe: { dx: number; at: number };
 }
 
 export interface Particle {
@@ -357,6 +389,8 @@ export interface IslandState {
   notion: NotionFeed | null;
   grafana: GrafanaFeed | null;
   almanac: AlmanacFeed | null;
+  /** levels inside a module card: list -> item -> back (island/depth.ts, stage 10) */
+  depth: DepthState;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
@@ -520,6 +554,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     notion: null,
     grafana: null,
     almanac: null,
+    depth: { mod: null, stack: [], from: null, dir: 1, at: -1, scroll: {}, swipe: { dx: 0, at: -1 } },
     requests: [],
     settingsLink: false,
     host: null,

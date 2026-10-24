@@ -4,6 +4,7 @@ import { rrect, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { statusOf } from '../sim/events';
 import { closeCountdown, notchState } from './focus';
+import { depthReset } from './depth';
 import { islandShape, islandTargets } from './geometry';
 import { bootTrace, drawShine, islandFlash, shakeX, workFx } from './fx';
 import { drawHalf } from './half';
@@ -60,6 +61,9 @@ export function renderIsland(s: IslandState, ic: Ctx, oc: Ctx, lc?: Ctx): void {
   s.drawnOpen = state === 'open';
   const halfA = clamp(sp.halfA.x, 0, 1),
     openA = clamp(sp.openA.x, 0, 1);
+  // a card's inner levels last while it is on screen: closed, or another module in focus, the
+  // next look starts from the card's summary (island/depth.ts)
+  if (s.depth.mod && (openA < 0.02 || (s.focusId && s.focusId !== s.depth.mod))) depthReset(s);
   const cx = IW / 2;
   s.mascotSpots = [];
   s.hits = [];

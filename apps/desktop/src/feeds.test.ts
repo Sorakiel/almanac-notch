@@ -27,7 +27,16 @@ import {
   type VcState,
 } from './feeds';
 import { vercelFeed } from './feeds';
-import { AlmanacDriver, almanacFeed, dayKey, leftText, tapHabit, type AlHabit, type AlState } from './feeds';
+import {
+  AlmanacDriver,
+  almanacFeed,
+  dayKey,
+  habitStreak,
+  leftText,
+  tapHabit,
+  type AlHabit,
+  type AlState,
+} from './feeds';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EN } from '@almanac-notch/island';
@@ -757,5 +766,29 @@ describe('almanac', () => {
     d2.onState(al([hb({ done: true })]));
     d2.tick();
     expect(m2.state.event).toBeNull();
+  });
+});
+
+describe('habitStreak, as Almanac counts it (streak.ts)', () => {
+  const pad = (tail: string) => '0'.repeat(64 - tail.length) + tail;
+  it('a daily run, today still open does not break it', () => {
+    expect(habitStreak('daily', 1, pad('1110'), '2026-10-17')).toBe(3);
+    expect(habitStreak('daily', 1, pad('1111'), '2026-10-17')).toBe(4);
+    expect(habitStreak('daily', 1, pad('1100'), '2026-10-17')).toBe(0);
+  });
+  it('a frozen day neither counts nor breaks', () => {
+    expect(habitStreak('daily', 1, pad('11f1'), '2026-10-17')).toBe(3);
+  });
+  it('weekdays skip the weekend', () => {
+    // 2026-10-19 is a Monday: Fri 1, Sat 0, Sun 0, Mon 1
+    expect(habitStreak('weekdays', 1, pad('1001'), '2026-10-19')).toBe(2);
+  });
+  it('every N days: completions no more than N apart', () => {
+    expect(habitStreak('every_n_days', 3, pad('1001000'), '2026-10-17')).toBe(2);
+    expect(habitStreak('every_n_days', 3, pad('10000'), '2026-10-17')).toBe(0);
+  });
+  it('no history, no streak', () => {
+    expect(habitStreak('daily', 1, null, '2026-10-17')).toBeNull();
+    expect(habitStreak(undefined, 1, pad('1'), '2026-10-17')).toBeNull();
   });
 });

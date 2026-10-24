@@ -1,6 +1,7 @@
 // Stage 9 filmstrip: the app page on a virtual clock, one action, then the island every 1/60 s.
 // node tools/strip.mjs <scene> [out-dir]  - scenes: open, focus, ev-error, ev-attention, focus-back, tab-chat, tab-settings, tab-home,
-//   rail-sweep (the pointer down the focus card's mascot stack and back up), autoclose (click-open, leave, fold)
+//   rail-sweep (the pointer down the focus card's mascot stack and back up), autoclose (click-open, leave, fold),
+//   almanac-depth (Almanac's list: wheel, into a habit, back)
 // Writes frames to <out-dir>/<scene>/NNN.png and a contact sheet <out-dir>/<scene>.png (ffmpeg).
 import { chromium } from 'playwright';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -114,6 +115,55 @@ if (scene === 'hover-mascot') {
     }
   }
   await p.mouse.move(rail.x - 200, 12);
+  await shoot();
+} else if (scene === 'almanac-depth') {
+  // Almanac's card on its levels: the list of the day, the wheel down and up, into a habit, back
+  await p.evaluate(() => {
+    const s = window.__state;
+    const h = (id, name, done, count, goal, streak, week) => ({
+      id: `00000000-0000-4000-8000-00000000000${id}`, name, done, progress: goal > 1 && !done ? `${count}/${goal}` : '',
+      count, goal, streak, week,
+    });
+    const rows = [
+      h(1, 'Зарядка', false, 0, 1, 12, '1111110'),
+      h(2, 'Вода', false, 3, 8, 5, '1101110'),
+      h(3, 'Читать 20 минут', false, 0, 1, 0, '0010000'),
+      h(4, 'Английский', false, 0, 1, 3, '0f01110'),
+      h(5, 'Прогулка', false, 0, 1, 1, '1000010'),
+      h(6, 'Медитация', true, 1, 1, 9, '1111111'),
+      h(7, 'Без сахара', true, 1, 1, 21, '1111111'),
+    ];
+    s.almanac = { auth: 'ok', rows, done: 2, total: 7, short: 'привычки 2 из 7', hint: ['', ''], note: '' };
+  });
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  const pill = await p.evaluate(() => window.__state.hits.find((x) => x.act === 'focus:almanac'));
+  await p.mouse.move(pill.x + pill.w / 2, pill.y + pill.h / 2);
+  await p.mouse.down();
+  await p.mouse.up();
+  await p.clock.runFor(1500);
+  const zone = await p.evaluate(() => window.__state.hits.find((x) => x.act === 'scroll:almanac'));
+  const cx = zone.x + zone.w * 0.6;
+  await p.mouse.move(cx, zone.y + 30);
+  await shoot();
+  for (let i = 0; i < 3; i++) {
+    await p.mouse.wheel(0, 100);
+    await shoot();
+  }
+  await p.mouse.wheel(0, 100); // past the end: the list gives a little and springs back
+  await shoot();
+  for (let i = 0; i < 4; i++) await p.mouse.wheel(0, -100);
+  await shoot();
+  const row = await p.evaluate(() => window.__state.hits.find((x) => x.act.startsWith('depth:almanac:item:')));
+  await p.mouse.move(row.x + row.w * 0.6, row.y + row.h / 2);
+  await p.mouse.down();
+  await p.mouse.up();
+  await shoot();
+  await shoot();
+  const back = await p.evaluate(() => window.__state.hits.find((x) => x.act === 'depth:back'));
+  await p.mouse.move(back.x + 8, back.y + back.h / 2);
+  await p.mouse.down();
+  await p.mouse.up();
   await shoot();
 } else if (scene === 'autoclose') {
   // the island opened by a click, then the pointer leaves: the countdown, then the fold

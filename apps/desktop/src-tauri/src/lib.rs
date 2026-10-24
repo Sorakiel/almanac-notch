@@ -272,6 +272,12 @@ async fn almanac_toggle(id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+/// The Almanac card's "Открыть в Almanac": the habit's page in the web app.
+#[tauri::command]
+fn almanac_open(id: String) -> Result<(), String> {
+    almanac::open_habit(&id)
+}
+
 /// Connect a Notion integration token: checked against Notion, then kept in the keychain.
 /// Returns the workspace name.
 #[tauri::command]
@@ -806,6 +812,7 @@ pub fn run() {
             almanac_browser_cancel,
             almanac_available,
             almanac_toggle,
+            almanac_open,
             calendar_config,
             calendar_choose,
             calendar_access,

@@ -21,6 +21,8 @@ import {
   islandPointerDown,
   islandPointerUp,
   islandPointerLeave,
+  islandBack,
+  islandWheel,
   islandPointerMove,
   islandRect,
   notchState,
@@ -298,6 +300,11 @@ const domPoint = (e: MouseEvent): IslandPoint => {
   return { x: ((e.clientX - r.left) * s.IW) / r.width, y: ((e.clientY - r.top) * s.IH) / r.height };
 };
 island.addEventListener('pointerdown', (e) => {
+  // the mouse's back button: one level back inside a card (island/depth.ts)
+  if (e.button === 3) {
+    if (islandBack(s)) wake();
+    return;
+  }
   const p = domPoint(e),
     act = hitTest(s, p);
   // the control's sound depends on its state before the click (a habit ticked or unticked)
@@ -307,6 +314,18 @@ island.addEventListener('pointerdown', (e) => {
   if (s.host?.volDrag) island.setPointerCapture(e.pointerId);
 });
 island.addEventListener('pointerup', () => islandPointerUp(s));
+// the wheel and the trackpad: lists inside cards scroll, a swipe to the right goes back
+island.addEventListener(
+  'wheel',
+  (e) => {
+    const k = e.deltaMode === 1 ? 20 : e.deltaMode === 2 ? 200 : 1;
+    if (islandWheel(s, domPoint(e), e.deltaX * k, e.deltaY * k)) {
+      e.preventDefault();
+      wake();
+    }
+  },
+  { passive: false },
+);
 island.addEventListener('pointercancel', () => islandPointerUp(s));
 
 // proto: keydown - the answer keys Y/N and 1-3 (SPEC 2.10). The panel never takes the keyboard
@@ -332,6 +351,11 @@ function answerKey(key: string): boolean {
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (answerKey(e.key.toLowerCase())) e.preventDefault();
+  // Esc steps back out of a card's level (the browser mode: the panel never takes the keyboard)
+  else if (e.key === 'Escape' && islandBack(s)) {
+    e.preventDefault();
+    wake();
+  }
 });
 
 /** Which global answer keys are registered: none, the approval pair or the options. */
@@ -604,6 +628,7 @@ function tick(now: number, id: number): void {
     else if (r.startsWith('notion:')) void invoke('notion_open', { id: r.slice(7) });
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
     else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));
+    else if (r.startsWith('alweb:')) void invoke('almanac_open', { id: r.slice(6) });
     // the settings card
     else if (r === 'host:quit') void invoke('island_action', { id: 'quit' });
     else if (r.startsWith('host:')) {

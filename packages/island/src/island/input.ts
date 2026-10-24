@@ -10,6 +10,7 @@ import type { ModuleId, Tab } from '../sim/state';
 import { habitsDone, habitsTotal } from './focus';
 import { hitAt } from './hits';
 import { ciHide } from './ci';
+import { depthAct } from './depth';
 
 export interface IslandPoint {
   x: number;
@@ -69,6 +70,8 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   const act = h.act;
   s.pressAct = act;
   s.pressAt = s.t;
+  // levels inside a module card (island/depth.ts)
+  if (depthAct(s, act)) return;
   if (act === 'mascot') {
     const R = h.R ?? 1;
     poke(s, clamp((p.x - (h.cx ?? 0)) / R, -1, 1), clamp((p.y - (h.cy ?? 0)) / (R * 0.92), -1, 1));
@@ -83,7 +86,7 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   }
   // not in the prototype (docs/CHANGES.md): a live habit row - the app marks it in Almanac and
   // answers with the same feedback as the stub's checkbox (src/feeds.ts AlmanacDriver)
-  else if (act.startsWith('almanac:')) s.requests.push(act);
+  else if (act.startsWith('almanac:') || act.startsWith('alweb:')) s.requests.push(act);
   else if (act.startsWith('habit:')) {
     const hb = s.habits[+act.slice(6)];
     if (!hb) return;

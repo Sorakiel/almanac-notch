@@ -1047,6 +1047,11 @@ export interface AlHabit {
   count: number;
   goal: number;
   done: boolean;
+  /** Almanac 0041: the schedule and the last 64 days ('1' done, 'f' frozen, '0' else, today last);
+   *  absent from an older Almanac - then the card shows no streak and no week */
+  frequency?: string | null;
+  target?: number | null;
+  history?: string | null;
 }
 
 export interface AlState {
@@ -1065,6 +1070,8 @@ const AL_HINT = 'Настройки → Almanac';
 /** the evening reminder: from this hour, once a day, while habits are left */
 export const EVENING_HOUR = 20;
 const AL_NAME_MAX = 28;
+/** how long the card says a tap did not go through, ms */
+const NOTE_MS = 3500;
 
 /** "2026-10-18" for a local time */
 export function dayKey(t: number): string {
@@ -1110,17 +1117,71 @@ export function almanacFeed(a: AlState | null, lang: Lang = 'ru'): AlmanacFeed {
   }
   return {
     auth: 'ok',
-    rows: a.habits.map((h) => ({
-      id: h.id,
-      name: clip(h.name, AL_NAME_MAX),
-      done: h.done,
-      progress: h.goal > 1 && !h.done ? h.count + '/' + h.goal : '',
-    })),
+    rows: a.habits.map((h) => {
+      // today's mark follows a tap at once, before Almanac answers
+      const hist = h.history ? h.history.slice(0, -1) + (h.done ? '1' : h.history.endsWith('f') ? 'f' : '0') : null;
+      return {
+        id: h.id,
+        name: clip(h.name, AL_NAME_MAX),
+        done: h.done,
+        progress: h.goal > 1 && !h.done ? h.count + '/' + h.goal : '',
+        count: h.count,
+        goal: h.goal,
+        streak: habitStreak(h.frequency, h.target, hist, a.date),
+        week: hist && hist.length >= 7 ? hist.slice(-7) : null,
+      };
+    }),
     done: a.done,
     total: a.total,
     short: tr(L, 'привычки {0} из {1}', a.done, a.total),
     hint: ['', ''],
   };
+}
+
+/**
+ * The streak as Almanac shows it - a port of currentStreak (almanac-app
+ * src/features/habits/lib/streak.ts) over today_habits' history, so the island and the app never
+ * disagree. `history` runs oldest first and ends on `date` ("2026-10-18"); null when there is none.
+ */
+export function habitStreak(
+  frequency: string | null | undefined,
+  target: number | null | undefined,
+  history: string | null | undefined,
+  date: string | null,
+): number | null {
+  if (!history || !date || !frequency) return null;
+  const n = history.length;
+  const doneOn = (i: number): boolean => history[i] === '1',
+    frozenOn = (i: number): boolean => history[i] === 'f';
+  const interval =
+    frequency === 'every_n_days' ? (target ?? 1) : frequency === 'every_n_weeks' ? (target ?? 1) * 7 : null;
+  if (interval !== null) {
+    // intervalStreak: completions no more than N days apart; a frozen day bridges without counting
+    const marks: { i: number; done: boolean }[] = [];
+    for (let i = 0; i < n; i++) if (doneOn(i) || frozenOn(i)) marks.push({ i, done: doneOn(i) });
+    const last = marks[marks.length - 1];
+    if (!last || n - 1 - last.i > interval) return 0;
+    let run = last.done ? 1 : 0;
+    for (let j = marks.length - 1; j > 0; j--) {
+      if ((marks[j] as { i: number }).i - (marks[j - 1] as { i: number }).i > interval) break;
+      if ((marks[j - 1] as { done: boolean }).done) run++;
+    }
+    return run;
+  }
+  // dailyStreak; a weekdays habit walks its weekdays only
+  const day0 = new Date(date + 'T12:00:00');
+  if (Number.isNaN(day0.getTime())) return null;
+  const weekday = (i: number): number => (day0.getDay() - (n - 1 - i) + 7 * 64) % 7;
+  let streak = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    if (frequency === 'weekdays' && (weekday(i) === 0 || weekday(i) === 6)) continue;
+    // today is still open: it neither counts nor breaks the run yet
+    if (i === n - 1 && !doneOn(i)) continue;
+    if (doneOn(i)) streak++;
+    else if (frozenOn(i)) continue;
+    else break;
+  }
+  return streak;
 }
 
 /** One tap, as Almanac counts it: a done habit clears, an open one gets one more. */
@@ -1175,6 +1236,8 @@ export class AlmanacDriver {
   /** the day the celebration already ran */
   private cheered: string | null = null;
   private pending: { type: EventType; label: string } | null = null;
+  /** the line after a failed tap, until when (now()) */
+  private note: { text: string; until: number } | null = null;
   constructor(
     private s: IslandState,
     private m: { trigger: (t: EventType) => void },
@@ -1231,7 +1294,12 @@ export class AlmanacDriver {
       if (f && --f.n <= 0) this.inflight.delete(id);
       this.show();
     };
-    this.send(id).then(settle, settle);
+    // a tap that did not reach Almanac: the row goes back and the card says so, briefly
+    const failed = (): void => {
+      this.note = { text: 'не отмечено · нет связи', until: this.now() + NOTE_MS };
+      settle();
+    };
+    this.send(id).then(settle, failed);
   }
 
   /** The last read with the taps still on their way laid over it. */
@@ -1244,12 +1312,18 @@ export class AlmanacDriver {
 
   private show(): void {
     this.lang = this.s.lang;
-    this.s.almanac = almanacFeed(this.view(), this.lang);
+    const f = almanacFeed(this.view(), this.lang);
+    if (this.note && this.now() < this.note.until) f.note = tr(this.s, this.note.text);
+    this.s.almanac = f;
   }
 
   /** Per frame: the language, a waiting event, the evening reminder. */
   tick(): void {
     if (this.s.lang !== this.lang) this.show();
+    if (this.note && this.now() >= this.note.until) {
+      this.note = null;
+      this.show();
+    }
     const ev = this.s.event;
     if (ev && PROMPTS.includes(ev.type)) return;
     const p = this.pending;

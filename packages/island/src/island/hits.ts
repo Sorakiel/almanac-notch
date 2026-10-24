@@ -99,3 +99,37 @@ export function withScale(s: IslandState, c: Ctx, ox: number, oy: number, k: num
     s.islandMascot = { x: fx(m.x), y: fy(m.y), R: m.R * k };
   }
 }
+
+/** Draw shifted by (dx, dy), keeping clicks, hover and the mascot's spots in island coordinates,
+ * as withScale does for a scale: a level of a card sliding in or out (island/depth.ts). */
+export function withShift(s: IslandState, c: Ctx, dx: number, dy: number, draw: () => void): void {
+  if (dx === 0 && dy === 0) return draw();
+  const ptr = s.islandPtr,
+    nh = s.hits.length,
+    ns = s.mascotSpots.length;
+  if (ptr) s.islandPtr = { x: ptr.x - dx, y: ptr.y - dy };
+  c.save();
+  c.translate(dx, dy);
+  try {
+    draw();
+  } finally {
+    c.restore();
+    s.islandPtr = ptr;
+  }
+  for (let i = nh; i < s.hits.length; i++) {
+    const h = s.hits[i] as Hit;
+    s.hits[i] = {
+      ...h,
+      x: h.x + dx,
+      y: h.y + dy,
+      ...(h.cx !== undefined ? { cx: h.cx + dx } : {}),
+      ...(h.cy !== undefined ? { cy: h.cy + dy } : {}),
+      ...(h.bx0 !== undefined ? { bx0: h.bx0 + dx } : {}),
+      ...(h.bx1 !== undefined ? { bx1: h.bx1 + dx } : {}),
+    };
+  }
+  for (let i = ns; i < s.mascotSpots.length; i++) {
+    const p = s.mascotSpots[i];
+    if (p) s.mascotSpots[i] = { ...p, x: p.x + dx, y: p.y + dy };
+  }
+}
