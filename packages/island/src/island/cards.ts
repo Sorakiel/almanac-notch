@@ -287,6 +287,94 @@ function githubLevel(
 
 type GhPr = NonNullable<GhFeed['review']>[number];
 
+type VcFeed = NonNullable<IslandState['vercel']>;
+type VcRow = VcFeed['rows'][number];
+
+function vercelLevel(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  vc: VcFeed,
+  key: string,
+  tx: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  tmax: number,
+): void {
+  if (key.startsWith('dep:')) {
+    const r = vc.rows.find((x) => x.id === key.slice(4));
+    if (r) return vercelDeploy(s, c, vc, r, tx, y0, tmax);
+  }
+  brandHead(s, c, it.id, it.name, tx, y0, x1);
+  const top = y0 + ROW0 - ROW_STEP / 2;
+  scrollList(s, c, 'vercel', tx - 6, top, tmax + 6, y1 - top + 9, vc.rows.length, ROW_STEP, (i, cy) => {
+    const r = vc.rows[i] as VcRow;
+    listLine(
+      s,
+      c,
+      'vc:' + r.id,
+      'depth:vercel:dep:' + r.id,
+      cy,
+      tx,
+      tmax,
+      (x, y) => deployDot(c, x, y + 0.5, 2.6, r.state, s.t),
+      r.name,
+      r.ago,
+      '',
+      r.state === 'off',
+    );
+  });
+}
+
+/** one deployment inside the card: how it went, from what, and the one thing to do next */
+function vercelDeploy(s: IslandState, c: Ctx, vc: VcFeed, r: VcRow, tx: number, y0: number, tmax: number): void {
+  backHead(s, c, r.name, tx, y0 + 18, tmax - 44);
+  textAt(c, r.ago, tx + tmax, y0 + 18.5, { size: 11, weight: 400, color: DIM3, align: 'right' });
+  let y = y0 + ROW0;
+  const word = { ok: 'Готов', fail: 'Упал', run: 'Собирается', off: 'Отменён' }[r.state];
+  deployDot(c, tx + 3, y + 0.5, 3, r.state, s.t);
+  textAt(c, tr(s, word), tx + 12, y + 0.5, { size: 11.5, weight: 600, color: r.state === 'fail' ? '#F4505E' : VAL });
+  c.save();
+  c.font = '600 11.5px Onest, system-ui, sans-serif';
+  const ww = c.measureText(tr(s, word)).width;
+  c.restore();
+  if (r.target) textAt(c, '· ' + r.target, tx + 18 + ww, y + 0.5, { size: 11, weight: 400, color: DIM });
+  y += ROW_STEP;
+  const note = vc.note && vc.note.id === r.id ? vc.note : null;
+  if (note) textAt(c, note.text, tx, y + 0.5, { size: 11, weight: 500, color: note.err ? '#F5B94A' : VAL, max: tmax });
+  else if (r.branch || r.commit) {
+    let x = tx;
+    if (r.branch) {
+      textAt(c, r.branch, x, y + 0.5, { size: 10.5, weight: 500, mono: true, color: DIM3, max: tmax * 0.45 });
+      c.save();
+      c.font = '500 10.5px "JetBrains Mono", monospace';
+      x += Math.min(c.measureText(r.branch).width, tmax * 0.45) + 7;
+      c.restore();
+    }
+    if (r.commit) textAt(c, r.commit, x, y + 0.5, { size: 11, weight: 400, color: DIM, max: tx + tmax - x });
+  }
+  y += ROW_STEP + 3;
+  // the next step: a failed build is built again, a ready one is looked at
+  let x = tx - 2;
+  const primary =
+    r.state === 'fail'
+      ? ['Повторить', 'vcredo:' + r.id]
+      : r.state === 'ok' && r.site
+        ? ['Открыть сайт', 'vcsite:' + r.id]
+        : null;
+  if (primary) {
+    const label = tr(s, primary[0] as string);
+    c.save();
+    c.font = '500 11.5px Onest, system-ui, sans-serif';
+    const w = c.measureText(label).width + 22;
+    c.restore();
+    button(s, c, x, y - 10, w, 20, label, primary[1] as string, true);
+    x += w + 10;
+  }
+  linkOut(s, c, r.state === 'fail' ? tr(s, 'Логи') : 'Vercel', 'vercel:' + r.id, x, y, tx + tmax);
+}
+
 type CalFeed = NonNullable<IslandState['cal']>;
 type CalEv = NonNullable<CalFeed['events']>[number];
 
@@ -1299,6 +1387,12 @@ export function drawFocusCard(
   if (it.kind === 'ci' && s.github && s.github.auth === 'ok' && !(tmax > 300 && ciRun(s))) {
     const gh = s.github;
     drawDepth(s, c, 'github', (key) => githubLevel(s, c, it, gh, key, tx, y0, x1, y1, tmax));
+    return;
+  }
+  // Vercel: every deployment kept, a list; one opens - its site, or "Повторить" when it failed
+  if (it.kind === 'deploy' && s.vercel && s.vercel.auth === 'ok' && s.vercel.rows.length) {
+    const vc = s.vercel;
+    drawDepth(s, c, 'vercel', (key) => vercelLevel(s, c, it, vc, key, tx, y0, x1, y1, tmax));
     return;
   }
   // the calendar: the next meeting and the day open further - where it is, join the call (stage 10)

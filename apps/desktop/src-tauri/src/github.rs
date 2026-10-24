@@ -87,13 +87,20 @@ fn parse_review(v: &Value) -> Vec<Pr> {
         .into_iter()
         .flatten()
         .filter_map(|n| {
-            let url = n["url"].as_str().filter(|u| u.starts_with("https://github.com/"))?;
+            let url = n["url"]
+                .as_str()
+                .filter(|u| u.starts_with("https://github.com/"))?;
             let full = n["repository"]["nameWithOwner"].as_str()?.to_owned();
             Some(Pr {
                 repo: full.rsplit('/').next().unwrap_or(&full).to_owned(),
                 full,
                 number: n["number"].as_u64()?,
-                title: n["title"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" "),
+                title: n["title"]
+                    .as_str()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" "),
                 author: n["author"]["login"].as_str().map(str::to_owned),
                 created: n["createdAt"].as_str().and_then(parse_time).unwrap_or(0.0),
                 url: url.to_owned(),
@@ -648,7 +655,10 @@ mod tests {
         ]}}});
         let r = parse_review(&v);
         assert_eq!(r.len(), 2);
-        assert_eq!((r[0].repo.as_str(), r[0].number, r[0].title.as_str()), ("app", 7, "Fix the rail"));
+        assert_eq!(
+            (r[0].repo.as_str(), r[0].number, r[0].title.as_str()),
+            ("app", 7, "Fix the rail")
+        );
         assert_eq!(r[0].author.as_deref(), Some("ann"));
         assert!(r[0].created > 0.0);
         assert!(r[1].draft && r[1].author.is_none());

@@ -168,11 +168,23 @@ export interface VercelFeed {
   /** newest deployment; "none" = no deployments yet */
   state: 'run' | 'fail' | 'ok' | 'none';
   /** the card's rows, newest first (at most three): project, state dot, "2 ч" */
-  rows: { id: string; name: string; state: 'run' | 'fail' | 'ok' | 'off'; ago: string }[];
+  rows: {
+    id: string;
+    name: string;
+    state: 'run' | 'fail' | 'ok' | 'off';
+    ago: string;
+    /** stage 10, a deployment's own level: production or preview, branch, commit, has a site */
+    target?: 'production' | 'preview';
+    branch?: string;
+    commit?: string;
+    site?: boolean;
+  }[];
   /** the rail's, chips' and ears' short text */
   short: string;
   /** the card's two lines while there is nothing to show (no token, refused, no deployments) */
   hint: [string, string];
+  /** how a "Повторить" went, on that deployment's level */
+  note?: { id: string; text: string; err: boolean };
 }
 
 /**

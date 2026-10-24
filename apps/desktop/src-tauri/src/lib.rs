@@ -203,6 +203,33 @@ async fn vercel_connect(token: String) -> Result<String, String> {
 }
 
 /// The card's arrow: open a deployment's page; the URL is looked up here, not sent by the page.
+fn vercel_deploy(feeds: &Arc<Mutex<Feeds>>, id: &str) -> Option<vercel::Deploy> {
+    feeds
+        .lock()
+        .unwrap()
+        .vercel
+        .as_ref()
+        .and_then(|v| v.deploys.iter().find(|d| d.id == id).cloned())
+}
+
+/// A deployment's own level: "Открыть сайт" (its host, looked up here).
+#[tauri::command]
+fn vercel_site(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
+    if let Some(h) = vercel_deploy(&feeds, &id).and_then(|d| d.site) {
+        vercel::open_site(&h);
+    }
+}
+
+/// A failed deployment's "Повторить": Vercel builds it again from the same source.
+#[tauri::command]
+async fn vercel_redeploy(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) -> Result<(), String> {
+    let d = vercel_deploy(&feeds, &id)
+        .ok_or_else(|| lang::t("Нет такого деплоя", "No such deployment").to_owned())?;
+    tauri::async_runtime::spawn_blocking(move || vercel::redeploy(&d))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn vercel_open(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
     let url = feeds.lock().unwrap().vercel.as_ref().and_then(|v| {
@@ -806,6 +833,8 @@ pub fn run() {
             vercel_connect,
             vercel_disconnect,
             vercel_open,
+            vercel_site,
+            vercel_redeploy,
             notion_connect,
             notion_disconnect,
             notion_open,

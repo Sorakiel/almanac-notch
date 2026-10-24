@@ -49,7 +49,9 @@ pub fn call_link(texts: &[&str]) -> Option<String> {
         while let Some(i) = rest.find("https://") {
             let tail = &rest[i..];
             let end = tail
-                .find(|c: char| c.is_whitespace() || matches!(c, '"' | '<' | '>' | ')' | ']' | '\\'))
+                .find(|c: char| {
+                    c.is_whitespace() || matches!(c, '"' | '<' | '>' | ')' | ']' | '\\')
+                })
                 .unwrap_or(tail.len());
             let url = tail[..end].trim_end_matches(['.', ',', ';']);
             let host = url[8..].split(['/', '?', '#', ':']).next().unwrap_or("");
@@ -589,7 +591,10 @@ mod mac {
                     continue;
                 }
                 let location = ev.location().map(|s| s.to_string());
-                let url = ev.URL().and_then(|u| u.absoluteString()).map(|s| s.to_string());
+                let url = ev
+                    .URL()
+                    .and_then(|u| u.absoluteString())
+                    .map(|s| s.to_string());
                 let notes = ev.notes().map(|s| s.to_string());
                 out.push(Event {
                     title: ev.title().to_string(),
@@ -655,17 +660,30 @@ mod tests {
 
     #[test]
     fn call_links_are_known_call_hosts_only() {
-        let notes = "Agenda: https://docs.google.com/d/1\nJoin: https://us02web.zoom.us/j/123?pwd=x.\n";
-        assert_eq!(call_link(&["", notes]).as_deref(), Some("https://us02web.zoom.us/j/123?pwd=x"));
-        assert_eq!(call_link(&["https://meet.google.com/abc-defg-hij"]).as_deref(), Some("https://meet.google.com/abc-defg-hij"));
-        assert_eq!(call_link(&["http://zoom.us/j/1", "https://zoom.us.evil.com/x"]), None);
+        let notes =
+            "Agenda: https://docs.google.com/d/1\nJoin: https://us02web.zoom.us/j/123?pwd=x.\n";
+        assert_eq!(
+            call_link(&["", notes]).as_deref(),
+            Some("https://us02web.zoom.us/j/123?pwd=x")
+        );
+        assert_eq!(
+            call_link(&["https://meet.google.com/abc-defg-hij"]).as_deref(),
+            Some("https://meet.google.com/abc-defg-hij")
+        );
+        assert_eq!(
+            call_link(&["http://zoom.us/j/1", "https://zoom.us.evil.com/x"]),
+            None
+        );
         assert_eq!(call_link(&["see https://evilzoom.us/j/1"]), None);
         assert!(join("https://example.com/").is_err());
     }
 
     #[test]
     fn a_place_is_text_not_a_link() {
-        assert_eq!(place_of(Some("  Room 4,\n floor 2 ")).as_deref(), Some("Room 4, floor 2"));
+        assert_eq!(
+            place_of(Some("  Room 4,\n floor 2 ")).as_deref(),
+            Some("Room 4, floor 2")
+        );
         assert_eq!(place_of(Some("https://zoom.us/j/1")), None);
         assert_eq!(place_of(Some("  ")), None);
         assert_eq!(place_of(None), None);

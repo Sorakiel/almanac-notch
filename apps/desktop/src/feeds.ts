@@ -635,6 +635,9 @@ export interface VcDeploy {
   done: number | null;
   target: 'production' | 'preview';
   branch: string | null;
+  /** stage 10 (absent from an older build): the commit's first line, the deployment's host */
+  commit?: string | null;
+  site?: string | null;
 }
 
 export interface VcState {
@@ -675,11 +678,16 @@ export function vercelFeed(v: VcState | null, now: number, lang: Lang = 'ru'): V
   return {
     auth: 'ok',
     state: st === 'off' ? 'none' : st,
-    rows: v.deploys.slice(0, 3).map((x) => ({
+    // every deployment kept: the card scrolls them, each one opens (stage 10)
+    rows: v.deploys.map((x) => ({
       id: x.id,
       name: clip(x.project, 22),
       state: VC_STATE[x.state],
       ago: agoText(x.state === 'building' ? x.created : (x.done ?? x.created), now, lang),
+      target: x.target,
+      branch: x.branch ?? '',
+      commit: x.commit ?? '',
+      site: !!x.site,
     })),
     short: d
       ? tr(
@@ -742,14 +750,37 @@ export class VercelDriver {
     this.tick();
   }
 
+  /** A deployment's "Повторить": asks Vercel, then the card says how it went for a few seconds. */
+  redeploy(id: string, send: (id: string) => Promise<unknown>): void {
+    this.note = { id, text: tr(this.s, 'запускаю заново…'), err: false, until: this.now() + 60_000 };
+    this.lastMin = -1;
+    send(id).then(
+      () => {
+        this.note = { id, text: tr(this.s, 'запущен заново'), err: false, until: this.now() + NOTE_MS };
+        this.lastMin = -1;
+      },
+      (e: unknown) => {
+        this.note = { id, text: String(e), err: true, until: this.now() + NOTE_MS * 2 };
+        this.lastMin = -1;
+      },
+    );
+  }
+  private note: { id: string; text: string; err: boolean; until: number } | null = null;
+
   /** Per frame: the relative times, a waiting deploy event. */
   tick(): void {
     const now = this.now(),
       min = Math.floor(now / 60_000);
+    if (this.note && now >= this.note.until) {
+      this.note = null;
+      this.lastMin = -1;
+    }
     if (min !== this.lastMin || this.s.lang !== this.lang) {
       this.lastMin = min;
       this.lang = this.s.lang;
-      this.s.vercel = vercelFeed(this.v, now, this.lang);
+      const f = vercelFeed(this.v, now, this.lang);
+      if (this.note) f.note = { id: this.note.id, text: this.note.text, err: this.note.err };
+      this.s.vercel = f;
     }
     const p = this.pending,
       ev = this.s.event;

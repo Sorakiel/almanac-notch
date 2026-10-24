@@ -392,7 +392,7 @@ describe('vercel feed', () => {
     expect(vercelFeed(vc([], { auth: 'net', user: null }), T0).hint[0]).toBe('Нет связи с Vercel');
     expect(vercelFeed(vc([]), T0)).toMatchObject({ short: 'нет деплоев', hint: ['деплоев пока нет', ''], rows: [] });
   });
-  it('the three newest deployments: dot, project, compact age', () => {
+  it('every deployment kept, newest first: dot, project, compact age (the card scrolls, stage 10)', () => {
     const f = vercelFeed(
       vc([
         dep({ id: 'a', state: 'building', created: T0 - 2 * min, done: null }),
@@ -408,6 +408,7 @@ describe('vercel feed', () => {
       ['almanac-site', 'run', '2 мин'],
       ['almanac-site', 'ok', '2 ч'],
       ['carcosa-guide', 'fail', '6 дн'],
+      ['almanac-site', 'ok', expect.any(String)],
     ]);
     expect(vercelFeed(vc([dep()]), T0, 'en').rows[0]?.ago).toBe('8 min');
     expect(agoText(T0, T0, 'en')).toBe('now');

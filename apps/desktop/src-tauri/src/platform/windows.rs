@@ -142,7 +142,12 @@ pub fn place(window: &WebviewWindow) -> Placement {
             r.top,
             r.right - r.left,
             r.bottom - r.top,
-            SWP_NOACTIVATE | if may_show() { SWP_SHOWWINDOW } else { Default::default() },
+            SWP_NOACTIVATE
+                | if may_show() {
+                    SWP_SHOWWINDOW
+                } else {
+                    Default::default()
+                },
         );
         let mut got = RECT::default();
         let _ = GetWindowRect(h, &mut got);

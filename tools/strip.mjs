@@ -260,6 +260,41 @@ if (scene === 'hover-mascot') {
   await shoot();
   await click('depth:cal:day');
   await shoot();
+} else if (scene === 'vercel-depth') {
+  // Vercel's card: the deployments, a failed one inside, back, a ready one inside
+  await p.evaluate(() => {
+    const s = window.__state;
+    const row = (id, name, state, ago, target, branch, commit) => ({ id, name, state, ago, target, branch, commit, site: state === 'ok' });
+    s.vercel = {
+      auth: 'ok', state: 'fail', short: 'деплой упал', hint: ['', ''],
+      rows: [
+        row('d1', 'almanac-site', 'fail', '3 мин', 'production', 'main', 'Fix the hero on small screens'),
+        row('d2', 'portfolio', 'ok', '1 ч', 'production', 'main', 'Case study: Grok Bot'),
+        row('d3', 'almanac-site', 'run', 'сейчас', 'preview', 'feat/streaks', 'Streak card'),
+        row('d4', 'parkovich', 'ok', '2 дн', 'preview', 'dev', 'Map pins'),
+        row('d5', 'foa', 'off', '4 дн', 'preview', 'main', 'Bump deps'),
+      ],
+    };
+    if (!s.off) s.off = [];
+    s.off = s.off.filter((x) => x !== 'vercel');
+    s.focusId = 'vercel';
+  });
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  const click = async (act) => {
+    const h = await p.evaluate((a) => window.__state.hits.find((x) => x.act === a || x.act.startsWith(a)), act);
+    if (!h) throw new Error('no zone ' + act + ' in ' + (await p.evaluate(() => window.__state.hits.map((x) => x.act).join(' '))));
+    await p.mouse.move(h.x + h.w * 0.5, h.y + h.h / 2);
+    await shoot();
+    await p.mouse.down();
+    await p.mouse.up();
+  };
+  await click('depth:vercel:dep:d1');
+  await shoot();
+  await click('depth:back');
+  await shoot();
+  await click('depth:vercel:dep:d2');
+  await shoot();
 } else if (scene === 'autoclose') {
   // the island opened by a click, then the pointer leaves: the countdown, then the fold
   await p.evaluate(() => (window.__state.host.openOnHover = false));

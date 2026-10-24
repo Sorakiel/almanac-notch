@@ -13,7 +13,9 @@ use std::thread;
 use std::time::Duration;
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
+
+use crate::lang;
 
 const SERVICE: &str = "dev.almanac.notch";
 const ACCOUNT: &str = "vercel-token";
@@ -25,7 +27,7 @@ const PER_SCOPE: u32 = 20;
 /// teams read besides the personal account
 const TEAMS: usize = 5;
 /// deployments kept, newest first
-const KEEP: usize = 10;
+const KEEP: usize = 12;
 
 /// One deployment.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -44,6 +46,13 @@ pub struct Deploy {
     pub branch: Option<String>,
     /// the deployment's page on vercel.com (opened from the card's arrow)
     pub url: Option<String>,
+    /// the commit's message, first line (stage 10: the deployment's own level)
+    pub commit: Option<String>,
+    /// the deployment's own host, "proj-abc.vercel.app": "Открыть сайт"
+    pub site: Option<String>,
+    /// the team it belongs to ('' the personal account): a redeploy is asked in its scope
+    #[serde(skip)]
+    pub team: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -134,7 +143,7 @@ fn fetch(token: &str) -> Result<State, Failure> {
             format!("/v6/deployments?limit={PER_SCOPE}&teamId={team}")
         };
         match get(token, &q) {
-            Ok(v) => all.extend(parse_deploys(&v)),
+            Ok(v) => all.extend(parse_deploys(&v, team)),
             // a team the token may not read is skipped; the personal scope must answer
             Err(e) if i == 0 => return Err(e),
             Err(_) => {}
@@ -164,7 +173,7 @@ fn ms(v: &Value) -> Option<f64> {
 }
 
 /// `/v6/deployments` answer -> deployments. Unknown shapes give an empty list.
-fn parse_deploys(v: &Value) -> Vec<Deploy> {
+fn parse_deploys(v: &Value, team: &str) -> Vec<Deploy> {
     let mut out = Vec::new();
     for d in v["deployments"].as_array().into_iter().flatten() {
         let (Some(id), Some(project), Some(created)) = (
@@ -207,6 +216,15 @@ fn parse_deploys(v: &Value) -> Vec<Deploy> {
                 .as_str()
                 .filter(|u| u.starts_with("https://vercel.com/"))
                 .map(str::to_owned),
+            commit: d["meta"]["githubCommitMessage"]
+                .as_str()
+                .or_else(|| d["meta"]["gitlabCommitMessage"].as_str())
+                .or_else(|| d["meta"]["bitbucketCommitMessage"].as_str())
+                .and_then(|m| m.lines().next())
+                .map(|m| m.trim().chars().take(120).collect())
+                .filter(|m: &String| !m.is_empty()),
+            site: d["url"].as_str().filter(|h| host_ok(h)).map(str::to_owned),
+            team: team.to_owned(),
         });
     }
     out
@@ -219,6 +237,75 @@ fn newest(mut all: Vec<Deploy>) -> Vec<Deploy> {
     all.retain(|d| seen.insert(d.id.clone()));
     all.truncate(KEEP);
     all
+}
+
+/// A host name as Vercel gives a deployment: letters, digits, dots and dashes, nothing more.
+fn host_ok(h: &str) -> bool {
+    !h.is_empty()
+        && h.len() <= 253
+        && h.contains('.')
+        && h.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+}
+
+/// "Открыть сайт": the deployment itself.
+pub fn open_site(host: &str) {
+    if host_ok(host) {
+        open_any(&format!("https://{host}"));
+    }
+}
+
+/// "Повторить": a new deployment from this one's source, in its scope and to its target.
+/// Vercel's own redeploy (POST /v13/deployments with deploymentId).
+pub fn redeploy(d: &Deploy) -> Result<(), String> {
+    let token = token()
+        .ok_or_else(|| lang::t("Vercel не подключён", "Vercel is not connected").to_owned())?;
+    let mut body = json!({"name": d.project, "deploymentId": d.id});
+    if d.target == "production" {
+        body["target"] = json!("production");
+    }
+    let q = if d.team.is_empty() {
+        String::new()
+    } else {
+        format!("?teamId={}", d.team)
+    };
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(20)))
+        .tls_config(
+            ureq::tls::TlsConfig::builder()
+                .provider(ureq::tls::TlsProvider::NativeTls)
+                .build(),
+        )
+        .build()
+        .into();
+    match agent
+        .post(format!("{API}/v13/deployments{q}"))
+        .header("Authorization", format!("Bearer {token}"))
+        .header("User-Agent", "almanac-notch")
+        .send_json(&body)
+    {
+        Ok(_) => {
+            poke();
+            Ok(())
+        }
+        Err(ureq::Error::StatusCode(401 | 403)) => Err(lang::t(
+            "Токену не хватает прав на деплой",
+            "The token may not deploy",
+        )
+        .to_owned()),
+        Err(_) => Err(lang::t("Vercel не ответил", "Vercel did not answer").to_owned()),
+    }
+}
+
+fn open_any(url: &str) {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(windows)]
+    let _ = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }
 
 /// Open a deployment's page in the browser. The URL comes from Vercel's answer, checked above.
@@ -335,6 +422,21 @@ pub fn disconnect() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn commit_site_and_team_for_the_deployment_level() {
+        let v = json!({"deployments": [
+            {"uid": "d1", "name": "site", "state": "ERROR", "created": 1000.0, "url": "site-abc.vercel.app",
+             "meta": {"githubCommitRef": "main", "githubCommitMessage": "Fix the hero\n\nlong body"}},
+            {"uid": "d2", "name": "site", "state": "READY", "created": 900.0, "url": "evil.com/\"x"}
+        ]});
+        let d = parse_deploys(&v, "team_1");
+        assert_eq!(d[0].commit.as_deref(), Some("Fix the hero"));
+        assert_eq!(d[0].site.as_deref(), Some("site-abc.vercel.app"));
+        assert_eq!(d[0].team, "team_1");
+        assert_eq!(d[1].site, None);
+        assert!(!host_ok("a b.com") && !host_ok("nodot") && host_ok("x-1.vercel.app"));
+    }
     use serde_json::json;
 
     fn deployments() -> Value {
@@ -356,7 +458,7 @@ mod tests {
 
     #[test]
     fn newest_deploys_first() {
-        let d = newest(parse_deploys(&deployments()));
+        let d = newest(parse_deploys(&deployments(), ""));
         let rows: Vec<_> = d
             .iter()
             .map(|x| (x.project.as_str(), x.state, x.target, x.branch.as_deref()))
@@ -388,7 +490,7 @@ mod tests {
 
     #[test]
     fn wrong_shape_is_empty() {
-        assert!(parse_deploys(&json!({"error": {"code": "forbidden"}})).is_empty());
+        assert!(parse_deploys(&json!({"error": {"code": "forbidden"}}), "").is_empty());
     }
 
     /// Network: a made-up token must come back as refused, not as "no connection".

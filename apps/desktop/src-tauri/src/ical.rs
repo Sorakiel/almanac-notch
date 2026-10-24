@@ -421,18 +421,19 @@ pub fn parse(text: &str, from: f64, to: f64) -> Vec<Event> {
     };
 
     let mut out = Vec::new();
-    let push = |out: &mut Vec<Event>, t: &str, x: &(Option<String>, Option<String>), s: i64, len: i64| {
-        let (start, end) = (s as f64 * 1000.0, (s + len) as f64 * 1000.0);
-        if end > from && start < to {
-            out.push(Event {
-                title: t.to_string(),
-                start,
-                end,
-                place: x.0.clone(),
-                link: x.1.clone(),
-            });
-        }
-    };
+    let push =
+        |out: &mut Vec<Event>, t: &str, x: &(Option<String>, Option<String>), s: i64, len: i64| {
+            let (start, end) = (s as f64 * 1000.0, (s + len) as f64 * 1000.0);
+            if end > from && start < to {
+                out.push(Event {
+                    title: t.to_string(),
+                    start,
+                    end,
+                    place: x.0.clone(),
+                    link: x.1.clone(),
+                });
+            }
+        };
     for ev in &events {
         if cancelled(ev) || declined(ev) {
             continue;

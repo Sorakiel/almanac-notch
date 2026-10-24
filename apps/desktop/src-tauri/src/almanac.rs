@@ -763,10 +763,13 @@ fn web() -> &'static str {
 /// A habit's id as Almanac gives it: a uuid, nothing that could bend the URL.
 fn habit_id_ok(id: &str) -> bool {
     id.len() == 36
-        && id
-            .chars()
-            .enumerate()
-            .all(|(i, c)| if matches!(i, 8 | 13 | 18 | 23) { c == '-' } else { c.is_ascii_hexdigit() })
+        && id.chars().enumerate().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == '-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
 }
 
 /// Opens the habit in Almanac's web app (the card's "Открыть в Almanac").
@@ -907,7 +910,13 @@ mod tests {
         assert_eq!(s.habits[0].history.as_deref(), Some(h.as_str()));
         // anything but 0, 1, f is not a history: no streak rather than a wrong one
         assert_eq!(s.habits[1].history, None);
-        assert_eq!((s.habits[2].frequency.as_deref(), s.habits[2].history.as_deref()), (None, None));
+        assert_eq!(
+            (
+                s.habits[2].frequency.as_deref(),
+                s.habits[2].history.as_deref()
+            ),
+            (None, None)
+        );
     }
 
     #[test]
