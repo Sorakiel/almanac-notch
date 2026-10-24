@@ -304,10 +304,15 @@ pub fn read(from: f64, to: f64) -> Result<Vec<Event>, Failure> {
             let end = item.get("End").ok().and_then(|v| v.date_ms());
             if let (Some(start), Some(end)) = (start, end) {
                 if end > from && start < to {
+                    // the place only: the body would set off Outlook's object-model guard
+                    // (a security prompt) on machines without a known antivirus
+                    let location = item.get("Location").map(|v| v.text()).ok();
                     out.push(Event {
                         title: item.get("Subject").map(|v| v.text()).unwrap_or_default(),
                         start,
                         end,
+                        link: crate::calendar::call_link(&[location.as_deref().unwrap_or("")]),
+                        place: crate::calendar::place_of(location.as_deref()),
                     });
                 }
             }

@@ -24,6 +24,9 @@ export interface CalEvent {
   /** epoch ms */
   start: number;
   end: number;
+  /** where, and the call to join (stage 10; absent from an older build) */
+  place?: string | null;
+  link?: string | null;
 }
 
 export interface Calendar {
@@ -85,6 +88,16 @@ export function calFeed(cal: Calendar | null, now: number, lang: Lang = 'ru'): C
   if (!next) return empty('Встреч нет', 'ни сегодня, ни завтра');
   const after = ahead.find((e) => e.start >= next.end) ?? ahead[1];
   return {
+    // the card's levels: every meeting ahead, each one with its place and call (stage 10)
+    events: ahead.map((e, i) => ({
+      id: `${e.start}:${i}`,
+      title: clip(e.title || tr(L, 'Без названия'), 40),
+      start: e.start,
+      end: e.end,
+      at: whenText(e.start, now, lang),
+      place: e.place ?? '',
+      link: e.link ?? '',
+    })),
     mins: Math.max(0, Math.ceil((next.start - now) / 60_000)),
     at: whenText(next.start, now, lang),
     title: clip(next.title || tr(L, 'Без названия'), TITLE_MAX),

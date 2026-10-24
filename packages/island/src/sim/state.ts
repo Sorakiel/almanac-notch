@@ -98,6 +98,8 @@ export interface CalFeed {
   title: string;
   /** third line: "дальше: лекция в 17:10" (or the second line when mins is null) */
   after: string;
+  /** every meeting ahead, the next first (the card's levels; absent while there are none) */
+  events?: { id: string; title: string; start: number; end: number; at: string; place: string; link: string }[];
 }
 
 /**

@@ -287,6 +287,161 @@ function githubLevel(
 
 type GhPr = NonNullable<GhFeed['review']>[number];
 
+type CalFeed = NonNullable<IslandState['cal']>;
+type CalEv = NonNullable<CalFeed['events']>[number];
+
+/** "через 20 мин", "сейчас", "завтра 10:00": how soon, as the card head says it */
+function soonText(s: IslandState, e: CalEv): string {
+  const min = Math.ceil((e.start - s.date().getTime()) / 60000);
+  if (min <= 0) return tr(s, 'сейчас');
+  if (min < 60 * 12) return tr(s, 'через {0}', minsText(s, min));
+  return e.at;
+}
+
+/** the calendar's levels: '' the next meeting and what comes after, 'day' every meeting ahead,
+ * 'ev:<id>' one meeting - when, where, join the call */
+function calLevel(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  cal: CalFeed,
+  key: string,
+  tx: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  tmax: number,
+): void {
+  const events = cal.events ?? [],
+    now = s.date().getTime(),
+    col = MODULE_COL.cal.body;
+  if (key === 'day' && events.length > 1) {
+    backHead(s, c, tr(s, 'Встречи'), tx, y0 + 18, tmax - 40);
+    textAt(c, String(events.length), tx + tmax, y0 + 18.5, { size: 11, weight: 500, color: DIM, align: 'right' });
+    const top = y0 + ROW0 - ROW_STEP / 2;
+    scrollList(s, c, 'cal:day', tx - 6, top, tmax + 6, y1 - top + 9, events.length, ROW_STEP, (i, cy) => {
+      const e = events[i] as CalEv,
+        live = e.start <= now,
+        soon = !live && e.start - now <= 5 * 60000;
+      // a call is marked by a small camera instead of the dot: which ones are calls, at a glance
+      const tone = live || soon ? '#F5B94A' : col;
+      listLine(
+        s,
+        c,
+        'cal:' + e.id,
+        'depth:cal:ev:' + e.id,
+        cy,
+        tx,
+        tmax,
+        e.link ? (x, y) => camMark(c, x, y, tone) : dotMark(c, tone),
+        e.title,
+        live ? tr(s, 'сейчас') : '',
+        e.at,
+      );
+    });
+    return;
+  }
+  if (key.startsWith('ev:')) {
+    const e = events.find((x) => x.id === key.slice(3));
+    if (e) return calEvent(s, c, e, tx, y0, tmax);
+  }
+  // the summary: as before, with its rows leading further
+  const mins = cal.mins ?? 0;
+  brandHead(
+    s,
+    c,
+    it.id,
+    it.name,
+    tx,
+    y0,
+    x1,
+    mins <= 0 ? tr(s, 'сейчас') : tr(s, 'через {0}', minsText(s, mins)),
+    mins <= 5 ? '#F5B94A' : DIM,
+  );
+  const next = events[0] as CalEv;
+  const row = (id: string, act: string, y: number, draw: () => void): void => {
+    const k = rowPlate(s, c, id, tx, y, tmax, 0);
+    draw();
+    if (k > 0.01) {
+      c.save();
+      c.globalAlpha *= k;
+      chevron(c, tx + tmax - 3, y, DIM);
+      c.restore();
+    }
+    addHit(s, c, { x: tx - 6, y: y - 10, w: tmax + 6, h: 20, act });
+  };
+  row('cal:next', 'depth:cal:ev:' + next.id, y0 + ROW0, () =>
+    listRow(c, mins <= 5 ? '#F5B94A' : col, true, cal.title, '', tx, y0 + ROW0, tmax - 12, cal.at),
+  );
+  if (cal.after)
+    row('cal:after', 'depth:cal:day', y0 + ROW0 + ROW_STEP, () =>
+      listRow(c, DIM3, false, cal.after, '', tx, y0 + ROW0 + ROW_STEP, tmax - 12),
+    );
+}
+
+/** a small camera: the mark of a meeting that is a call */
+function camMark(c: Ctx, x: number, y: number, col: string): void {
+  c.fillStyle = col;
+  rrect(c, x - 3.5, y - 2.5, 5, 5, 1.2);
+  c.fill();
+  c.beginPath();
+  c.moveTo(x + 1.5, y - 0.6);
+  c.lineTo(x + 3.8, y - 2.2);
+  c.lineTo(x + 3.8, y + 2.2);
+  c.lineTo(x + 1.5, y + 0.6);
+  c.closePath();
+  c.fill();
+}
+
+/** one meeting inside the card: when and how long, where, and the call one click away */
+function calEvent(s: IslandState, c: Ctx, e: CalEv, tx: number, y0: number, tmax: number): void {
+  const soon = soonText(s, e),
+    near = e.start - s.date().getTime() <= 5 * 60000;
+  // the title takes the head whole; how soon goes with the time below
+  backHead(s, c, e.title, tx, y0 + 18, tmax);
+  let y = y0 + ROW0;
+  const hm = (t: number): string => {
+    const d = new Date(t);
+    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  };
+  const range = `${e.at.replace(/\d{1,2}:\d{2}$/, '')}${hm(e.start)}–${hm(e.end)}`;
+  textAt(c, range, tx, y + 0.5, { size: 11, weight: 500, mono: true, color: VAL });
+  c.save();
+  c.font = '500 11px "JetBrains Mono", monospace';
+  const rw = c.measureText(range).width + 8;
+  c.restore();
+  // the range says how long; the row keeps room for how soon
+  const lenText = '· ';
+  textAt(c, lenText, tx + rw, y + 0.5, { size: 11, weight: 400, color: DIM });
+  c.save();
+  c.font = '400 11px Onest, system-ui, sans-serif';
+  const lw = c.measureText(lenText).width + 2;
+  c.restore();
+  textAt(c, soon, tx + rw + lw, y + 0.5, { size: 11, weight: 500, color: near ? '#F5B94A' : DIM, max: tmax - rw - lw });
+  if (e.place) {
+    y += ROW_STEP;
+    // a pin: where
+    c.save();
+    c.strokeStyle = DIM;
+    c.lineWidth = 1.3;
+    c.beginPath();
+    c.arc(tx + 4, y - 1.5, 3, 0, Math.PI * 2);
+    c.moveTo(tx + 4, y + 1.5);
+    c.lineTo(tx + 4, y + 5);
+    c.stroke();
+    c.restore();
+    textAt(c, e.place, tx + 14, y + 0.5, { size: 11.5, weight: 400, color: DIM, max: tmax - 14 });
+  }
+  if (!e.link) return;
+  y += ROW_STEP + 3;
+  const label = tr(s, 'Подключиться');
+  c.save();
+  c.font = '500 11.5px Onest, system-ui, sans-serif';
+  const w = c.measureText(label).width + 22;
+  c.restore();
+  button(s, c, tx - 2, y - 10, w, 20, label, 'caljoin:' + e.link, true);
+}
+
 /** one repository's CI inside the card: what broke and where, open the run, re-run it */
 function ghRun(s: IslandState, c: Ctx, r: CiRun, tx: number, y0: number, tmax: number): void {
   backHead(s, c, r.repo, tx, y0 + 18, tmax - 50);
@@ -1144,6 +1299,12 @@ export function drawFocusCard(
   if (it.kind === 'ci' && s.github && s.github.auth === 'ok' && !(tmax > 300 && ciRun(s))) {
     const gh = s.github;
     drawDepth(s, c, 'github', (key) => githubLevel(s, c, it, gh, key, tx, y0, x1, y1, tmax));
+    return;
+  }
+  // the calendar: the next meeting and the day open further - where it is, join the call (stage 10)
+  if (it.kind === 'cal' && s.cal && s.cal.mins !== null && s.cal.events && s.cal.events.length) {
+    const cal = s.cal;
+    drawDepth(s, c, 'cal', (key) => calLevel(s, c, it, cal, key, tx, y0, x1, y1, tmax));
     return;
   }
   // one head for every card; the calendar's says how soon the next meeting is (amber when close)

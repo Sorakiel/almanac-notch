@@ -224,6 +224,42 @@ if (scene === 'hover-mascot') {
   await shoot();
   await click('depth:github:pr:');
   await shoot();
+} else if (scene === 'cal-depth') {
+  // the calendar's card on its levels: the next meeting inside, back, the day's list
+  await p.evaluate(() => {
+    const s = window.__state,
+      now = s.date().getTime();
+    const hm = (t) => new Date(t).getHours() + ':' + String(new Date(t).getMinutes()).padStart(2, '0');
+    const ev = (i, title, inMin, len, place, link) => ({
+      id: `${now + inMin * 60000}:${i}`, title, start: now + inMin * 60000, end: now + (inMin + len) * 60000,
+      at: hm(now + inMin * 60000), place, link,
+    });
+    const events = [
+      ev(0, 'Созвон с командой', 4, 30, 'Переговорка «Север»', 'https://meet.google.com/abc-defg-hij'),
+      ev(1, 'Ревью дизайна', 70, 45, '', 'https://zoom.us/j/123'),
+      ev(2, 'Обед с Аней', 150, 60, 'Кафе на Покровке', ''),
+      ev(3, 'Лекция', 260, 90, 'Ауд. 512', ''),
+      ev(4, 'Спортзал', 420, 60, '', ''),
+    ];
+    s.cal = { mins: 4, at: events[0].at, title: events[0].title, after: 'дальше: Ревью дизайна в ' + events[1].at, events };
+    s.focusId = 'cal';
+  });
+  await p.mouse.move(340, 12);
+  await p.clock.runFor(1500);
+  const click = async (act) => {
+    const h = await p.evaluate((a) => window.__state.hits.find((x) => x.act === a || x.act.startsWith(a)), act);
+    if (!h) throw new Error('no zone ' + act + ' in ' + (await p.evaluate(() => window.__state.hits.map((x) => x.act).join(' '))));
+    await p.mouse.move(h.x + h.w * 0.5, h.y + h.h / 2);
+    await shoot();
+    await p.mouse.down();
+    await p.mouse.up();
+  };
+  await click('depth:cal:ev:');
+  await shoot();
+  await click('depth:back');
+  await shoot();
+  await click('depth:cal:day');
+  await shoot();
 } else if (scene === 'autoclose') {
   // the island opened by a click, then the pointer leaves: the countdown, then the fold
   await p.evaluate(() => (window.__state.host.openOnHover = false));

@@ -86,7 +86,7 @@ export function islandPointerDown(s: IslandState, p: IslandPoint): void {
   }
   // not in the prototype (docs/CHANGES.md): a live habit row - the app marks it in Almanac and
   // answers with the same feedback as the stub's checkbox (src/feeds.ts AlmanacDriver)
-  else if (act.startsWith('almanac:') || act.startsWith('alweb:')) s.requests.push(act);
+  else if (act.startsWith('almanac:') || act.startsWith('alweb:') || act.startsWith('caljoin:')) s.requests.push(act);
   else if (act.startsWith('habit:')) {
     const hb = s.habits[+act.slice(6)];
     if (!hb) return;

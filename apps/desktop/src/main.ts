@@ -630,6 +630,7 @@ function tick(now: number, id: number): void {
     else if (r.startsWith('grafana:')) void invoke('grafana_open', { what: r.slice(8) });
     else if (r.startsWith('almanac:')) almanac?.tap(r.slice(8));
     else if (r.startsWith('alweb:')) void invoke('almanac_open', { id: r.slice(6) });
+    else if (r.startsWith('caljoin:')) void invoke('calendar_join', { url: r.slice(8) });
     // the settings card
     else if (r === 'host:quit') void invoke('island_action', { id: 'quit' });
     else if (r.startsWith('host:')) {

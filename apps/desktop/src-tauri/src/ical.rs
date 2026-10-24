@@ -12,7 +12,7 @@ use std::time::Duration;
 use chrono::{DateTime, FixedOffset, NaiveDateTime, TimeZone, Utc};
 use rrule::{RRule, Tz, Unvalidated};
 
-use crate::calendar::Event;
+use crate::calendar::{self, Event};
 
 /// Big personal calendars run to a few MB; anything larger is not an .ics we can use.
 const MAX_BYTES: u64 = 32 << 20;
@@ -407,14 +407,29 @@ pub fn parse(text: &str, from: f64, to: f64) -> Vec<Event> {
         }
     }
 
+    // the place and the call: Google puts its Meet link in X-GOOGLE-CONFERENCE and the description
+    let extra = |ev: &Vevent| {
+        let get = |n: &str| ev.get(n).map(|p| unescape(&p.value)).unwrap_or_default();
+        let location = get("LOCATION");
+        let link = calendar::call_link(&[
+            &get("X-GOOGLE-CONFERENCE"),
+            &get("URL"),
+            &location,
+            &get("DESCRIPTION"),
+        ]);
+        (calendar::place_of(Some(&location)), link)
+    };
+
     let mut out = Vec::new();
-    let push = |out: &mut Vec<Event>, t: &str, s: i64, len: i64| {
+    let push = |out: &mut Vec<Event>, t: &str, x: &(Option<String>, Option<String>), s: i64, len: i64| {
         let (start, end) = (s as f64 * 1000.0, (s + len) as f64 * 1000.0);
         if end > from && start < to {
             out.push(Event {
                 title: t.to_string(),
                 start,
                 end,
+                place: x.0.clone(),
+                link: x.1.clone(),
             });
         }
     };
@@ -425,9 +440,10 @@ pub fn parse(text: &str, from: f64, to: f64) -> Vec<Event> {
         let Some(start) = start_of(ev) else { continue };
         let len = length(ev, &start);
         let t = title(ev);
+        let x = extra(ev);
         let rules: Vec<&Prop> = ev.all("RRULE").collect();
         if ev.get("RECURRENCE-ID").is_some() || (rules.is_empty() && ev.get("RDATE").is_none()) {
-            push(&mut out, &t, start.timestamp(), len);
+            push(&mut out, &t, &x, start.timestamp(), len);
             continue;
         }
         let skip = ev
@@ -469,7 +485,7 @@ pub fn parse(text: &str, from: f64, to: f64) -> Vec<Event> {
         let dates = set.after(lo).before(hi).all(MAX_REPEATS).dates;
         for d in dates {
             if !skip.contains(&d.timestamp()) {
-                push(&mut out, &t, d.timestamp(), len);
+                push(&mut out, &t, &x, d.timestamp(), len);
             }
         }
     }

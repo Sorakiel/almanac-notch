@@ -278,6 +278,12 @@ async fn almanac_toggle(id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+/// The calendar card's "Подключиться": the event's call link (calendar::join checks it).
+#[tauri::command]
+fn calendar_join(url: String) -> Result<(), String> {
+    calendar::join(&url)
+}
+
 /// The Almanac card's "Открыть в Almanac": the habit's page in the web app.
 #[tauri::command]
 fn almanac_open(id: String) -> Result<(), String> {
@@ -820,6 +826,7 @@ pub fn run() {
             almanac_available,
             almanac_toggle,
             almanac_open,
+            calendar_join,
             calendar_config,
             calendar_choose,
             calendar_access,

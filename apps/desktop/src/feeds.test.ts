@@ -64,8 +64,24 @@ describe('calendar feed', () => {
   });
   it('picks the next call, rounds minutes up, names the one after', () => {
     const c: Calendar = { access: 'ok', events: [ev('Past', -90), ev('Sync', 14), ev('Lecture', 160)] };
-    expect(calFeed(c, T0)).toEqual({ mins: 14, at: '14:44', title: 'Sync', after: 'дальше: Lecture в 17:10' });
+    expect(calFeed(c, T0)).toMatchObject({ mins: 14, at: '14:44', title: 'Sync', after: 'дальше: Lecture в 17:10' });
     expect(calFeed(c, T0 + 30_000).mins).toBe(14);
+  });
+  it('lists every meeting ahead with its place and call, for the card levels', () => {
+    const c: Calendar = {
+      access: 'ok',
+      events: [
+        ev('Past', -90),
+        { ...ev('Sync', 14), place: 'Room 4', link: 'https://zoom.us/j/1' },
+        ev('Lecture', 160),
+      ],
+    };
+    const e = calFeed(c, T0).events ?? [];
+    expect(e.map((x) => [x.title, x.at, x.place, x.link])).toEqual([
+      ['Sync', '14:44', 'Room 4', 'https://zoom.us/j/1'],
+      ['Lecture', '17:10', '', ''],
+    ]);
+    expect(new Set(e.map((x) => x.id)).size).toBe(2);
   });
   it('a started call stays 10 minutes, then the next takes over', () => {
     const c: Calendar = { access: 'ok', events: [ev('Sync', -5, 60), ev('Lecture', 160)] };
