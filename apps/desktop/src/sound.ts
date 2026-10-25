@@ -55,6 +55,7 @@ export class SoundWatch {
   /** island sounds stay quiet until then (s): the launch settling, the greeting folding away */
   private quietUntil = -1;
   private last = new Map<SoundName, number>();
+  private shelved = -1;
 
   /** The sounds due this frame. */
   step(s: IslandState): SoundStep {
@@ -92,6 +93,12 @@ export class SoundWatch {
     this.sleeping = s.sleeping;
     if (s.petting && !this.petting) play.push('pet');
     this.petting = s.petting;
+    // things landed on the shelf (island/shelf.ts)
+    const drop = s.shelf.drop;
+    if (drop && drop.at > this.shelved) {
+      if (this.shelved >= 0 || t - drop.at < 0.2) play.push('shelve');
+      this.shelved = drop.at;
+    }
     // the island itself - quiet, and never on top of another sound or the greeting
     const ns = notchState(s);
     if (this.quietUntil < 0) this.quietUntil = t + 1.5;

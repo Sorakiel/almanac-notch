@@ -32,10 +32,13 @@ chrono-tz = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSLocale", "NSGeometry", "NSArray", "NSThread", "NSDate", "NSString", "NSPredicate", "NSNotification", "NSError", "NSRunLoop", "NSFileManager", "NSURL"] }
+objc2-foundation = { version = "0.3", features = ["NSLocale", "NSGeometry", "NSArray", "NSThread", "NSDate", "NSString", "NSPredicate", "NSNotification", "NSError", "NSRunLoop", "NSFileManager", "NSURL", "NSData", "NSDictionary", "NSValue", "NSObject"] }
 objc2-event-kit = { version = "0.3", features = ["EKEventStore", "EKEvent", "EKCalendarItem", "EKObject", "EKTypes", "EKCalendar", "EKParticipant", "block2"] }
 block2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics", "NSWorkspace", "NSPanel", "NSView", "NSColor"] }
+objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics", "NSWorkspace", "NSPanel", "NSView", "NSColor", "NSPasteboard", "NSPasteboardItem", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSEvent", "NSSharingService", "NSPreviewRepresentingActivityItem"] }
+objc2-quick-look-ui = { version = "0.3", features = ["QLPreviewPanel", "QLPreviewItem", "objc2-app-kit"] }
+objc2-quick-look-thumbnailing = { version = "0.3", features = ["QLThumbnailGenerator", "QLThumbnailGenerationRequest", "QLThumbnailRepresentation", "block2", "objc2-app-kit"] }
+objc2-core-foundation = { version = "0.3", features = ["CFCGTypes"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
@@ -52,11 +55,21 @@ windows = { version = "0.61", features = [
     "Win32_Media_Audio_Endpoints",
     "Win32_System_Registry",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_Mapi",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemServices",
+    "Win32_System_Memory",
     "Foundation",
     "Media",
     "Media_Control",
     "Storage_Streams",
 ] }
+windows-core = "0.61"
+webview2-com = "0.39"
+wv2_core = { package = "windows-core", version = "0.62" }
+png = "0.17"
 
 [profile.release]
 lto = true

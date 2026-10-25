@@ -293,15 +293,47 @@ function setInteractive(on: boolean): void {
 
 /** The window takes the mouse only over the strip or a clickable zone (e.g. the mascot). */
 function updateInteractive(): void {
+  // something carried to the island: the window must take the drop (and on Windows the drag
+  // must reach the WebView at all - its dragenter starts the carry there)
+  if (carrying || (lastDrag === 1 && !isMac && ptr && dragZone(ptr))) return setInteractive(true);
   if (!ptr) return setInteractive(false);
   const r = islandRect(s);
   const inRect = ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h;
   setInteractive(inRect || hitTest(s, ptr) !== null);
 }
 
+// ---------- something carried to the island (the shelf) ----------
+const isMac = navigator.userAgent.includes('Mac');
+/** the cursor stream's button state: 0 up, 1 held, 2 carrying something (macOS only) */
+let lastDrag = 0;
+let carrying = false;
+let leaveTimer = 0;
+/** "a little wider than the island" (docs/PLAN.md): the island opens before the file reaches it */
+function dragZone(p: IslandPoint): boolean {
+  // more room below than at the sides: a hand bringing a file to the notch comes up from
+  // under it, and a closed island is only a strip
+  const r = islandRect(s);
+  return p.x >= r.x - 48 && p.x <= r.x + r.w + 48 && p.y <= r.y + r.h + 64;
+}
+function carryFromCursor(p: (IslandPoint & { drag?: number }) | null): void {
+  const d = p?.drag ?? 0;
+  if (d === 2 && p && dragZone(p)) {
+    clearTimeout(leaveTimer);
+    carrying = true;
+    shelfCarry(s, p);
+  } else if (carrying) {
+    carrying = false;
+    // let go over the island: the drop is on its way from Rust and ends the carry itself;
+    // carried away: the island goes back after a moment
+    leaveTimer = window.setTimeout(() => shelfCarry(s, null), d === 0 ? 400 : 120);
+  }
+}
+
 /** proto: island pointermove / pointerleave - the window is the prototype's island canvas */
 function pointer(p: IslandPoint | null): void {
   wake();
+  lastDrag = (p as { drag?: number } | null)?.drag ?? 0;
+  if (inTauri && isMac) carryFromCursor(p);
   const inside = !!p && p.x >= 0 && p.y >= 0 && p.x < s.IW && p.y < s.IH;
   if (inside && p) {
     ptr = p;

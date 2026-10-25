@@ -36,14 +36,7 @@ export { update } from './sim/behavior';
 export { AUTO_CLOSE, AUTO_CLOSE_DEFAULT, autoCloseFrom, notchState, type NotchState } from './island/focus';
 export { renderIsland } from './island/render';
 export { islandBack, islandWheel } from './island/depth';
-export {
-  SHELF_LIFE,
-  extOf,
-  shelfCarry,
-  shelfDrop,
-  shelfRemove,
-  type ShelfIn,
-} from './island/shelf';
+export { SHELF_LIFE, extOf, shelfCarry, shelfDrop, shelfRemove, type ShelfIn } from './island/shelf';
 export { MB, NOTCH_W, islandShape, islandTargets, type IslandInputs, type IslandTargets } from './island/geometry';
 export {
   islandPointerMove,

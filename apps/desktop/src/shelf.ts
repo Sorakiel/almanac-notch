@@ -56,6 +56,9 @@ interface WebView2 {
 }
 
 export class ShelfDriver {
+  /** our own drag out is on: the island is its source, not a place to drop it */
+  private out = false;
+
   constructor(
     private s: IslandState,
     private inTauri: boolean,
@@ -79,6 +82,7 @@ export class ShelfDriver {
         this.wake();
         shelfRemove(this.s, e.payload.ids, e.payload.how);
       });
+      await listen('island://shelf-drag-end', () => (this.out = false));
       await listen<{ id: string; thumb: string }>('island://shelf-thumb', async (e) => {
         const img = await decode(e.payload.thumb),
           it = this.s.shelf.items.find((i) => i.id === e.payload.id);
@@ -92,6 +96,8 @@ export class ShelfDriver {
    * Tauri's native handler takes every drop first and this never fires. */
   private html(): void {
     const over = (e: DragEvent): void => {
+      // not accepted: the cursor says "no drop" and the drag goes back as cancelled
+      if (this.out) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
       this.wake();
@@ -148,8 +154,10 @@ export class ShelfDriver {
       if (what === 'drag' || what === 'remove') shelfRemove(this.s, ids, what === 'drag' ? 'sent' : 'removed');
       return;
     }
-    if (what === 'drag') void invoke('shelf_drag', { ids });
-    else if (what === 'open') void invoke('shelf_open', { id: ids[0] });
+    if (what === 'drag') {
+      this.out = true;
+      void invoke('shelf_drag', { ids });
+    } else if (what === 'open') void invoke('shelf_open', { id: ids[0] });
     else if (what === 'menu') void invoke('shelf_menu', { ids });
     else if (what === 'look') void invoke('shelf_quicklook', { ids });
   }

@@ -66,7 +66,7 @@ export function shelfCarry(s: IslandState, p: { x: number; y: number } | null, n
  * just dropped is what is dragged out next, and the oldest drift to the end where they expire. */
 export function shelfDrop(s: IslandState, items: ShelfIn[], p: { x: number; y: number } | null): void {
   const sh = s.shelf;
-  const at = p ?? sh.carry ?? { x: s.islandBox.x0 + KEEPER_W + 60, y: 90 };
+  const at = p ?? sh.carry ?? s.islandPtr ?? { x: s.islandBox.x0 + KEEPER_W + 60, y: 90 };
   sh.carry = null;
   sh.tabBefore = null;
   if (!items.length) return;
