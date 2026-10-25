@@ -81,6 +81,12 @@ fn move_hooks(old: &Path, new: &Path) {
 fn webview_storage() {
     for (old, new) in storage_dirs() {
         if old.exists() {
+            // A release that moved would have removed the old folder: a new one beside it is a
+            // dev or test build's (WebKit ignores HOME), and its empty storage must not win
+            // over the person's real one.
+            if new.exists() {
+                let _ = fs::remove_dir_all(&new);
+            }
             merge(&old, &new);
             let _ = fs::remove_dir_all(&old);
         }
@@ -163,6 +169,10 @@ mod tests {
         let kit = home.join("Library/WebKit").join(paths::OLD_APP_ID);
         fs::create_dir_all(kit.join("WebsiteData")).unwrap();
         fs::write(kit.join("WebsiteData/ls"), "volume").unwrap();
+        // a test build already made an empty storage under the new identifier
+        let kit_dev = home.join("Library/WebKit").join(paths::APP_ID);
+        fs::create_dir_all(kit_dev.join("WebsiteData")).unwrap();
+        fs::write(kit_dev.join("WebsiteData/ls"), "empty").unwrap();
         let settings = paths::claude_settings();
         fs::create_dir_all(settings.parent().unwrap()).unwrap();
         fs::write(&settings, "{}").unwrap();
