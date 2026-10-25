@@ -14,7 +14,9 @@ import {
   minsText,
   type ClaudeState,
 } from './focus';
-import { STATE_COL, drawMini } from './crew';
+import { STATE_COL, drawMini, type MiniItem } from './crew';
+import { hexA, ss } from '../util/math';
+import { drawLate, flyMascot, markSpot } from './flight';
 
 export type ModuleItem =
   | { id: 'claude'; kind: 'agent'; name: string; body: string; seed: number; state: ClaudeState; short: string }
@@ -72,16 +74,23 @@ export function modules(s: IslandState): ModuleItem[] {
       id: 'github',
       kind: 'ci',
       name: 'GitHub',
+      // a red head anywhere keeps the pill red, even when a newer repository is green (island/ci.ts)
       state: gh
-        ? gh.auth === 'ok' && gh.ci !== 'none'
-          ? gh.ci
-          : 'off'
+        ? gh.auth === 'ok' && gh.fail
+          ? 'fail'
+          : gh.auth === 'ok' && gh.ci !== 'none'
+            ? gh.ci
+            : 'off'
         : ev === 'working'
           ? 'run'
           : ev === 'error'
             ? 'fail'
             : 'ok',
-      short: gh ? gh.short : tr(s, ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный'),
+      short: gh
+        ? gh.auth === 'ok' && gh.fail
+          ? tr(s, 'CI упал')
+          : gh.short
+        : tr(s, ev === 'working' ? 'CI идёт' : ev === 'error' ? 'деплой упал' : 'CI зелёный'),
     },
     {
       id: 'cal',
@@ -398,5 +407,94 @@ export function alertMark(c: Ctx, x: number, y: number, r: number, st: CiState, 
   c.lineTo(x + r * 0.45, y);
   c.lineTo(x + r, y);
   c.stroke();
+  c.restore();
+}
+
+/** a module as a small mascot in its own colour (coucou's pills, Grok Bot's rail): the mood shows its state */
+export function miniFor(it: ModuleItem): MiniItem {
+  const seed = ['claude', 'github', 'cal', 'music', 'almanac', 'vercel', 'notion', 'grafana'].indexOf(it.id);
+  let state: string = 'idle';
+  if (it.kind === 'agent') state = it.state;
+  else if ((it.kind === 'ci' || it.kind === 'deploy' || it.kind === 'alerts') && it.state === 'fail') state = 'fail';
+  else if ((it.kind === 'ci' || it.kind === 'deploy') && it.state === 'run') state = 'work';
+  else if (it.kind === 'cal' && it.mins <= 5) state = 'ask';
+  return { body: MODULE_COL[it.id].body, shade: MODULE_COL[it.id].shade, seed, state };
+}
+
+/** a module colour made deeper for small mascots on dark: more saturated, a little darker. Measured
+ * on Grok Bot's rail (2026-10-19): their faces are saturated mid tones (217,59,62), ours pastel
+ * (214,153,118) - pastel on black has little colour contrast and reads flat */
+export function deepCol(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  let r = ((n >> 16) & 255) / 255,
+    g = ((n >> 8) & 255) / 255,
+    b = (n & 255) / 255;
+  const mx = Math.max(r, g, b),
+    mn = Math.min(r, g, b),
+    l = (mx + mn) / 2,
+    d = mx - mn;
+  let h = 0,
+    sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h *= 60;
+  sat = Math.min(1, sat * 1.08);
+  const L = l * 0.8,
+    C = (1 - Math.abs(2 * L - 1)) * sat,
+    X = C * (1 - Math.abs(((h / 60) % 2) - 1)),
+    m = L - C / 2;
+  [r, g, b] =
+    h < 60
+      ? [C, X, 0]
+      : h < 120
+        ? [X, C, 0]
+        : h < 180
+          ? [0, C, X]
+          : h < 240
+            ? [0, X, C]
+            : h < 300
+              ? [X, 0, C]
+              : [C, 0, X];
+  const to = (v: number) => Math.round((v + m) * 255);
+  return `#${((1 << 24) | (to(r) << 16) | (to(g) << 8) | to(b)).toString(16).slice(1)}`;
+}
+
+/** a mascot sunk in a round well with a thin ring of its colour - a "slime" of the module rail.
+ * The well is darker than the rail card (Grok Bot: (30,6,15) on (20,20,20)): the face sits in it
+ * instead of on it, which is where the depth comes from */
+export function slime(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  x0: number,
+  y: number,
+  d: number,
+  k = 0,
+  enter = 1,
+  delay = 0,
+): void {
+  const col = MODULE_COL[it.id].body,
+    r = d / 2;
+  // gathering into the rail (island/eventIn.ts): the mascot flies in from wherever it was and its
+  // plate comes up as it lands; with nowhere to fly from the whole slime slides in from the right
+  const fl = flyMascot(s, c, it.id, x0, y + r * 0.06, r * 0.62, delay),
+    x = fl ? x0 : x0 + (1 - enter) * 22;
+  const a0 = c.globalAlpha;
+  c.save();
+  c.globalAlpha *= fl ? ss(0.45, 1, fl.k) : enter;
+  c.beginPath();
+  c.arc(x, y, r, 0, Math.PI * 2);
+  c.fillStyle = '#070708';
+  c.fill();
+  c.fillStyle = hexA(deepCol(col), 0.13 + 0.07 * k);
+  c.fill();
+  c.lineWidth = 1.2;
+  c.strokeStyle = hexA(col, 0.2 + 0.4 * k);
+  c.stroke();
+  const my = y + r * 0.06,
+    mR = r * 0.62,
+    mini = { ...miniFor(it), body: deepCol(col) };
+  if (fl) drawLate(c, () => drawMini(s, c, fl.x, fl.y, fl.R, mini), a0);
+  else drawMini(s, c, x, my, mR, mini);
+  markSpot(s, c, it.id, fl ? fl.x : x, fl ? fl.y : my, fl ? fl.R : mR);
   c.restore();
 }

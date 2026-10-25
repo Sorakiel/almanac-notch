@@ -573,6 +573,10 @@ pub fn open(what: &str) {
     };
     let url = match what {
         "alerts" => format!("{base}/alerting/list"),
+        // one rule from the card's list (stage 10); a uid that could bend the URL opens nothing
+        w if w.starts_with("rule:") && safe_uid(&w[5..]) => {
+            format!("{base}/alerting/grafana/{}/view", &w[5..])
+        }
         "board" => match pick().board.filter(|u| safe_uid(u)) {
             Some(uid) => format!("{base}/d/{uid}"),
             None => return,

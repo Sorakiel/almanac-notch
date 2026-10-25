@@ -10,8 +10,8 @@ const CYR = /[А-Яа-яЁё]/;
 const KEEP = ['Русский'];
 
 describe('settings window in English', () => {
-  it('every Russian text of settings.html has an English line', () => {
-    const html = readFileSync(join(__dirname, '../settings.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  it.each(['settings.html', 'bye.html', 'setup.html'])('every Russian text of %s has an English line', (page) => {
+    const html = readFileSync(join(__dirname, '..', page), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
     const texts = [
       ...html.split(/<[^>]*>/).map(norm),
       ...[...html.matchAll(/(?:aria-label|placeholder|title)="([^"]*)"/g)].map((m) => norm(m[1] as string)),
@@ -19,8 +19,8 @@ describe('settings window in English', () => {
     expect(texts.filter((x) => !(x in SETTINGS_EN) && !(x in EN))).toEqual([]);
   });
 
-  it('every t() text of settings.ts has an English line', () => {
-    const code = readFileSync(join(__dirname, 'settings.ts'), 'utf8');
+  it.each(['settings.ts', 'bye.ts', 'setup.ts'])('every t() text of %s has an English line', (file) => {
+    const code = readFileSync(join(__dirname, file), 'utf8');
     const missing = [...code.matchAll(/'([^'\n]*[А-Яа-яЁё][^'\n]*)'/g)]
       .map((m) => m[1] as string)
       .filter((x) => !(x in SETTINGS_EN) && !(x in EN) && !/^(репозитори|встреч)/.test(x));

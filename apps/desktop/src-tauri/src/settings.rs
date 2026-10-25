@@ -11,8 +11,10 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
     let section = section
         .filter(|s| s.chars().all(|c| c.is_ascii_lowercase()) && !s.is_empty())
         .map(str::to_string);
-    // window creation belongs to the main thread (commands may run elsewhere)
-    let _ = app.run_on_main_thread(move || {
+    // Mac: window creation on the main thread. Windows: building a webview window from the main
+    // thread's event loop (setup, tray, run_on_main_thread) leaves it black - its WebView2 waits for
+    // that same loop (tauri#4121); `build()` from another thread hands it over and waits.
+    on_ui(app, move || {
         if let Some(w) = app2.get_webview_window("settings") {
             if let Some(sec) = &section {
                 let _ = w.emit("settings://section", sec);
@@ -51,4 +53,17 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
             Err(e) => eprintln!("[settings] window not created: {e}"),
         }
     });
+}
+
+/// Run window-building code where it works on this platform (see `open`).
+pub fn on_ui(app: &AppHandle, f: impl FnOnce() + Send + 'static) {
+    #[cfg(windows)]
+    {
+        let _ = app;
+        std::thread::spawn(f);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app.run_on_main_thread(f);
+    }
 }

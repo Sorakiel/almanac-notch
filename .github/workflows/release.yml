@@ -52,6 +52,7 @@ jobs:
           workspaces: |
             apps/desktop/src-tauri -> target
             apps/desktop/hook -> target
+            apps/setup -> target
 
       - run: npm ci
 
@@ -96,7 +97,7 @@ jobs:
           releaseBody: |
             **Mac** - `Almanac_Notch_*_universal.dmg`: открыть, перетащить в «Программы». Приложение пока без подписи Apple: при первом запуске macOS скажет, что не может проверить разработчика. Откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть» (один раз).
 
-            **Windows** - `Almanac_Notch_*_x64-setup.exe`. Прав администратора не нужно. Подписи пока нет: SmartScreen спросит - «Подробнее» → «Выполнить в любом случае».
+            **Windows** - `Almanac.Notch.Setup.exe`: папку можно выбрать, прав администратора не нужно. Подписи пока нет: SmartScreen спросит - «Подробнее» → «Выполнить в любом случае». Файл `*_x64-setup.exe` нужен приложению для обновлений, скачивать его не надо.
 
             Дальше приложение обновляется само: раз в день проверяет новую версию, обновление ставится по кнопке (выключается в настройках).
 
@@ -104,6 +105,17 @@ jobs:
 
             **Mac** - `Almanac_Notch_*_universal.dmg`: open it and drag the app to Applications. The app is not signed by Apple yet: on first launch macOS says it can't verify the developer. Open System Settings → Privacy & Security and press "Open Anyway" (once).
 
-            **Windows** - `Almanac_Notch_*_x64-setup.exe`. No admin rights needed. Not signed yet: SmartScreen asks - "More info" → "Run anyway".
+            **Windows** - `Almanac.Notch.Setup.exe`: pick any folder, no admin rights needed. Not signed yet: SmartScreen asks - "More info" → "Run anyway". The `*_x64-setup.exe` file is for the app's own updates, no need to download it.
 
             After that the app keeps itself up to date: it checks once a day, the update installs on a click (can be turned off in settings).
+
+      # Windows (stage 8g): our installer window around the NSIS installer tauri-action just built;
+      # the NSIS file stays in the release for the updater (latest.json points to it)
+      - name: Setup.exe
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node apps/desktop/scripts/setup-exe.mjs "$RUNNER_TEMP/Almanac.Notch.Setup.exe"
+          gh release upload "${{ github.ref_name }}" "$RUNNER_TEMP/Almanac.Notch.Setup.exe" --clobber

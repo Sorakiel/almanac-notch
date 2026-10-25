@@ -3,6 +3,7 @@ import { hop } from './actions';
 import { spawnFloat } from './particles';
 import { busyAside, callMins, effectiveFocus, habitsDone, notchState } from '../island/focus';
 import { PROPS, propFor } from '../mascot/props';
+import { ciAlert } from '../island/ci';
 
 /**
  * proto: moduleMood - what the mascot does while a module is in focus and nothing else is going on.
@@ -34,6 +35,13 @@ export function moduleMood(s: IslandState, T: Targets): string | undefined {
   if (f === 'almanac' && habitsDone(s) === s.habits.length) {
     T.happy = 1;
     return 'гордится';
+  }
+  // a red CI still waiting: a quiet sulk, softer than the jolt of the failure itself (island/ci.ts)
+  if (f === 'github' && ciAlert(s)) {
+    T.grump = 0.4;
+    T.lid = 0.3;
+    T.happy = 0;
+    return '';
   }
   const kind = propFor(s, f),
     prop = kind && PROPS[kind];

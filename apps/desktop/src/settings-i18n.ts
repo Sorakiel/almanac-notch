@@ -26,17 +26,20 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   // app and updates (stage 8f)
   'Запускать вместе с системой': 'Launch at login',
   'Проверять обновления': 'Check for updates',
+  'Прятать поверх полноэкранных приложений': 'Hide over full-screen apps',
+  'Игра, видео или презентация во весь экран. Остров вернётся, когда вы из них выйдете.':
+    'A game, a video or a slideshow in full screen. The island comes back when you leave it.',
   'Проверить сейчас': 'Check now',
   'Версия {0}': 'Version {0}',
-  'Проверяю…': 'Checking…',
+  'Проверка…': 'Checking…',
   'Установлена последняя версия': 'You have the latest version',
   'Вышла версия {0}': 'Version {0} is out',
-  'Скачиваю обновление… {0}%': 'Downloading the update… {0}%',
+  'Загрузка обновления… {0}%': 'Downloading the update… {0}%',
   'Обновить и перезапустить': 'Update and restart',
   // first-run guide (stage 8f)
   'Привет! Я живу у выреза камеры': 'Hi! I live at the camera notch',
-  'Покажу, что делает Claude Code, сколько осталось до созвона и что играет. Настроим за минуту.':
-    "I'll show what Claude Code is doing, how long until your next call and what's playing. Setup takes a minute.",
+  'Покажу, сколько осталось до созвона, что играет и всё, что подключите: от CI и деплоев до привычек. Настроим за минуту.':
+    "I'll show how long until your next call, what's playing and everything you connect - from CI and deploys to habits. Setup takes a minute.",
   'Подключим Claude Code': "Let's connect Claude Code",
   'Буду показывать шаги агента и отвечать на его вопросы и запросы разрешений прямо с острова.':
     "I'll show the agent's steps and answer its questions and permission requests right from the island.",
@@ -55,8 +58,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Claude Code is always with me. Pick up to four modules - you can connect them later.',
   'Выбрано {0} из 4': '{0} of 4 picked',
   'Всё готово': 'All set',
-  'Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.':
-    'Once a day I check GitHub for a new version. It installs only when you press the button.',
+  'Раз в день приложение смотрит на GitHub, вышла ли новая версия. Ставится только по кнопке.':
+    'Once a day the app checks GitHub for a new version. It installs only when you press the button.',
   'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.':
     'The island sits at the top edge of the screen - hover over it. The menu is the Almanac Notch icon in the tray.',
   'Остров - у выреза камеры: наведите на него курсор. Меню - значок Almanac Notch в строке меню.':
@@ -88,6 +91,17 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   Открыто: 'Open',
   Вкладки: 'Tabs',
   'Чат в острове': 'Chat in the island',
+  // sounds (stage 9a)
+  Звук: 'Sound',
+  События: 'Events',
+  'Разрешения, вопросы, готово, ошибки, начало работы агента':
+    'Permissions, questions, done, errors, an agent starting work',
+  Маскот: 'Mascot',
+  'Приветствие, клики, поглаживание, сон': 'The greeting, clicks, stroking, sleep',
+  'Остров и кнопки': 'Island and buttons',
+  'Открытие, закрытие, вкладки, переключатели': 'Opening, closing, tabs, switches',
+  'Громкость и общий выключатель - в карточке настроек острова. Во время звонка звуки молчат, под музыку кнопки молчат, а остальное тише; ночью (с 22 до 8) всё на треть тише.':
+    "The volume and the main switch are in the island's settings card. During a call sounds stay silent, under music the buttons are silent and the rest quieter; at night (10 pm to 8 am) everything is a third quieter.",
   Язык: 'Language',
   'Язык интерфейса': 'Interface language',
   'Как в системе': 'System',
@@ -105,8 +119,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Установить хуки…': 'Install hooks…',
   'Удалить хуки…': 'Remove hooks…',
   'Что это': 'What it is',
-  'Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа на разрешения и вопросы. Перед записью покажу, что изменится, и сделаю копию файла. Ваши другие хуки не трогаю.':
-    'Hooks are short commands in ~/.claude/settings.json: Claude Code tells the island what it is doing and waits for answers to permissions and questions. Before writing I show what changes and back the file up. Your other hooks stay untouched.',
+  'Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа на разрешения и вопросы. Перед записью видно, что изменится, и сохраняется копия файла. Другие ваши хуки не меняются.':
+    'Hooks are short commands in ~/.claude/settings.json: Claude Code tells the island what it is doing and waits for answers to permissions and questions. Before writing you see what changes, and the file is backed up. Your other hooks stay untouched.',
   'Источник календаря': 'Calendar source',
   'Ссылка iCal': 'iCal link',
   Ничего: 'None',
@@ -139,12 +153,24 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Read-only permissions: Contents, Pull requests, Commit statuses, Actions (Metadata is added by itself).',
   'Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
     'Repository names, the check status of the latest commits, the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.',
+  'Чтобы перезапускать упавшие проверки из острова, дайте Actions право на запись.':
+    'To re-run failed checks from the island, give Actions write access.',
+  'Названия репозиториев, статус проверок последних коммитов (название упавшей проверки, ветка, первая строка сообщения коммита), число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
+    "Repository names, the check status of the latest commits (the failed check's name, the branch, the first line of the commit message), the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.",
+  'Результат CI': 'CI result',
+  'Проверки прошли': 'Checks passed',
+  'Проверка упала': 'A check failed',
+  Показывать: 'Show',
+  'Не показывать': "Don't show",
+  'Только точка': 'Dot only',
+  'Упавшая проверка ненадолго всплывает, потом о ней напоминает красная точка на маскоте. В открытом острове она один раз встанет в карточку с кнопками «Открыть прогон» и «Перезапустить»; крестик убирает её до следующего падения.':
+    'A failed check pops up briefly, then a red dot on the mascot keeps it in mind. On the open island it takes the card once, with "Open run" and "Re-run"; the cross puts it away until the next failure.',
   // dynamic texts (src/settings.ts)
   'GitHub не принял сохранённый токен': 'GitHub rejected the saved token',
   // Vercel, the module limit
-  'Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один':
-    'Besides Claude Code, at most 4 modules can be on - switch one off first',
-  'Кроме Claude Code включено не больше 4 модулей': 'Besides Claude Code, at most 4 modules are on',
+  'Одновременно можно включить не больше 5 модулей - сначала выключите один':
+    'At most 5 modules can be on at once - switch one off first',
+  'В острове помещается 5 модулей': 'The island fits 5 modules',
   'Токен Vercel': 'Vercel token',
   'Откройте vercel.com → Account Settings → Tokens → Create Token.':
     'Open vercel.com → Account Settings → Tokens → Create Token.',
@@ -227,6 +253,48 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   '{0} · {1} за 48 ч': '{0} · {1} in 48 h',
   '{0} · CI в {1}': '{0} · CI in {1}',
   ' · нет связи': ' · offline',
+  // installer and uninstall windows (stage 8g)
+  'Удалить Almanac Notch': 'Uninstall Almanac Notch',
+  'Удалить Almanac Notch?': 'Uninstall Almanac Notch?',
+  'Хуки Claude Code и запуск при входе будут сняты, приложение уйдёт в Корзину.':
+    'The Claude Code hooks and launch at login will be removed, and the app will go to the Trash.',
+  'Хуки Claude Code и запуск при входе будут сняты, программа и её ярлыки - удалены.':
+    'The Claude Code hooks and launch at login will be removed, along with the app and its shortcuts.',
+  'Удалить настройки и данные': 'Remove settings and data',
+  'Подключения, токены в связке ключей, кэш и доступ к календарю':
+    'Connections, tokens in the keychain, the cache and calendar access',
+  'Подключения, токены в диспетчере учётных данных и кэш': 'Connections, tokens in Credential Manager and the cache',
+  Закрыть: 'Close',
+  Удалить: 'Uninstall',
+  'Удаление…': 'Uninstalling…',
+  'Снимаются хуки Claude Code, удаляются файлы.': 'Removing the Claude Code hooks and the files.',
+  'Almanac Notch удалён': 'Almanac Notch is uninstalled',
+  'Хуки Claude Code сняты. Настройки остались - пригодятся, если вернёте приложение.':
+    'The Claude Code hooks are gone. Your settings stay, in case you come back.',
+  'Хуки Claude Code сняты, настройки и данные удалены.': 'The Claude Code hooks, settings and data are gone.',
+  'Удалить…': 'Uninstall…',
+  'Снимает хуки Claude Code и запуск при входе; настройки и данные - по желанию':
+    'Removes the Claude Code hooks and launch at login; settings and data if you choose',
+  'Установка Almanac Notch': 'Almanac Notch Setup',
+  'Живой остров у выреза камеры: ближайший созвон, музыка и модули, которые вы выберете сами.':
+    'A living island at the camera notch: your next call, music and the modules you pick.',
+  Папка: 'Folder',
+  Изменить: 'Change',
+  'Ярлык на рабочем столе': 'Desktop shortcut',
+  Установить: 'Install',
+  'Установка…': 'Installing…',
+  'Займёт несколько секунд.': 'This takes a few seconds.',
+  'Almanac Notch установлен. Остров живёт у верхнего края экрана, по центру.':
+    'Almanac Notch is installed. The island lives at the top centre of the screen.',
+  Открыть: 'Open',
+  'Версия {0} обновится до {1}. Настройки и подключения сохранятся.':
+    'Version {0} will be updated to {1}. Settings and connections stay.',
+  'Версия {0} уже установлена - она будет поставлена заново. Настройки и подключения сохранятся.':
+    'Version {0} is already installed - it will be installed again. Settings and connections stay.',
+  'Установлена более новая версия {0}. Можно поставить {1} поверх, настройки сохранятся.':
+    'A newer version {0} is installed. You can put {1} over it, settings stay.',
+  Обновить: 'Update',
+  Переустановить: 'Reinstall',
 };
 
 let lang: Lang = 'ru';

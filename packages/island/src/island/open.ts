@@ -1,23 +1,43 @@
 // Open state: top bar with tabs and settings, then the active tab (docs/SPEC.md 2.4-2.9).
+import { hoverK, pressScale } from './hover';
 import { clamp, ss } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
-import type { IslandState, Tab } from '../sim/state';
+import type { IslandState, ModuleId, Tab } from '../sim/state';
 import type { Status } from '../sim/events';
 import type { WorkFx } from './fx';
 import { effectiveFocus } from './focus';
-import { addHit, hovering } from './hits';
-import { T_MUTED } from './half';
-import { card, cardTint } from './card';
+import { addHit, hovering, withScale } from './hits';
+import { depthTop } from './depth';
+import { card, cardTint, haloTint } from './card';
+import { ciAlert } from './ci';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
 import { drawAdd, drawChat, drawSettings } from './tabs';
-import { drawGlyph, focusTint, idleShort, isHot, modules } from './modules';
+import { drawLeaving, layer, shared, springK, tabOutA } from './reveal';
+import { deepCol, focusTint, isHot, miniFor, modules, type ModuleItem } from './modules';
+import { MODULE_COL } from './focus';
+import { drawMini } from './crew';
+import { hexA } from '../util/math';
+import { EV_OUT, eventInDt, evTextA, evTintA, evWidthK, seq } from './eventIn';
+import {
+  cardFade,
+  drawLate,
+  flushLate,
+  flyBox,
+  flyDt,
+  flyMascot,
+  markBox,
+  markSpot,
+  newPillA,
+  startFlight,
+  toLocal,
+} from './flight';
 
 type IconKind = 'home' | 'chat' | 'add' | 'gear' | 'sound';
 
 /** proto: icon */
-export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
-  if (s.iconSet === 'solid') return solidIcon(s, c, kind, x, y, active);
+export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean, hk = 0): void {
+  if (s.iconSet === 'solid') return solidIcon(s, c, kind, x, y, active, hk);
   c.save();
   c.strokeStyle = c.fillStyle = active ? '#FFFFFF' : 'rgba(255,255,255,0.6)';
   c.lineWidth = 1.5;
@@ -91,88 +111,112 @@ export function icon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: numbe
   c.restore();
 }
 
-// Filled top-bar icons for the app (docs/CHANGES.md 2026-10-17): drawn on a 24-unit grid,
-// scaled to the prototype's ~13 px glyph box. Paths are our own, not a system symbol set.
-const SOLID_SCALE = 0.62;
+// Top-bar icons of the app (docs/CHANGES.md 2026-10-19): one family on a 24-unit grid, drawn at
+// 18 px - the way tab bars do it: an outline when idle (1.4 px, round caps and joins), the same
+// shape filled when active. The earlier set mixed filled blobs with a thick toothed gear and read
+// harsh. Paths are our own.
+const ICON_Z = 0.75;
+const ICON_LW = 1.9;
 const P_HOME =
-  'M12 3.3c.4 0 .8.1 1.1.4l8.2 7.1c.7.6.3 1.7-.6 1.7H19.5v7.4c0 .9-.7 1.6-1.6 1.6h-3.4v-5.2c0-.6-.4-1-1-1h-3c-.6 0-1 .4-1 1v5.2H6.1c-.9 0-1.6-.7-1.6-1.6v-7.4H3.3c-.9 0-1.3-1.1-.6-1.7l8.2-7.1c.3-.3.7-.4 1.1-.4Z';
+  'M3.8 10.2 11 4.3a1.6 1.6 0 0 1 2 0l7.2 5.9c.5.4.8 1 .8 1.6V19a2 2 0 0 1-2 2h-3.4a.6.6 0 0 1-.6-.6v-4.2a1.6 1.6 0 0 0-1.6-1.6h-2.8a1.6 1.6 0 0 0-1.6 1.6v4.2a.6.6 0 0 1-.6.6H5a2 2 0 0 1-2-2v-7.2c0-.6.3-1.2.8-1.6Z';
 const P_CHAT =
-  'M6.2 4h11.6c2 0 3.7 1.7 3.7 3.7v6.1c0 2-1.7 3.7-3.7 3.7h-6.9l-4.6 3.3c-.6.4-1.4-.1-1.2-.8l.6-2.6c-1.7-.4-3.2-1.9-3.2-3.6V7.7C2.5 5.7 4.2 4 6.2 4Z';
+  'M7 4.5h10a4 4 0 0 1 4 4v5a4 4 0 0 1-4 4h-4.6l-4.1 3.1c-.5.4-1.3 0-1.3-.6v-2.6A4 4 0 0 1 3 13.5v-5a4 4 0 0 1 4-4Z';
 const P_SPEAKER =
-  'M4 8.6h2.9l4.5-3.8c.7-.6 1.7-.1 1.7.8v12.8c0 .9-1 1.4-1.7.8l-4.5-3.8H4c-.8 0-1.5-.7-1.5-1.5V10.1c0-.8.7-1.5 1.5-1.5Z';
+  'M4.5 9h2.8l4.4-3.7c.6-.5 1.5-.1 1.5.7v12c0 .8-.9 1.2-1.5.7L7.3 15H4.5A1.5 1.5 0 0 1 3 13.5v-3A1.5 1.5 0 0 1 4.5 9Z';
 const pathCache = new Map<string, Path2D>();
 function path(d: string): Path2D {
   let p = pathCache.get(d);
   if (!p) pathCache.set(d, (p = new Path2D(d)));
   return p;
 }
-/** a cog: 8 rounded teeth around a ring, the hole cut out (even-odd) */
+/** a cog with 8 short rounded teeth (round joins do the rounding) */
 function gearPath(): Path2D {
   let p = pathCache.get('gear');
   if (p) return p;
   p = new Path2D();
   const teeth = 8,
-    rIn = 7.4,
-    rOut = 10.2,
-    half = (Math.PI / teeth) * 0.42;
-  for (let i = 0; i < teeth * 2; i++) {
-    const a = (i / (teeth * 2)) * Math.PI * 2 - Math.PI / 2,
-      r = i % 2 === 0 ? rOut : rIn,
-      w = i % 2 === 0 ? half : half * 1.25;
-    const x0 = 12 + Math.cos(a - w) * r,
-      y0 = 12 + Math.sin(a - w) * r;
+    rIn = 7.6,
+    rOut = 9.7;
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2 - Math.PI / 2,
+      half = Math.PI / teeth;
+    const pt = (ang: number, r: number) => [12 + Math.cos(ang) * r, 12 + Math.sin(ang) * r] as const;
+    const [x0, y0] = pt(a - half * 0.55, rOut),
+      [x1, y1] = pt(a + half * 0.55, rOut),
+      [x2, y2] = pt(a + half * 0.75, rIn),
+      [x3, y3] = pt(a + half * 1.25, rIn);
     if (i === 0) p.moveTo(x0, y0);
     else p.lineTo(x0, y0);
-    p.lineTo(12 + Math.cos(a + w) * r, 12 + Math.sin(a + w) * r);
+    p.lineTo(x1, y1);
+    p.lineTo(x2, y2);
+    p.lineTo(x3, y3);
   }
   p.closePath();
-  p.moveTo(12 + 3.1, 12);
-  p.arc(12, 12, 3.1, 0, Math.PI * 2);
   pathCache.set('gear', p);
   return p;
 }
 
-function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean): void {
+function solidIcon(s: IslandState, c: Ctx, kind: IconKind, x: number, y: number, active: boolean, hk = 0): void {
   c.save();
-  const col = active ? '#FFFFFF' : 'rgba(255,255,255,0.55)';
+  const col = active ? 'rgba(255,255,255,0.95)' : `rgba(255,255,255,${(0.5 + 0.3 * hk).toFixed(3)})`;
   c.fillStyle = c.strokeStyle = col;
+  c.lineWidth = ICON_LW;
   c.lineCap = 'round';
   c.lineJoin = 'round';
-  c.translate(x - 12 * SOLID_SCALE, y - 12 * SOLID_SCALE);
-  c.scale(SOLID_SCALE, SOLID_SCALE);
-  if (kind === 'home') c.fill(path(P_HOME));
-  else if (kind === 'chat') c.fill(path(P_CHAT));
+  c.translate(x - 12 * ICON_Z, y - 12 * ICON_Z);
+  c.scale(ICON_Z, ICON_Z);
+  const shape = (p: Path2D) => (active ? c.fill(p) : c.stroke(p));
+  if (kind === 'home') shape(path(P_HOME));
+  else if (kind === 'chat') shape(path(P_CHAT));
   else if (kind === 'add') {
-    c.lineWidth = 2.6;
     c.beginPath();
-    c.moveTo(12, 4.5);
-    c.lineTo(12, 19.5);
-    c.moveTo(4.5, 12);
-    c.lineTo(19.5, 12);
+    c.arc(12, 12, 8.6, 0, Math.PI * 2);
+    if (active) c.fill();
+    else c.stroke();
+    c.strokeStyle = active ? '#0B0B0D' : col;
+    c.beginPath();
+    c.moveTo(12, 8.2);
+    c.lineTo(12, 15.8);
+    c.moveTo(8.2, 12);
+    c.lineTo(15.8, 12);
     c.stroke();
   } else if (kind === 'gear') {
-    // stroke-join softens the teeth corners
-    c.lineWidth = 1.4;
-    c.fill(gearPath(), 'evenodd');
-    c.stroke(gearPath());
+    if (active) {
+      const p = new Path2D();
+      p.addPath(gearPath());
+      p.moveTo(15, 12);
+      p.arc(12, 12, 3, 0, Math.PI * 2);
+      c.stroke(gearPath());
+      c.fill(p, 'evenodd');
+    } else {
+      c.stroke(gearPath());
+      c.beginPath();
+      c.arc(12, 12, 3, 0, Math.PI * 2);
+      c.stroke();
+    }
   } else {
-    c.fill(path(P_SPEAKER));
-    c.lineWidth = 2;
+    shape(path(P_SPEAKER));
     c.beginPath();
     if (s.muted) {
-      c.moveTo(16, 9.5);
-      c.lineTo(21, 14.5);
-      c.moveTo(21, 9.5);
-      c.lineTo(16, 14.5);
+      c.moveTo(16.4, 9.6);
+      c.lineTo(21, 14.4);
+      c.moveTo(21, 9.6);
+      c.lineTo(16.4, 14.4);
     } else {
-      c.arc(13.5, 12, 3.6, -0.85, 0.85);
-      c.moveTo(13.5 + Math.cos(-0.85) * 7, 12 + Math.sin(-0.85) * 7);
-      c.arc(13.5, 12, 7, -0.85, 0.85);
+      c.arc(14.2, 12, 3.4, -0.8, 0.8);
+      c.moveTo(14.2 + Math.cos(-0.8) * 6.6, 12 + Math.sin(-0.8) * 6.6);
+      c.arc(14.2, 12, 6.6, -0.8, 0.8);
     }
     c.stroke();
   }
   c.restore();
 }
+
+/** top bar layout (2026-10-19, after Grok Bot): 40 apart, a 36 x 26 capsule with a hairline rim */
+const BAR_L = 26,
+  BAR_STEP = 40,
+  CAP_W = 36,
+  CAP_H = 26;
 
 /** proto: topBar */
 export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number): void {
@@ -181,33 +225,54 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
     ['chat', 'tab:chat'],
     ['add', 'tab:add'],
   ].filter(([k]) => !(s.chatOff && k === 'chat')) as [Tab & IconKind, string][];
-  tabs.forEach(([k, act], i) => {
-    const x = x0 + 22 + i * 30,
-      on = s.tab === k,
-      hov = hovering(s, x - 13, y - 11, 26, 22);
-    if (on || hov) {
-      c.fillStyle = on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
-      rrect(c, x - 13, y - 11, 26, 22, 11);
-      c.fill();
+  const gearX = x1 - BAR_L - BAR_STEP + 4,
+    right: [IconKind, string, number][] = [
+      ['gear', 'tab:settings', gearX],
+      ['sound', 'mute', x1 - BAR_L + 2],
+    ];
+  // the active capsule travels from the tab we left to the new one (docs/CHANGES.md 2026-10-19):
+  // the eye follows one object instead of two capsules blinking; across the notch to the gear it
+  // cross-fades, a slide that long under the camera would read as lag
+  const tabX = (t: Tab): number | null => {
+    if (t === 'settings') return gearX;
+    const i = tabs.findIndex(([k]) => k === t);
+    return i < 0 ? null : x0 + BAR_L + i * BAR_STEP;
+  };
+  const dt = s.t - s.tabStart,
+    xNew = tabX(s.tab),
+    xOld = s.prevTab !== s.tab ? tabX(s.prevTab) : null;
+  const pill = (x: number, a: number, hover = false) => {
+    c.save();
+    c.globalAlpha *= a;
+    rrect(c, x - CAP_W / 2, y - CAP_H / 2, CAP_W, CAP_H, CAP_H / 2);
+    c.fillStyle = hover ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.13)';
+    c.fill();
+    if (!hover) {
+      c.lineWidth = 1;
+      c.strokeStyle = 'rgba(255,255,255,0.07)';
+      rrect(c, x - CAP_W / 2 + 0.5, y - CAP_H / 2 + 0.5, CAP_W - 1, CAP_H - 1, CAP_H / 2 - 0.5);
+      c.stroke();
     }
-    icon(s, c, k, x, y, on);
-    addHit(s, c, { x: x - 13, y: y - 11, w: 26, h: 22, act });
-  });
-  const right: [IconKind, string, number][] = [
-    ['gear', 'tab:settings', x1 - 50],
-    ['sound', 'mute', x1 - 22],
-  ];
-  right.forEach(([k, act, x]) => {
-    const on = k === 'gear' && s.tab === 'settings',
-      hov = hovering(s, x - 13, y - 11, 26, 22);
-    if (on || hov) {
-      c.fillStyle = on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)';
-      rrect(c, x - 13, y - 11, 26, 22, 11);
-      c.fill();
+    c.restore();
+  };
+  if (xNew !== null) {
+    if (xOld === null || dt >= 0.9) pill(xNew, 1);
+    else if (s.tab !== 'settings' && s.prevTab !== 'settings') pill(xOld + (xNew - xOld) * springK(dt, 0.3, 0.78), 1);
+    else {
+      const k = clamp(dt / 0.16, 0, 1);
+      pill(xOld, 1 - k);
+      pill(xNew, k);
     }
-    icon(s, c, k, x, y, on);
-    addHit(s, c, { x: x - 13, y: y - 11, w: 26, h: 22, act });
-  });
+  }
+  const item = (k: IconKind, act: string, x: number, on: boolean) => {
+    const hov = hovering(s, x - CAP_W / 2, y - CAP_H / 2, CAP_W, CAP_H),
+      hk = clamp(hoverK(s, 'bar:' + k, !on && hov, 0.2, 1), 0, 1);
+    if (hk > 0.01) pill(x, hk, true);
+    icon(s, c, k, x, y, on, hk);
+    addHit(s, c, { x: x - CAP_W / 2, y: y - CAP_H / 2, w: CAP_W, h: CAP_H, act });
+  };
+  tabs.forEach(([k, act], i) => item(k, act, x0 + BAR_L + i * BAR_STEP, s.tab === k));
+  right.forEach(([k, act, x]) => item(k, act, x, k === 'gear' && s.tab === 'settings'));
 }
 
 /** proto: drawOpen */
@@ -244,9 +309,90 @@ export function drawOpen(
     c.save();
     c.globalAlpha *= 1 - aA;
     c.translate(0, aA * 6);
+    // a left card both tabs have (home's focus card, chat, the app's settings) stays and changes
+    // width with a spring instead of blinking out and in, as Grok Bot and coucou keep their card
+    const dt = s.t - s.tabStart,
+      wOld = leftCardW(s, s.prevTab, X0, X1),
+      wNew = leftCardW(s, s.tab, X0, X1);
+    shared.card = s.prevTab !== s.tab && dt < 0.6 && wOld !== null && wNew !== null;
+    if (shared.card && wOld !== null && wNew !== null)
+      card(c, X0, cy0, wOld + (wNew - wOld) * springK(dt, 0.35, 0.86), cy1 - cy0, false);
+    const outA = tabOutA(s);
+    if (outA > 0) {
+      // the tab we leave: fades and sinks a little, takes no clicks
+      const tab = s.tab,
+        n = s.hits.length;
+      s.tab = s.prevTab;
+      c.save();
+      c.globalAlpha *= outA;
+      if (!shared.card) {
+        const mx = (X0 + X1) / 2,
+          my = (cy0 + cy1) / 2,
+          sc = 0.985 + 0.015 * outA;
+        c.translate(mx, my);
+        c.scale(sc, sc);
+        c.translate(-mx, -my);
+      }
+      drawLeaving(() => drawOpenBody(s, c, X0, X1, cy0, cy1, fx));
+      c.restore();
+      s.tab = tab;
+      s.hits.length = n;
+    }
     drawOpenBody(s, c, X0, X1, cy0, cy1, fx);
+    shared.card = false;
     c.restore();
   }
+}
+
+/** The card's state tint (a red CI) belongs to its summary: inside a list or an item it would
+ * colour things it says nothing about, so it fades out on a spring while a level is open. */
+function levelTint(s: IslandState, f: ModuleId | null): number {
+  return f ? clamp(hoverK(s, 'level-tint', depthTop(s, f) === '', 0.3, 1), 0, 1) : 1;
+}
+
+/** the focus card takes this share of home: the active module says more than the others together */
+const SPLIT = 0.53;
+/** the module rail beside a big event card, as Grok Bot's */
+const RAIL_W = 52;
+/** the card's content (mascot, text, buttons) is drawn this much bigger than the prototype's,
+ * as Grok Bot's - the island grew, its content grows with it instead of floating in space */
+const CARD_K = 1.18;
+/** the prototype's content block height; it sits in the middle of the card */
+const BLOCK_H = 104;
+
+/** draw a card's content scaled by CARD_K, centred in the card's height */
+function bigFocus(
+  s: IslandState,
+  c: Ctx,
+  f: ModuleId,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  fx: WorkFx | null,
+): void {
+  const k = CARD_K,
+    h = (y1 - y0) / k,
+    ins = Math.max(0, (h - BLOCK_H) / 2);
+  withScale(s, c, x0, y0, k, () => drawFocusCard(s, c, f, x0, y0 + ins, x0 + (x1 - x0) / k, y0 + h - ins, fx));
+}
+
+/** an event that takes the big card, the other modules wait in the rail */
+function railEvent(s: IslandState): boolean {
+  const ev = s.event && s.event.type;
+  if (ev === 'attention' || ev === 'question' || ev === 'success' || ev === 'error') return true;
+  // a red CI in focus keeps the big card after its event: it has buttons to reach (island/ci.ts)
+  return !!ciAlert(s) && effectiveFocus(s) === 'github';
+}
+
+/** width of the tab's left card when it has one (the card the tabs share in a switch) */
+function leftCardW(s: IslandState, tab: Tab, X0: number, X1: number): number | null {
+  if (tab === 'chat' && !s.chatOff) return 112;
+  if (tab === 'settings') return s.host ? X1 - X0 : null;
+  if (tab !== 'home') return null;
+  if (railEvent(s)) return X1 - X0 - RAIL_W - 8;
+  if (effectiveFocus(s) === 'music') return null;
+  return (X1 - X0) * SPLIT - 4;
 }
 
 /** proto: drawOpenBody - the active tab; on home the focus card plus the other modules */
@@ -259,60 +405,293 @@ export function drawOpenBody(
   cy1: number,
   fx: WorkFx | null,
 ): void {
-  if (s.tab === 'chat' && !s.chatOff) return drawChat(s, c, X0, X1, cy0, cy1);
-  if (s.tab === 'add') return drawAdd(s, c, X0, X1, cy0, cy1);
-  if (s.tab === 'settings') return drawSettings(s, c, X0, X1, cy0, cy1);
-  const split = X0 + (X1 - X0) * 0.52,
-    gap = 8;
-  if (s.event && (s.event.type === 'attention' || s.event.type === 'question'))
-    return drawAsk(s, c, X0, X1, cy0, cy1, fx);
+  haloTint.k = 0;
+  drawBody(s, c, X0, X1, cy0, cy1, fx);
+  // mascots crossing between the card and the grid go over both
+  flushLate();
+}
+
+function drawBody(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, cy1: number, fx: WorkFx | null): void {
+  if (s.tab !== 'home') {
+    c.save();
+    // chat and settings layer their own rows; the add tab is one layer until the shelf replaces it
+    if (s.tab === 'add') layer(s, c, 0);
+    if (s.tab === 'chat' && !s.chatOff) drawChat(s, c, X0, X1, cy0, cy1);
+    else if (s.tab === 'add') drawAdd(s, c, X0, X1, cy0, cy1);
+    else if (s.tab === 'settings') drawSettings(s, c, X0, X1, cy0, cy1);
+    c.restore();
+    if (s.tab !== 'chat' || !s.chatOff) return;
+  }
+  const gap = 8;
   const f = effectiveFocus(s);
   const k = ss(0, 1, (s.t - s.focusStart) / 0.28);
-  if (f === 'music') {
+  // permission, question, done, error: one big card, the other modules as a rail of mascots
+  if (railEvent(s)) {
+    const bx1 = X1 - RAIL_W - gap,
+      // on an island already open the event comes in by a sequence (island/eventIn.ts)
+      dt = eventInDt(s);
+    if (dt !== null) {
+      // the mascots gather from where they were last frame: into the big card and the rail
+      if (s.event && s.flyStart < s.event.start) startFlight(s);
+      if (dt < EV_OUT) drawOldHome(s, c, X0, X1, cy0, cy1, 1 - dt / EV_OUT);
+    }
+    const w0 = (X1 - X0) * SPLIT - gap / 2,
+      bw = dt === null ? bx1 - X0 : w0 + (bx1 - X0 - w0) * evWidthK(dt);
+    seq.on = dt !== null;
+    seq.textA = dt === null ? 1 : evTextA(dt);
+    seq.tintA = dt === null ? 1 : evTintA(dt);
     c.save();
-    c.globalAlpha *= k;
-    c.translate((1 - k) * 8, 0);
-    drawMusicWide(s, c, X0, X1 - 44, cy0, cy1);
+    if (dt === null) layer(s, c, 0);
+    if (s.event && (s.event.type === 'attention' || s.event.type === 'question')) {
+      if (seq.on && !shared.card) card(c, X0, cy0, bw, cy1 - cy0, false);
+      withScale(s, c, X0, cy0, CARD_K, () =>
+        drawAsk(s, c, X0, X0 + (bx1 - X0) / CARD_K, cy0, cy0 + (cy1 - cy0) / CARD_K, fx),
+      );
+    } else {
+      if (!shared.card) card(c, X0, cy0, bw, cy1 - cy0, false);
+      const tintC = focusTint(s, f);
+      if (tintC) cardTint(c, X0, cy0, bw, cy1 - cy0, tintC.c, tintC.a * seq.tintA * levelTint(s, f));
+      if (seq.on) {
+        cardFade.a = c.globalAlpha;
+        c.globalAlpha *= seq.textA;
+      }
+      bigFocus(s, c, f, X0, cy0, bx1, cy1, fx);
+      cardFade.a = -1;
+    }
+    seq.on = false;
     c.restore();
+    c.save();
+    if (dt === null) layer(s, c, 1);
     drawRail(
       s,
       c,
-      X1 - 36,
+      X1 - RAIL_W,
+      X1,
+      cy0,
+      cy1,
+      modules(s).filter((m) => m.id !== f),
+      dt,
+    );
+    c.restore();
+    return;
+  }
+  if (f === 'music') {
+    c.save();
+    layer(s, c, 0);
+    cardFade.a = c.globalAlpha;
+    c.globalAlpha *= k;
+    c.translate((1 - k) * 8, 0);
+    // the player grows with the island like the other cards, instead of spreading its rows apart
+    withScale(s, c, X0, cy0, CARD_K, () =>
+      drawMusicWide(s, c, X0, X0 + (X1 - RAIL_W - gap - X0) / CARD_K, cy0, cy0 + (cy1 - cy0) / CARD_K),
+    );
+    c.restore();
+    c.save();
+    layer(s, c, 1);
+    drawRail(
+      s,
+      c,
+      X1 - RAIL_W,
       X1,
       cy0,
       cy1,
       modules(s).filter((m) => m.id !== 'music'),
     );
+    c.restore();
+    cardFade.a = -1;
     return;
   }
-  card(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, false);
-  const tintC = focusTint(s, f);
-  if (tintC) cardTint(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, tintC.c, tintC.a);
+  const split = X0 + (X1 - X0) * SPLIT;
   c.save();
+  layer(s, c, 0);
+  if (!shared.card) card(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, false);
+  const tintC = focusTint(s, f);
+  if (tintC) cardTint(c, X0, cy0, split - X0 - gap / 2, cy1 - cy0, tintC.c, tintC.a * levelTint(s, f));
+  c.save();
+  cardFade.a = c.globalAlpha;
   c.globalAlpha *= k;
   c.translate((1 - k) * 8, 0);
-  drawFocusCard(s, c, f, X0, cy0, split - gap / 2, cy1, fx);
+  bigFocus(s, c, f, X0, cy0, split - gap / 2, cy1, fx);
+  cardFade.a = -1;
   c.restore();
-  // the other four modules as a 2 × 2 grid of chips
-  const items = modules(s).filter((m) => m.id !== f);
-  const gx0 = split + gap / 2,
-    gw = (X1 - gx0 - gap) / 2,
-    gh = (cy1 - cy0 - gap) / 2;
-  items.slice(0, 4).forEach((it, i) => {
-    const x = gx0 + (i % 2) * (gw + gap),
-      y = cy0 + Math.floor(i / 2) * (gh + gap);
-    const hov = hovering(s, x, y, gw, gh);
-    c.fillStyle = hov ? 'rgba(255,255,255,0.13)' : isHot(it) ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.05)';
-    rrect(c, x, y, gw, gh, 12);
-    c.fill();
-    drawGlyph(s, c, it, x + 17, y + gh / 2, it.kind === 'agent' ? 8 : 7.5);
-    textAt(c, it.name, x + 32, y + gh / 2 - 7, { size: 12, max: gw - 38 });
-    textAt(c, idleShort(s, it), x + 32, y + gh / 2 + 8, {
-      size: 11,
-      weight: 400,
-      color: isHot(it) ? 'rgba(255,255,255,0.85)' : T_MUTED,
-      max: gw - 38,
-    });
-    addHit(s, c, { x, y, w: gw, h: gh, act: 'focus:' + it.id });
+  c.restore();
+  // the other modules: Grok Bot's grid - one card, a 2 × 2 of pills, each a small mascot in its
+  // colour and the name. The state is the mascot's mood and the pill's rim, not words: the focus
+  // card on the left is where the reading happens
+  const items = modules(s)
+    .filter((m) => m.id !== f)
+    .slice(0, 4);
+  const g = grid(X0, X1, cy0, cy1, items.length);
+  c.save();
+  layer(s, c, 1);
+  card(c, g.x0, cy0, g.w, cy1 - cy0, false);
+  c.restore();
+  items.forEach((it, i) => {
+    c.save();
+    layer(s, c, 1 + i);
+    const p = g.pill(i);
+    modulePill(s, c, it, i, p.x, p.y, g.pw, g.ph);
+    c.restore();
   });
+  const picked = modules(s).find((m) => m.id === f);
+  if (picked) ghostPill(s, c, picked);
+}
+
+/** a module as a pill: a dark fill tinted with its colour, a rim of it, its mascot and the name */
+function modulePill(
+  s: IslandState,
+  c: Ctx,
+  it: ModuleItem,
+  i: number,
+  px: number,
+  py: number,
+  pw: number,
+  ph: number,
+): void {
+  const col = MODULE_COL[it.id].body,
+    hov = hovering(s, px, py, pw, ph),
+    hot = isHot(it);
+  // a focus change: the pill slides from its old slot, one after another (island/flight.ts)
+  const fb = flyBox(s, c, it.id, i, px, py, pw, ph),
+    { x, y, w, h } = fb || { x: px, y: py, w: pw, h: ph };
+  markBox(s, c, it.id, x, y, w, h);
+  // coucou's chip hover: lifts to 1.04 on a spring, the fill and rim take the module colour, a
+  // glow of it comes up behind (2026-10-19)
+  const k = hoverK(s, 'pill:' + it.id, hov),
+    ka = clamp(k, 0, 1),
+    sc = (1 + 0.04 * k) * pressScale(s, 'focus:' + it.id),
+    a0 = c.globalAlpha;
+  c.save();
+  c.globalAlpha *= newPillA(s, it.id);
+  c.translate(x + w / 2, y + h / 2);
+  c.scale(sc, sc);
+  c.translate(-(x + w / 2), -(y + h / 2));
+  pillPlate(c, x, y, w, h, col, hot, ka);
+  const mx = x + 8 + h * 0.27,
+    my = y + h / 2 + 0.5,
+    mR = h * 0.27,
+    mini = { ...miniFor(it), body: deepCol(col) },
+    // the module that just left focus: its mascot shrinks in from the card, its pill comes up under it
+    fl = flyMascot(s, c, it.id, mx, my, mR);
+  if (fl) drawLate(c, () => drawMini(s, c, fl.x, fl.y, fl.R, mini), a0);
+  else drawMini(s, c, mx, my, mR, mini);
+  markSpot(s, c, it.id, fl ? fl.x : mx, fl ? fl.y : my, fl ? fl.R : mR);
+  pillName(c, it.name, x, y, w, h, col, ka);
+  c.restore();
+  addHit(s, c, { x: px, y: py, w: pw, h: ph, act: 'focus:' + it.id });
+}
+
+/** a pill's plate: a dark fill tinted with the module colour and a rim of it; ka - hover */
+function pillPlate(c: Ctx, x: number, y: number, w: number, h: number, col: string, hot: boolean, ka: number): void {
+  const r = h / 2;
+  if (ka > 0.01) {
+    c.save();
+    c.shadowColor = hexA(deepCol(col), 0.5 * ka);
+    c.shadowBlur = 14 * c.getTransform().a;
+    rrect(c, x, y, w, h, r);
+    c.fillStyle = '#0B0B0C';
+    c.fill();
+    c.restore();
+  }
+  rrect(c, x, y, w, h, r);
+  c.fillStyle = '#0B0B0C';
+  c.fill();
+  c.fillStyle = hexA(deepCol(col), 0.1 + 0.12 * ka);
+  c.fill();
+  c.lineWidth = 1;
+  c.strokeStyle = hexA(col, (hot ? 0.34 : 0.16) + 0.36 * ka);
+  rrect(c, x + 0.5, y + 0.5, w - 1, h - 1, r - 0.5);
+  c.stroke();
+}
+
+function pillName(c: Ctx, name: string, x: number, y: number, w: number, h: number, col: string, ka: number): void {
+  // the mascot's right edge (x + 8 + 0.54 h) plus a gap, so the name never touches it
+  const tx = x + 16 + h * 0.54;
+  textAt(c, name, tx, y + h / 2 + 0.5, {
+    size: 12.5,
+    color: mixWhite(col, 0.45 + 0.25 * ka),
+    max: w - (tx - x) - 8,
+  });
+}
+
+/** the pill just picked: its mascot lifts out and flies to the card, the plate and name it leaves
+ * fade and settle back a little instead of vanishing in one frame */
+const GHOST = 0.16;
+function ghostPill(s: IslandState, c: Ctx, it: ModuleItem): void {
+  const b = s.flyBoxFrom[it.id],
+    dt = flyDt(s);
+  if (!b || dt >= GHOST || !s.flyFrom[it.id]) return;
+  const k = dt / GHOST,
+    p = toLocal(c, b.x, b.y),
+    w = b.w / p.k,
+    h = b.h / p.k,
+    col = MODULE_COL[it.id].body,
+    sc = 1 - 0.04 * k;
+  c.save();
+  c.globalAlpha *= 1 - k;
+  c.translate(p.x + w / 2, p.y + h / 2);
+  c.scale(sc, sc);
+  c.translate(-(p.x + w / 2), -(p.y + h / 2));
+  pillPlate(c, p.x, p.y, w, h, col, false, 0);
+  pillName(c, it.name, p.x, p.y, w, h, col, 0);
+  c.restore();
+}
+
+/** home's right half: one card holding a 2 × 2 of pills */
+function grid(X0: number, X1: number, cy0: number, cy1: number, n: number) {
+  const gap = 8,
+    x0 = X0 + (X1 - X0) * SPLIT + gap / 2,
+    w = X1 - x0,
+    pad = 10,
+    pg = 12,
+    pw = (w - pad * 2 - 8) / 2,
+    // a pill is a label to read and press: about 3 x its text (12.5 px) reads as a chip; at 48 px it
+    // read as a slab with the name lost in it (owner, 2026-10-20). The rows and the card's margins
+    // keep one rhythm (gap ~ margin ~ a third of the pill) instead of hugging the edges
+    ph = Math.min(38, (cy1 - cy0 - pad * 2 - pg) / 2),
+    rows = Math.ceil(n / 2),
+    py0 = cy0 + (cy1 - cy0 - (rows * ph + (rows - 1) * pg)) / 2;
+  return {
+    x0,
+    w,
+    pw,
+    ph,
+    pill: (i: number) => ({ x: x0 + pad + (i % 2) * (pw + 8), y: py0 + Math.floor(i / 2) * (ph + pg) }),
+  };
+}
+
+/** home as it was before an event took the big card, fading out (alpha a): the old focus card's
+ * text and the pills' plates and names. Their mascots are not drawn: they are flying to the big
+ * card and the rail. Takes no clicks. */
+function drawOldHome(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, cy1: number, a: number): void {
+  const f0 = s.prevFocus;
+  if (!f0 || f0 === 'music' || !modules(s).some((m) => m.id === f0)) return;
+  const items = modules(s)
+      .filter((m) => m.id !== f0)
+      .slice(0, 4),
+    g = grid(X0, X1, cy0, cy1, items.length),
+    n = s.hits.length,
+    spots = { ...s.flySpots };
+  c.save();
+  c.globalAlpha *= a;
+  cardFade.hide = true;
+  drawLeaving(() => bigFocus(s, c, f0, X0, cy0, X0 + (X1 - X0) * SPLIT - 4, cy1, null));
+  cardFade.hide = false;
+  card(c, g.x0, cy0, g.w, cy1 - cy0, false);
+  items.forEach((it, i) => {
+    const p = g.pill(i),
+      col = MODULE_COL[it.id].body;
+    pillPlate(c, p.x, p.y, g.pw, g.ph, col, isHot(it), 0);
+    pillName(c, it.name, p.x, p.y, g.pw, g.ph, col, 0);
+  });
+  c.restore();
+  s.hits.length = n;
+  s.flySpots = spots;
+}
+
+/** a module colour lifted toward white, for text on its own tint */
+function mixWhite(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1), 16),
+    m = (v: number) => Math.round(v + (255 - v) * k);
+  return `rgb(${m((n >> 16) & 255)},${m((n >> 8) & 255)},${m(n & 255)})`;
 }

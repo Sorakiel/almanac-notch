@@ -6,16 +6,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::WebviewWindow;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+    GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL,
+    MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::HiDpi::{
     GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
+use windows::Win32::UI::Shell::{
+    SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetWindowLongPtrW, GetWindowRect, IsWindowVisible, SetWindowLongPtrW,
-    SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
+    IsWindowVisible, IsZoomed, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync, GWL_EXSTYLE,
+    GWL_STYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION, WS_EX_APPWINDOW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -31,6 +36,29 @@ pub fn init_process() {
     // SAFETY: plain Win32 call with a constant context.
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+    // WebView2 paints its default white before wry's transparent colour reaches the controller
+    // (older runtimes have no ControllerOptions3); this variable makes the very first fill clear.
+    // Set before any webview exists, while the process has one thread.
+    std::env::set_var("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0");
+}
+
+/// The page has drawn its first frame. Until then the window stays hidden: WebView2 needs a moment
+/// to load the page, and a window shown earlier is a white or empty 680x230 box over the screen.
+static READY: AtomicBool = AtomicBool::new(false);
+
+fn may_show() -> bool {
+    READY.load(Ordering::Relaxed) && !FS_HIDDEN.load(Ordering::Relaxed)
+}
+
+/// The frontend's first frame is on screen (or the fallback timer ran out): show the island.
+pub fn ready(window: &WebviewWindow) {
+    if READY.swap(true, Ordering::Relaxed) || FS_HIDDEN.load(Ordering::Relaxed) {
+        return;
+    }
+    // SAFETY: `h` is a live window owned by Tauri; the async call only posts to its thread.
+    unsafe {
+        let _ = ShowWindowAsync(hwnd(window), SW_SHOWNOACTIVATE);
     }
 }
 
@@ -114,7 +142,12 @@ pub fn place(window: &WebviewWindow) -> Placement {
             r.top,
             r.right - r.left,
             r.bottom - r.top,
-            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            SWP_NOACTIVATE
+                | if may_show() {
+                    SWP_SHOWWINDOW
+                } else {
+                    Default::default()
+                },
         );
         let mut got = RECT::default();
         let _ = GetWindowRect(h, &mut got);
@@ -132,6 +165,10 @@ pub fn place(window: &WebviewWindow) -> Placement {
 }
 
 pub fn needs_replace(window: &WebviewWindow, last: &Placement) -> bool {
+    // hidden for a full-screen app on purpose: re-placing would show it again
+    if FS_HIDDEN.load(Ordering::Relaxed) {
+        return false;
+    }
     let h = hwnd(window);
     let (r, geometry, scale) = desired(h);
     let mut got = RECT::default();
@@ -185,4 +222,68 @@ pub fn set_ignore(window: &WebviewWindow, ignore: bool) {
             );
         }
     }
+}
+
+/// The island is hidden because a full-screen app is in front.
+static FS_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// A window in front that covers the whole island monitor: a game (exclusive or borderless), a
+/// video or a browser in full screen, a slideshow. A maximized window with a title bar is not one,
+/// even when an auto-hidden taskbar lets it reach the bottom edge.
+fn fullscreen_in_front(own: HWND) -> bool {
+    // SAFETY: plain Win32 queries on whatever window is in front; nothing is kept.
+    unsafe {
+        if let Ok(q) = SHQueryUserNotificationState() {
+            if q == QUNS_RUNNING_D3D_FULL_SCREEN || q == QUNS_PRESENTATION_MODE {
+                return true;
+            }
+        }
+        let fg = GetForegroundWindow();
+        if fg.is_invalid() || fg == own {
+            return false;
+        }
+        // the desktop itself covers the monitor too
+        let mut cls = [0u16; 16];
+        let n = GetClassNameW(fg, &mut cls).max(0) as usize;
+        let cls = String::from_utf16_lossy(&cls[..n]);
+        if cls == "Progman" || cls == "WorkerW" {
+            return false;
+        }
+        let style = GetWindowLongPtrW(fg, GWL_STYLE) as u32;
+        if style & WS_CAPTION.0 == WS_CAPTION.0 || IsZoomed(fg).as_bool() {
+            return false;
+        }
+        let mon = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+        if MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != mon {
+            return false;
+        }
+        let mut info = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let mut r = RECT::default();
+        if !GetMonitorInfoW(mon, &mut info).as_bool() || GetWindowRect(fg, &mut r).is_err() {
+            return false;
+        }
+        let m = info.rcMonitor;
+        r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom
+    }
+}
+
+/// Any thread, a few times a second. Hides the island while a full-screen app is in front (when
+/// `hide` is on) and shows it again after; returns the new state when it changed.
+pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
+    let h = hwnd(window);
+    let want = hide && fullscreen_in_front(h);
+    if FS_HIDDEN.swap(want, Ordering::Relaxed) == want {
+        return None;
+    }
+    // a page that has not drawn yet stays hidden after the game too (ready shows it)
+    if want || READY.load(Ordering::Relaxed) {
+        // SAFETY: `h` is a live window owned by Tauri; the async call only posts to its thread.
+        unsafe {
+            let _ = ShowWindowAsync(h, if want { SW_HIDE } else { SW_SHOWNOACTIVATE });
+        }
+    }
+    Some(want)
 }

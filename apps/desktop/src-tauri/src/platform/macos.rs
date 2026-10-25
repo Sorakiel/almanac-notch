@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use objc2::rc::Retained;
 use objc2::{msg_send, MainThreadMarker, MainThreadOnly};
@@ -84,12 +85,36 @@ pub fn setup_window(window: &WebviewWindow) {
         created
     });
     panel.setLevel(STATUS_WINDOW_LEVEL);
-    panel.setCollectionBehavior(
-        NSWindowCollectionBehavior::CanJoinAllSpaces
-            | NSWindowCollectionBehavior::Stationary
-            | NSWindowCollectionBehavior::FullScreenAuxiliary
-            | NSWindowCollectionBehavior::IgnoresCycle,
-    );
+    apply_behavior(&panel, FS_HIDE.load(Ordering::Relaxed) != 0);
+}
+
+/// Last full-screen setting applied to the panel: 0 show over full-screen Spaces, 1 hide there.
+/// Starts as "hide", the default (prefs.rs), until the first `fullscreen_tick`.
+static FS_HIDE: AtomicU8 = AtomicU8::new(1);
+
+/// Every Space, but a full-screen one only when the user wants the island there: without
+/// `FullScreenAuxiliary` AppKit itself keeps the panel off full-screen Spaces (a game, a video,
+/// a slideshow) and brings it back on leaving them - nothing to poll.
+fn apply_behavior(panel: &NSPanel, hide: bool) {
+    let mut b = NSWindowCollectionBehavior::CanJoinAllSpaces
+        | NSWindowCollectionBehavior::Stationary
+        | NSWindowCollectionBehavior::IgnoresCycle;
+    if !hide {
+        b |= NSWindowCollectionBehavior::FullScreenAuxiliary;
+    }
+    panel.setCollectionBehavior(b);
+}
+
+/// Any thread. Applies a changed setting; AppKit does the hiding, so it never reports a change.
+pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
+    if FS_HIDE.swap(hide as u8, Ordering::Relaxed) != hide as u8 {
+        let _ = window.run_on_main_thread(move || {
+            if let Some(p) = PANEL.with(|p| p.borrow().clone()) {
+                apply_behavior(&p, hide);
+            }
+        });
+    }
+    None
 }
 
 /// Click-through toggle for the panel; callable from any thread.
@@ -263,3 +288,7 @@ pub fn yield_activation() {
         _ => app.deactivate(),
     }
 }
+
+/// The page drew its first frame. Nothing to do here: the window is shown when placed, and a
+/// transparent WKWebView has no white fill to hide (Windows waits for this, platform/windows.rs).
+pub fn ready(_window: &WebviewWindow) {}

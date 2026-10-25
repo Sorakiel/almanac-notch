@@ -8,7 +8,8 @@ import { spawnFloat, stepParticles } from './particles';
 import { stepMusic } from './music';
 import { moduleMood } from './mood';
 import { after } from './state';
-import { busyAside, notchState } from '../island/focus';
+import { busyAside, effectiveFocus, notchState } from '../island/focus';
+import { ciAlert, ciEvent, ciTick } from '../island/ci';
 
 /**
  * proto: update - one frame of behaviour. Targets T are rebuilt layer by layer
@@ -27,8 +28,12 @@ export function update(s: IslandState, dt: number, now: number): void {
     }
   }
   const t = s.t;
+  // the app's auto-close ran out: the next visit starts from a peek again
+  if (s.host && s.clickOpen && !s.islandHover && t - s.hoverLeftAt >= s.host.autoClose) s.clickOpen = false;
   const grab = s.grab;
   const dragging = !!(grab && grab.active);
+  // a CI result stays while the pointer is on the island: it is being read (island/ci.ts)
+  if (s.event && ciEvent(s) && s.islandHover && s.event.until - t < 0.6) s.event.until = t + 0.6;
   if (s.event && t >= s.event.until) {
     if (s.event.type === 'greeting') s.postLaunchUntil = t + 30;
     s.event = null;
@@ -325,6 +330,12 @@ export function update(s: IslandState, dt: number, now: number): void {
         : 1
       : 0;
   if (st && st.badge) s.badgeColor = st.color;
+  // a red CI not set aside: the dot alone remembers it (island/ci.ts)
+  else if (!st && ciAlert(s) && !aside) {
+    sp.badge.t = 1;
+    s.badgeColor = '#FF453A';
+  }
+  ciTick(s, notchState(s) === 'open', effectiveFocus(s) === 'github');
 
   stepSprings(s, dt, dragging);
   if (dt > 1e-4) s.lastAx = clamp((sp.posX.v - s.prevPosXv) / dt, -200, 200);

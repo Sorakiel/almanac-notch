@@ -4,6 +4,8 @@
 //! no tool output). Two kinds are held until the user answers in the island or 30 s pass:
 //! PermissionRequest (approve / deny a tool) and PreToolUse of AskUserQuestion (pick an
 //! option). Without an answer the hook gets no decision and Claude Code shows its own prompt.
+//! While a full-screen app hides the island the 30 s do not run: the prompt waits for the
+//! user to come back (up to HOLD_MAX_SECS) and then gets its full 30 s on the island.
 
 pub mod hooks_ui;
 pub mod server;
@@ -18,7 +20,7 @@ use std::time::{Duration, Instant};
 /// How often a held hook checks that its client is still there.
 const POLL: Duration = Duration::from_millis(200);
 
-use almanac_hook::{is_blocking, ANSWER_WAIT_SECS, MAX_QUESTIONS};
+use almanac_hook::{is_blocking, ANSWER_WAIT_SECS, HOLD_MAX_SECS, MAX_QUESTIONS};
 use serde_json::{json, Map, Value};
 
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
@@ -36,6 +38,11 @@ pub struct Hub {
     /// full payloads of held hooks, needed to build the answer (AskUserQuestion input)
     held: Mutex<HashMap<u64, Value>>,
     wait: Duration,
+    /// cap on a hold while the island is hidden (the hook's timeout in settings.json is longer)
+    hold_max: Duration,
+    /// None while a full-screen app hides the island (platform::fullscreen_tick),
+    /// else the moment it was last shown
+    shown: Mutex<Option<Instant>>,
     /// poked on Stop / StopFailure so the limit shows without waiting for the next scan
     pub on_turn_end: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
@@ -232,13 +239,30 @@ impl Hub {
     }
 
     pub fn with_wait(emit: Emit, wait: Duration) -> Self {
+        Self::with_limits(emit, wait, Duration::from_secs(HOLD_MAX_SECS))
+    }
+
+    pub fn with_limits(emit: Emit, wait: Duration, hold_max: Duration) -> Self {
         Self {
             emit,
             next: AtomicU64::new(1),
             pending: Mutex::new(HashMap::new()),
             held: Mutex::new(HashMap::new()),
             wait,
+            hold_max,
+            shown: Mutex::new(Some(Instant::now())),
             on_turn_end: Mutex::new(None),
+        }
+    }
+
+    /// The island hid behind a full-screen app or came back. Held prompts stop their clock
+    /// while it is hidden; the frontend takes their cards down and shows them again on return.
+    pub fn set_hidden(&self, hidden: bool) {
+        let mut s = self.shown.lock().unwrap();
+        match (hidden, *s) {
+            (true, _) => *s = None,
+            (false, None) => *s = Some(Instant::now()),
+            (false, Some(_)) => {}
         }
     }
 
@@ -308,20 +332,34 @@ impl Hub {
         let start = Instant::now();
         // the island asks questions one by one, each with the prototype's 30 s
         let wait = self.wait * question_count(&p);
+        // The 30 s count only on screen: from the hold's start or the island's return,
+        // whichever is later.
+        let mut shown_from = start;
         let answer = loop {
             match rx.recv_timeout(POLL.min(wait)) {
                 Ok(a) => break a,
                 Err(RecvTimeoutError::Disconnected) => break String::new(),
                 Err(RecvTimeoutError::Timeout) => {
+                    let now = Instant::now();
+                    let shown = *self.shown.lock().unwrap();
+                    if let Some(t) = shown {
+                        shown_from = shown_from.max(t);
+                    }
                     let gone = !alive();
-                    if gone || start.elapsed() >= wait {
+                    let too_long = now - start >= self.hold_max;
+                    let seen = shown.is_some() && now - shown_from >= wait;
+                    if gone || too_long || seen {
                         if gone {
                             eprintln!("[claude] #{id} decided elsewhere, hook closed");
+                        } else if too_long {
+                            eprintln!("[claude] #{id} hidden too long, over to the terminal");
                         }
                         if self.pending.lock().unwrap().remove(&id).is_some() {
                             (self.emit)("island://agent", json!({ "kind": "resolved", "id": id }));
+                            break String::new();
                         }
-                        break String::new();
+                        // an answer took the prompt in the same moment: it is on its way
+                        break rx.recv().unwrap_or_default();
                     }
                 }
             }
@@ -406,6 +444,67 @@ mod tests {
         let t0 = Instant::now();
         assert_eq!(h.handle(perm(), &|| false), "");
         assert!(t0.elapsed() < Duration::from_secs(1));
+        assert!(log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
+    }
+
+    #[test]
+    fn hidden_island_holds_then_counts_from_return() {
+        let (h, log) = hub(300);
+        h.set_hidden(true);
+        let h2 = h.clone();
+        let t = thread::spawn(move || h2.handle(perm(), &|| true));
+        let id = wait_id(&log);
+        // far past the 300 ms a visible card gets
+        thread::sleep(Duration::from_millis(600));
+        assert!(!t.is_finished(), "released while hidden");
+        assert!(!log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
+        // back from the game: the card gets its full time again and can be answered
+        h.set_hidden(false);
+        thread::sleep(Duration::from_millis(40));
+        h.answer(id, "deny");
+        let out: Value = serde_json::from_str(&t.join().unwrap()).unwrap();
+        assert_eq!(out["hookSpecificOutput"]["decision"]["behavior"], "deny");
+    }
+
+    #[test]
+    fn hidden_island_times_out_after_return() {
+        let (h, log) = hub(100);
+        h.set_hidden(true);
+        let h2 = h.clone();
+        let t = thread::spawn(move || h2.handle(perm(), &|| true));
+        wait_id(&log);
+        thread::sleep(Duration::from_millis(500));
+        let back = Instant::now();
+        h.set_hidden(false);
+        assert_eq!(t.join().unwrap(), "");
+        assert!(
+            back.elapsed() >= Duration::from_millis(100),
+            "the full wait after return"
+        );
+        assert!(log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
+    }
+
+    #[test]
+    fn hidden_island_lets_go_when_the_hook_dies() {
+        // app alive, hook client gone (Claude Code killed it or the user answered in the terminal)
+        let (h, log) = hub(5000);
+        h.set_hidden(true);
+        let t0 = Instant::now();
+        assert_eq!(h.handle(perm(), &|| false), "");
+        assert!(t0.elapsed() < Duration::from_secs(1));
+        assert!(log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
+    }
+
+    #[test]
+    fn hidden_island_gives_up_at_hold_max() {
+        let log: Log = Arc::new(Mutex::new(Vec::new()));
+        let l = log.clone();
+        let emit: Emit = Arc::new(move |_, v| l.lock().unwrap().push(v));
+        let h = Hub::with_limits(emit, Duration::from_millis(100), Duration::from_millis(400));
+        h.set_hidden(true);
+        let t0 = Instant::now();
+        assert_eq!(h.handle(perm(), &|| true), "");
+        assert!(t0.elapsed() >= Duration::from_millis(400));
         assert!(log.lock().unwrap().iter().any(|v| v["kind"] == "resolved"));
     }
 

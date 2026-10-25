@@ -1,6 +1,7 @@
 // One command for a ready installer: `npm run installer` from the repository root.
 // Builds the release bundle for this OS and copies it to <root>/release/:
-//   Windows - "Almanac Notch Setup.exe" (NSIS), Mac - "Almanac Notch.dmg" and "Almanac Notch.app".
+//   Windows - "Almanac Notch Setup.exe": our installer window with Tauri's NSIS inside (stage 8g,
+//   scripts/setup-exe.mjs); Mac - "Almanac Notch.dmg" (with its background) and "Almanac Notch.app".
 // Update artifacts (.app.tar.gz / signed setup) need the updater key: without
 // TAURI_SIGNING_PRIVATE_KEY they are skipped, so a local build works without it.
 // Tauri itself leaves it deep inside src-tauri/target/release/bundle/..., which is build output
@@ -45,8 +46,12 @@ function take(kind, ending, name) {
   cpSync(newest, dest, { recursive: true });
   console.log('[installer] ready: ' + dest);
 }
-if (win) take('nsis', '.exe', 'Almanac Notch Setup.exe');
-else {
+if (win) {
+  const r2 = spawnSync('node', [join(desktop, 'scripts', 'setup-exe.mjs'), join(out, 'Almanac Notch Setup.exe')], {
+    stdio: 'inherit',
+  });
+  if (r2.status !== 0) process.exit(r2.status ?? 1);
+} else {
   take('dmg', '.dmg', 'Almanac Notch.dmg');
   take('macos', '.app', 'Almanac Notch.app');
 }

@@ -48,6 +48,13 @@ pub struct Habit {
     pub count: i64,
     pub goal: i64,
     pub done: bool,
+    /// the schedule and the last 64 days ('1' done, 'f' frozen, '0' else, today last), from
+    /// Almanac's migration 0041; None from an Almanac without it - then no streak is shown
+    /// when in the day: "morning" | "afternoon" | "evening" | "anytime" | "week"
+    pub slot: Option<String>,
+    pub frequency: Option<String>,
+    pub target: Option<i64>,
+    pub history: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -306,6 +313,18 @@ fn parse(v: &Value) -> State {
                 count,
                 goal,
                 done: h["done"].as_bool().unwrap_or(count >= goal),
+                slot: h["slot"]
+                    .as_str()
+                    .filter(|s| {
+                        matches!(*s, "morning" | "afternoon" | "evening" | "anytime" | "week")
+                    })
+                    .map(str::to_owned),
+                frequency: h["frequency"].as_str().map(str::to_owned),
+                target: h["target"].as_i64(),
+                history: h["history"]
+                    .as_str()
+                    .filter(|s| s.len() <= 400 && s.chars().all(|c| matches!(c, '0' | '1' | 'f')))
+                    .map(str::to_owned),
             })
         })
         .collect();
@@ -738,6 +757,38 @@ fn wait_callback(
     }
 }
 
+/// Almanac's web app: the habit page that "Открыть в Almanac" opens. A build for another
+/// deployment sets ALMANAC_WEB, as ALMANAC_URL sets the project.
+const WEB_DEFAULT: &str = "https://almanac-sorakiels-projects.vercel.app";
+
+fn web() -> &'static str {
+    option_env!("ALMANAC_WEB")
+        .map(|u| u.trim_end_matches('/'))
+        .filter(|u| u.starts_with("https://"))
+        .unwrap_or(WEB_DEFAULT)
+}
+
+/// A habit's id as Almanac gives it: a uuid, nothing that could bend the URL.
+fn habit_id_ok(id: &str) -> bool {
+    id.len() == 36
+        && id.chars().enumerate().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == '-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
+}
+
+/// Opens the habit in Almanac's web app (the card's "Открыть в Almanac").
+pub fn open_habit(id: &str) -> Result<(), String> {
+    if !habit_id_ok(id) {
+        return Err("bad habit id".into());
+    }
+    open_browser(&format!("{}/habits/{id}", web()));
+    Ok(())
+}
+
 fn open_browser(url: &str) {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(url).spawn();
@@ -852,6 +903,36 @@ mod tests {
         );
         assert_eq!(s.habits[0].icon.as_deref(), Some("💧"));
         assert_eq!(s.habits[1].icon, None);
+    }
+
+    #[test]
+    fn schedule_and_history_pass_when_clean() {
+        let h = format!("{}1f01", "0".repeat(60));
+        let s = parse(&json!({"habits": [
+            {"id": "a", "name": "A", "goal": 1, "frequency": "every_n_days", "target": 3, "history": h},
+            {"id": "b", "name": "B", "goal": 1, "history": "01x"},
+            {"id": "c", "name": "C", "goal": 1}
+        ]}));
+        assert_eq!(s.habits[0].frequency.as_deref(), Some("every_n_days"));
+        assert_eq!(s.habits[0].target, Some(3));
+        assert_eq!(s.habits[0].history.as_deref(), Some(h.as_str()));
+        // anything but 0, 1, f is not a history: no streak rather than a wrong one
+        assert_eq!(s.habits[1].history, None);
+        assert_eq!(
+            (
+                s.habits[2].frequency.as_deref(),
+                s.habits[2].history.as_deref()
+            ),
+            (None, None)
+        );
+    }
+
+    #[test]
+    fn habit_page_takes_only_a_uuid() {
+        assert!(habit_id_ok("6f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f8"));
+        assert!(!habit_id_ok("6f1a2b3c-4d5e-6f70-8192-a3b4c5d6e7f"));
+        assert!(!habit_id_ok("../../evil/4d5e-6f70-8192-a3b4c5d6e7f8"));
+        assert!(open_habit("x").is_err());
     }
 
     #[test]

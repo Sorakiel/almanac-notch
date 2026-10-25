@@ -15,7 +15,8 @@
         <section class="step" data-step="1" data-glow="#6f86ff">
           <h1>Привет! Я живу у выреза камеры</h1>
           <p class="lead">
-            Покажу, что делает Claude Code, сколько осталось до созвона и что играет. Настроим за минуту.
+            Покажу, сколько осталось до созвона, что играет и всё, что подключите: от CI и деплоев до привычек. Настроим
+            за минуту.
           </p>
           <div class="seg pill-seg" role="radiogroup" aria-label="Язык интерфейса">
             <label><input type="radio" name="lang-w" value="auto" />Как в системе</label>
@@ -49,6 +50,8 @@
             Покажу, сколько осталось до созвона: из классического Outlook на этом компьютере или по секретной ссылке
             iCal.
           </p>
+          <!-- Windows: the calendar page's source picker moves here while the guide is open -->
+          <div class="w-cal-slot" id="w-cal-slot"></div>
           <div class="w-actions">
             <button class="pill primary" id="w-cal">Разрешить доступ</button>
             <span class="chip"><span class="dot" id="w-cal-dot"></span><span id="w-cal-status">…</span></span>
@@ -115,7 +118,7 @@
             <label class="g-row"
               ><span
                 >Проверять обновления<small
-                  >Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.</small
+                  >Раз в день приложение смотрит на GitHub, вышла ли новая версия. Ставится только по кнопке.</small
                 ></span
               ><input type="checkbox" class="toggle" id="w-updates" checked
             /></label>
@@ -213,7 +216,7 @@
           <span class="name">Almanac<small id="li-almanac">…</small></span>
           <span class="dot" id="li-almanac-dot"></span>
         </button>
-        <p class="list-note">Кроме Claude Code включено не больше 4 модулей</p>
+        <p class="list-note">В острове помещается 5 модулей</p>
       </aside>
       <div class="detail">
         <main id="general" hidden>
@@ -241,6 +244,25 @@
               </div>
             </div>
           </div>
+          <h3>Звук</h3>
+          <div class="group">
+            <label class="g-row"
+              ><span>События<small>Разрешения, вопросы, готово, ошибки, начало работы агента</small></span
+              ><input type="checkbox" class="toggle" data-tier="events"
+            /></label>
+            <label class="g-row"
+              ><span>Маскот<small>Приветствие, клики, поглаживание, сон</small></span
+              ><input type="checkbox" class="toggle" data-tier="mascot"
+            /></label>
+            <label class="g-row"
+              ><span>Остров и кнопки<small>Открытие, закрытие, вкладки, переключатели</small></span
+              ><input type="checkbox" class="toggle" data-tier="ui"
+            /></label>
+          </div>
+          <p class="plain foot">
+            Громкость и общий выключатель - в карточке настроек острова. Во время звонка звуки молчат, под музыку кнопки
+            молчат, а остальное тише; ночью (с 22 до 8) всё на треть тише.
+          </p>
           <h3>Приложение</h3>
           <div class="group">
             <label class="g-row"
@@ -248,14 +270,29 @@
             /></label>
             <label class="g-row"
               ><span
+                >Прятать поверх полноэкранных приложений<small
+                  >Игра, видео или презентация во весь экран. Остров вернётся, когда вы из них выйдете.</small
+                ></span
+              ><input type="checkbox" class="toggle" id="fullscreen"
+            /></label>
+            <label class="g-row"
+              ><span
                 >Проверять обновления<small
-                  >Раз в день смотрю на GitHub, вышла ли новая версия. Ставлю только по кнопке.</small
+                  >Раз в день приложение смотрит на GitHub, вышла ли новая версия. Ставится только по кнопке.</small
                 ></span
               ><input type="checkbox" class="toggle" id="updates"
             /></label>
             <div class="g-row">
               <span><span id="app-version"></span><small id="upd-status"></small></span>
               <button class="pill ghost" id="upd-go">Проверить сейчас</button>
+            </div>
+            <div class="g-row">
+              <span
+                >Удалить Almanac Notch<small
+                  >Снимает хуки Claude Code и запуск при входе; настройки и данные - по желанию</small
+                ></span
+              >
+              <button class="pill ghost" id="uninstall">Удалить…</button>
             </div>
           </div>
           <p class="note" id="upd-error"></p>
@@ -274,7 +311,6 @@
             <button data-ev="sleep">Сон</button>
           </div>
           <div class="page-foot">
-            <button class="pill ghost" id="welcome-again">Открыть приветствие</button>
             <button class="pill ghost danger" id="quit">Выйти из Almanac Notch</button>
           </div>
         </main>
@@ -300,8 +336,8 @@
             <h3>Что это</h3>
             <p>
               Хуки - короткие команды в ~/.claude/settings.json: Claude Code сообщает острову, что делает, и ждёт ответа
-              на разрешения и вопросы. Перед записью покажу, что изменится, и сделаю копию файла. Ваши другие хуки не
-              трогаю.
+              на разрешения и вопросы. Перед записью видно, что изменится, и сохраняется копия файла. Другие ваши хуки
+              не меняются.
             </p>
           </section>
         </main>
@@ -419,6 +455,30 @@
             <button id="off">Отключить</button>
           </section>
 
+          <h3>Результат CI</h3>
+          <div class="group">
+            <div class="g-row">
+              <span>Проверки прошли</span>
+              <div class="seg" role="radiogroup" aria-label="Проверки прошли">
+                <label><input type="radio" name="ci-ok" value="pop" />Показывать</label>
+                <label><input type="radio" name="ci-ok" value="off" />Не показывать</label>
+              </div>
+            </div>
+            <div class="g-row">
+              <span>Проверка упала</span>
+              <div class="seg" role="radiogroup" aria-label="Проверка упала">
+                <label><input type="radio" name="ci-fail" value="pop" />Показывать</label>
+                <label><input type="radio" name="ci-fail" value="dot" />Только точка</label>
+                <label><input type="radio" name="ci-fail" value="off" />Не показывать</label>
+              </div>
+            </div>
+          </div>
+          <p class="plain foot">
+            Упавшая проверка ненадолго всплывает, потом о ней напоминает красная точка на маскоте. В открытом острове
+            она один раз встанет в карточку с кнопками «Открыть прогон» и «Перезапустить»; крестик убирает её до
+            следующего падения.
+          </p>
+
           <section class="help">
             <h3>Как получить токен</h3>
             <ol>
@@ -427,12 +487,14 @@
               <li>
                 Права только на чтение: Contents, Pull requests, Commit statuses, Actions (Metadata добавится сама).
               </li>
+              <li>Чтобы перезапускать упавшие проверки из острова, дайте Actions право на запись.</li>
             </ol>
             <h3>Что читается и куда уходит</h3>
             <p>
-              Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и
-              время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в
-              связке ключей системы и не попадает ни в файлы, ни в остров.
+              Названия репозиториев, статус проверок последних коммитов (название упавшей проверки, ветка, первая строка
+              сообщения коммита), число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только
+              на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в
+              остров.
             </p>
           </section>
         </main>

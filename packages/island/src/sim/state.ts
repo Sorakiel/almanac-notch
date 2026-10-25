@@ -30,6 +30,36 @@ export interface MascotEvent {
   answerAt?: number;
   /** set by real Claude Code sessions, Vercel, Notion and Grafana: success and error then belong to that card */
   src?: 'agent' | 'vercel' | 'notion' | 'grafana' | 'almanac';
+  /** a GitHub CI result: the run's key (CiRun.key), which the card then shows */
+  ci?: string;
+}
+
+/** One repository's newest CI result, as the CI card shows it (island/ci.ts). */
+export interface CiRun {
+  /** repo#sha: one failure, one alert - hiding or seeing it is kept per key */
+  key: string;
+  state: 'run' | 'fail' | 'ok';
+  /** short repository name; the app looks the links up by it */
+  repo: string;
+  branch: string;
+  /** the first failed check, '' when GitHub names none */
+  check: string;
+  sha: string;
+  /** the commit message's first line */
+  title: string;
+  done: number;
+  total: number;
+  /** when the checks ran, epoch ms */
+  at: number;
+  /** an Actions run: its failed jobs can be re-run from the card */
+  rerun: boolean;
+}
+
+/** How a CI result reaches the person (settings, GitHub): the card pops up on its own, only the
+ * mascot's dot says it (a failure), or nothing */
+export interface CiNotify {
+  ok: 'pop' | 'off';
+  fail: 'pop' | 'dot' | 'off';
 }
 
 /**
@@ -68,6 +98,8 @@ export interface CalFeed {
   title: string;
   /** third line: "дальше: лекция в 17:10" (or the second line when mins is null) */
   after: string;
+  /** every meeting ahead, the next first (the card's levels; absent while there are none) */
+  events?: { id: string; title: string; start: number; end: number; at: string; place: string; link: string }[];
 }
 
 /**
@@ -118,6 +150,12 @@ export interface GithubFeed {
   commits: number[];
   /** the card's two lines while there is nothing to show (no token, no CI) */
   hint: [string, string];
+  /** every repository's newest CI, newest first (events look their run up here) */
+  runs: CiRun[];
+  /** the newest failing head, null when nothing is red */
+  fail: CiRun | null;
+  /** the PRs waiting for my review, newest first (the card's list; absent in the harness) */
+  review?: { repo: string; num: number; title: string; author: string; at: number; url: string; draft: boolean }[];
 }
 
 /**
@@ -130,11 +168,23 @@ export interface VercelFeed {
   /** newest deployment; "none" = no deployments yet */
   state: 'run' | 'fail' | 'ok' | 'none';
   /** the card's rows, newest first (at most three): project, state dot, "2 ч" */
-  rows: { id: string; name: string; state: 'run' | 'fail' | 'ok' | 'off'; ago: string }[];
+  rows: {
+    id: string;
+    name: string;
+    state: 'run' | 'fail' | 'ok' | 'off';
+    ago: string;
+    /** stage 10, a deployment's own level: production or preview, branch, commit, has a site */
+    target?: 'production' | 'preview';
+    branch?: string;
+    commit?: string;
+    site?: boolean;
+  }[];
   /** the rail's, chips' and ears' short text */
   short: string;
   /** the card's two lines while there is nothing to show (no token, refused, no deployments) */
   hint: [string, string];
+  /** how a "Повторить" went, on that deployment's level */
+  note?: { id: string; text: string; err: boolean };
 }
 
 /**
@@ -146,7 +196,7 @@ export interface NotionFeed {
   /** "off" no token, "bad" the token was refused, "ok" data is shown */
   auth: 'off' | 'bad' | 'ok';
   /** the card's rows, newest first (at most three): icon, title, "5 мин" */
-  rows: { id: string; title: string; emoji: string | null; ago: string }[];
+  rows: { id: string; title: string; emoji: string | null; ago: string; by?: string }[];
   /** the rail's, chips' and ears' short text */
   short: string;
   /** the card's two lines while there is nothing to show (no token, refused, no pages) */
@@ -186,7 +236,23 @@ export interface AlmanacFeed {
   /** "off" not signed in, "bad" the sign-in expired, "ok" data is shown */
   auth: 'off' | 'bad' | 'ok';
   /** today's habits in card order: id, name, done; "3/8" when a day takes more than one tap */
-  rows: { id: string; name: string; done: boolean; progress: string }[];
+  rows: {
+    id: string;
+    name: string;
+    done: boolean;
+    progress: string;
+    /** taps today and the taps that close the day (the habit's own level) */
+    count?: number;
+    goal?: number;
+    /** days in a row as Almanac counts them; null when Almanac does not send the history */
+    streak?: number | null;
+    /** the last 7 days, today last: '1' done, 'f' frozen, '0' else; null without the history */
+    week?: string | null;
+    /** when in the day, a word ("утро"); '' when Almanac does not say */
+    slot?: string;
+  }[];
+  /** a short line after a tap that did not reach Almanac: the row has gone back; '' none */
+  note?: string;
   /** habits done today, habits counted today */
   done: number;
   total: number;
@@ -194,6 +260,24 @@ export interface AlmanacFeed {
   short: string;
   /** the card's two lines while there is nothing to show (not signed in, no habits today) */
   hint: [string, string];
+}
+
+/** Levels inside a module card (island/depth.ts). The card itself is level ''. */
+export interface DepthState {
+  /** the module the levels belong to; another focus or a closed island clears them */
+  mod: ModuleId | null;
+  /** the levels below the card, deepest last: "item:<id>" */
+  stack: string[];
+  /** the level the transition leaves ('' = the card), null when none runs */
+  from: string | null;
+  /** 1 going in, -1 coming back */
+  dir: 1 | -1;
+  /** when the last change began (s.t) */
+  at: number;
+  /** scroll of each list: drawn offset, its velocity, where the wheel wants it, the last wheel (s.t) */
+  scroll: Record<string, { y: number; v: number; target: number; max: number; wheelAt: number; t: number }>;
+  /** a sideways two-finger swipe so far, and when it began */
+  swipe: { dx: number; at: number };
 }
 
 export interface Particle {
@@ -312,14 +396,32 @@ export interface IslandState {
   cal: CalFeed | null;
   media: MediaFeed | null;
   github: GithubFeed | null;
+  /** CI alerts (island/ci.ts): how they reach the person, the one set aside, the one already
+   * seen in the open island, the one that was on screen, the card's note after a button */
+  ciNotify: CiNotify;
+  ciHidden: string;
+  ciSeen: string;
+  ciShown: string;
+  ciNote: { key: string; text: string; at: number; err: boolean } | null;
   vercel: VercelFeed | null;
   notion: NotionFeed | null;
   grafana: GrafanaFeed | null;
   almanac: AlmanacFeed | null;
+  /** levels inside a module card: list -> item -> back (island/depth.ts, stage 10) */
+  depth: DepthState;
+  /** an action that asks for a second click (a PR's "Одобрить"): which, until when (s.t) */
+  confirm: { act: string; until: number } | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
   settingsLink: boolean;
+  /** the app's own settings card (stage 8g, docs/CHANGES.md): its real settings; null = the
+   *  prototype's card (harness) */
+  host: HostPrefs | null;
+  /** the app: the island was opened by a click and stays open until `autoClose` after leaving */
+  clickOpen: boolean;
+  /** when the pointer last left the island (s.t) */
+  hoverLeftAt: number;
   /** modules the user switched off in the app: no chip, rail item, card or mini mascot */
   off: ModuleId[];
   /** the chat tab is switched off: no chat icon in the top bar */
@@ -352,6 +454,26 @@ export interface IslandState {
   shownFocus: ModuleId | null;
   focusStart: number;
   tab: Tab;
+  /** tab transition (docs/CHANGES.md 2026-10-19): the tab we leave and when the switch began */
+  prevTab: Tab;
+  tabStart: number;
+  /** when the open island's content began to reveal (layered, island/reveal.ts) */
+  revealStart: number;
+  /** the last clicked zone and when, for the press dip (island/hover.ts) */
+  pressAct: string;
+  pressAt: number;
+  /** focus change flights (island/flight.ts): where each module's mascot and pill were last drawn,
+   * device px, and the copies frozen when the focus changed */
+  flySpots: Partial<Record<ModuleId, import('../island/flight').Spot>>;
+  flyBoxes: Partial<Record<ModuleId, import('../island/flight').Box>>;
+  flyFrom: Partial<Record<ModuleId, import('../island/flight').Spot>>;
+  flyBoxFrom: Partial<Record<ModuleId, import('../island/flight').Box>>;
+  /** when the flights began (a focus change or an event taking the big card) */
+  flyStart: number;
+  /** the card that was in focus before the last change */
+  prevFocus: ModuleId | null;
+  /** the open island was drawn on the previous frame */
+  drawnOpen: boolean;
   musicPlaying: boolean;
   trackIdx: number;
   musicPos: number;
@@ -381,6 +503,21 @@ export interface IslandState {
 }
 
 /** a clickable zone of the island, rebuilt every frame (proto: hits) */
+/** The app's settings card (stage 8g, as coucou's): how the island opens and the statuses. */
+export interface HostPrefs {
+  /** on: the pointer opens the island (the prototype); off: it only peeks (half), a click opens */
+  openOnHover: boolean;
+  /** seconds a clicked-open island stays open after the pointer leaves */
+  autoClose: number;
+  /** connection dots in the card's footer: Claude Code and the switched-on services */
+  status: { name: string; state: 'ok' | 'bad' | 'off' }[];
+  version: string;
+  /** sound volume 0..1 (stage 9a); on/off is `muted`, shared with the top bar's speaker */
+  volume: number;
+  /** the volume slider is being dragged: its track, island px */
+  volDrag?: { bx0: number; bx1: number } | null;
+}
+
 export interface Hit {
   x: number;
   y: number;
@@ -428,12 +565,22 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     cal: null,
     media: null,
     github: null,
+    ciNotify: { ok: 'pop', fail: 'pop' },
+    ciHidden: '',
+    ciSeen: '',
+    ciShown: '',
+    ciNote: null,
     vercel: null,
     notion: null,
     grafana: null,
     almanac: null,
+    confirm: null,
+    depth: { mod: null, stack: [], from: null, dir: 1, at: -1, scroll: {}, swipe: { dx: 0, at: -1 } },
     requests: [],
     settingsLink: false,
+    host: null,
+    clickOpen: false,
+    hoverLeftAt: 0,
     off: [],
     chatOff: false,
     iconSet: 'proto',
@@ -473,6 +620,18 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     shownFocus: null,
     focusStart: -10,
     tab: 'home',
+    prevTab: 'home',
+    tabStart: -10,
+    revealStart: -10,
+    pressAct: '',
+    pressAt: -10,
+    flySpots: {},
+    flyBoxes: {},
+    flyFrom: {},
+    flyBoxFrom: {},
+    flyStart: -10,
+    prevFocus: null,
+    drawnOpen: false,
     musicPlaying: true,
     trackIdx: 0,
     musicPos: 42,

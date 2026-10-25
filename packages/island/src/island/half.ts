@@ -11,7 +11,7 @@ import { addHit, button } from './hits';
 import { drawMini, miniCrew } from './crew';
 
 /** proto: T_MUTED */
-export const T_MUTED = 'rgba(255,255,255,0.55)';
+export const T_MUTED = 'rgba(255,255,255,0.5)';
 
 /** where the right ear's content goes (proto: drawHalf's earRight) */
 export interface EarRight {

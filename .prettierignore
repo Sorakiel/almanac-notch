@@ -8,3 +8,5 @@ package-lock.json
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/target/
 apps/harness/harness.html
+apps/setup/gen/
+apps/setup/target/

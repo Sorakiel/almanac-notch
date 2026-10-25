@@ -23,6 +23,7 @@ const input = $<HTMLInputElement>('token'),
   connected = $('connected');
 
 const inTauri = '__TAURI_INTERNALS__' in window;
+const isWin = navigator.userAgent.includes('Windows');
 if (import.meta.env.DEV) document.body.classList.add('dev');
 /** the first-run guide's live mascot, made when the guide first opens */
 let mascot: WelcomeMascot | null = null;
@@ -390,8 +391,18 @@ $('al-more').addEventListener('click', () => {
 // ---------- tabs and the module list (Raycast-like) ----------
 const mods = [...document.querySelectorAll<HTMLButtonElement>('.mod')];
 /** "welcome" covers the window with the first-run guide; anything else is a page of the sidebar */
+// Windows: step 3 of the guide shows the calendar page's own source picker (one set of controls,
+// and the guide never leaves for the calendar page with no way back)
+const calPickEl = $('cal-pick'),
+  calPickHome = calPickEl.parentElement as HTMLElement,
+  calPickNext = calPickEl.nextSibling;
+function calPickInGuide(on: boolean): void {
+  if (on) $('w-cal-slot').append(calPickEl);
+  else calPickHome.insertBefore(calPickEl, calPickNext);
+}
 function showTab(name: string): void {
   const welcome = name === 'welcome';
+  if (isWin) calPickInGuide(welcome);
   $('tab-welcome').hidden = !welcome;
   $('tab-modules').hidden = welcome;
   if (!welcome) {
@@ -493,9 +504,9 @@ async function saveModules(next: Modules): Promise<void> {
     renderModules(modCfg);
     return;
   }
-  // like coucou: Claude Code is the main module, at most 4 others (modules.rs MAX_ON)
-  if (Object.values(MOD_OF).filter((id) => id !== 'claude' && !next.off.includes(id)).length > 4) {
-    say(t('Кроме Claude Code можно включить не больше 4 модулей - сначала выключите один'));
+  // the open island fits 5: Claude Code counts only while it is on (modules.rs MAX_ON)
+  if (Object.values(MOD_OF).filter((id) => !next.off.includes(id)).length > 5) {
+    say(t('Одновременно можно включить не больше 5 модулей - сначала выключите один'));
     renderModules(modCfg);
     return;
   }
@@ -513,6 +524,53 @@ for (const t of toggles)
     void saveModules({ ...modCfg, off: t.checked ? off : [...off, id] });
   });
 chatOn.addEventListener('change', () => void saveModules({ ...modCfg, chat: chatOn.checked }));
+
+// sound tiers (stage 9a): kept in the storage this window shares with the island's, which hears
+// the change through the "storage" event (src/main.ts)
+const TIERS_KEY = 'almanac-notch.sound-tiers';
+const tierBoxes = [...document.querySelectorAll<HTMLInputElement>('input[data-tier]')];
+function readTiers(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(TIERS_KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+for (const box of tierBoxes) {
+  box.checked = readTiers()[box.dataset.tier ?? ''] !== false;
+  box.addEventListener('change', () => {
+    const t = readTiers();
+    for (const b of tierBoxes) t[b.dataset.tier ?? ''] = b.checked;
+    try {
+      localStorage.setItem(TIERS_KEY, JSON.stringify(t));
+    } catch {
+      // not saved: the island keeps its choice
+    }
+  });
+}
+
+// CI results (island/ci.ts): kept in the shared storage, as the sound tiers
+const CI_KEY = 'almanac-notch.ci';
+const ciRadios = [...document.querySelectorAll<HTMLInputElement>('input[name=ci-ok], input[name=ci-fail]')];
+function readCi(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(CI_KEY) ?? '{}') as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+for (const r of ciRadios) {
+  const key = r.name === 'ci-ok' ? 'ok' : 'fail';
+  r.checked = (readCi()[key] ?? 'pop') === r.value;
+  r.addEventListener('change', () => {
+    if (!r.checked) return;
+    try {
+      localStorage.setItem(CI_KEY, JSON.stringify({ ...readCi(), [key]: r.value }));
+    } catch {
+      // not saved: the island keeps its choice
+    }
+  });
+}
 
 // ---------- music ----------
 interface MediaNow {
@@ -660,7 +718,6 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-ev]'))
 $('hooks-install').addEventListener('click', () => act('hooks:install'));
 $('hooks-uninstall').addEventListener('click', () => act('hooks:uninstall'));
 $('quit').addEventListener('click', () => act('quit'));
-$('welcome-again').addEventListener('click', () => showWelcome());
 // the hook dialogs finish outside this window; read the status again when it is back in front
 window.addEventListener('focus', () => void refreshIsland());
 
@@ -673,19 +730,22 @@ interface UpdateState {
 }
 interface AppInfo {
   version: string;
+  /** the commit of this build: test builds share a version number */
+  build: string;
   onboarded: boolean;
   updates: boolean;
+  fullscreen_hide: boolean;
   autostart: boolean;
   update: UpdateState;
 }
-const isWin = navigator.userAgent.includes('Windows');
 let appInfo: AppInfo | null = null,
   lastUpd: UpdateState = { state: 'idle', version: null, progress: null, error: null };
 function renderApp(a: AppInfo | null): void {
   appInfo = a;
-  $('app-version').textContent = a ? t('Версия {0}', a.version) : '';
+  $('app-version').textContent = a ? t('Версия {0}', a.build ? a.version + ' · ' + a.build : a.version) : '';
   $<HTMLInputElement>('autostart').checked = !!a?.autostart;
   $<HTMLInputElement>('updates').checked = !!a?.updates;
+  $<HTMLInputElement>('fullscreen').checked = a ? a.fullscreen_hide : true;
   if (a) renderUpdate(a.update);
 }
 function renderUpdate(u: UpdateState): void {
@@ -693,13 +753,13 @@ function renderUpdate(u: UpdateState): void {
   const go = $<HTMLButtonElement>('upd-go');
   $('upd-status').textContent =
     u.state === 'checking'
-      ? t('Проверяю…')
+      ? t('Проверка…')
       : u.state === 'latest'
         ? t('Установлена последняя версия')
         : u.state === 'available'
           ? t('Вышла версия {0}', u.version ?? '')
           : u.state === 'downloading'
-            ? t('Скачиваю обновление… {0}%', Math.round((u.progress ?? 0) * 100))
+            ? t('Загрузка обновления… {0}%', Math.round((u.progress ?? 0) * 100))
             : '';
   go.textContent = u.state === 'available' ? t('Обновить и перезапустить') : t('Проверить сейчас');
   go.classList.toggle('primary', u.state === 'available');
@@ -711,6 +771,10 @@ $('upd-go').addEventListener('click', () => {
   if (lastUpd.state === 'available')
     void invoke('update_install').catch((e: unknown) => ($('upd-error').textContent = String(e)));
   else void invoke<UpdateState>('update_check').then(renderUpdate);
+});
+// stage 8g: the "Uninstall Almanac Notch?" window (Mac - in this app, Windows - the uninstaller)
+$('uninstall').addEventListener('click', () => {
+  if (inTauri) void invoke('open_bye').catch((e: unknown) => say(String(e)));
 });
 async function appSet(key: string, on: boolean): Promise<void> {
   try {
@@ -725,6 +789,9 @@ $<HTMLInputElement>('autostart').addEventListener('change', (e) => {
 });
 $<HTMLInputElement>('updates').addEventListener('change', (e) => {
   void appSet('updates', (e.target as HTMLInputElement).checked);
+});
+$<HTMLInputElement>('fullscreen').addEventListener('change', (e) => {
+  void appSet('fullscreen', (e.target as HTMLInputElement).checked);
 });
 
 // ---------- first-run guide (stage 8f): language, Claude Code, calendar, modules, launch at login ----------
@@ -753,6 +820,8 @@ function renderStep(back = false): void {
   $('w-next').textContent = t(last ? 'Начать' : 'Дальше');
   $('w-cal-mac').hidden = isWin;
   $('w-cal-win').hidden = !isWin;
+  // Windows picks the source right in the step; the button is the Mac permission prompt
+  $('w-cal').hidden = isWin;
   $('w-where').textContent = t(
     isWin
       ? 'Остров - у верхнего края экрана: наведите на него курсор. Меню - значок Almanac Notch в трее.'
@@ -804,12 +873,6 @@ $('w-skip').addEventListener('click', () => goStep(step + 1));
 $('w-back').addEventListener('click', () => goStep(step - 1));
 $('w-hooks').addEventListener('click', () => act('hooks:install'));
 $('w-cal').addEventListener('click', () => {
-  // Windows: the source is picked on the calendar page; the guide comes back from the tray
-  if (isWin) {
-    mascot?.setRunning(false);
-    showModule('calendar');
-    return;
-  }
   // asking for access means the calendar is wanted: switch the module on too
   if (modCfg.off.includes('cal')) void saveModules({ ...modCfg, off: modCfg.off.filter((x) => x !== 'cal') });
   void invoke('calendar_access');

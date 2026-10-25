@@ -1,6 +1,6 @@
 [package]
 name = "almanac-notch"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.90"
 publish = false
@@ -32,7 +32,7 @@ chrono-tz = "0.10"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSLocale", "NSGeometry", "NSArray", "NSThread", "NSDate", "NSString", "NSPredicate", "NSNotification", "NSError", "NSRunLoop"] }
+objc2-foundation = { version = "0.3", features = ["NSLocale", "NSGeometry", "NSArray", "NSThread", "NSDate", "NSString", "NSPredicate", "NSNotification", "NSError", "NSRunLoop", "NSFileManager", "NSURL"] }
 objc2-event-kit = { version = "0.3", features = ["EKEventStore", "EKEvent", "EKCalendarItem", "EKObject", "EKTypes", "EKCalendar", "EKParticipant", "block2"] }
 block2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSApplication", "NSRunningApplication", "NSGraphics", "NSWorkspace", "NSPanel", "NSView", "NSColor"] }
@@ -50,6 +50,8 @@ windows = { version = "0.61", features = [
     "Win32_Globalization",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
     "Foundation",
     "Media",
     "Media_Control",

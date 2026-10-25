@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "bye",
+  "description": "Uninstall window (stage 8g): its own commands, dragging and closing",
+  "windows": ["bye"],
+  "permissions": [
+    "core:event:default",
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-close",
+    "core:window:allow-destroy"
+  ]
+}

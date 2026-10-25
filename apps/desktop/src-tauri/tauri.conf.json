@@ -29,7 +29,8 @@
         "visible": false,
         "focus": false,
         "acceptFirstMouse": true,
-        "visibleOnAllWorkspaces": true
+        "visibleOnAllWorkspaces": true,
+        "create": false
       }
     ],
     "security": {
@@ -44,7 +45,22 @@
     "macOS": {
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-",
-      "entitlements": "Entitlements.plist"
+      "entitlements": "Entitlements.plist",
+      "dmg": {
+        "background": "dmg/background.tiff",
+        "windowSize": {
+          "width": 640,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 170,
+          "y": 214
+        },
+        "applicationFolderPosition": {
+          "x": 470,
+          "y": 214
+        }
+      }
     },
     "windows": {
       "webviewInstallMode": {
@@ -55,7 +71,8 @@
         "installMode": "currentUser",
         "languages": ["Russian", "English"],
         "displayLanguageSelector": false,
-        "startMenuFolder": "Almanac Notch"
+        "startMenuFolder": "Almanac Notch",
+        "installerHooks": "windows/hooks.nsh"
       }
     },
     "createUpdaterArtifacts": true
@@ -65,7 +82,7 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFDMEIwMkYxRDIyOThERDEKUldUUmpTblM4UUlMSEszVW42NkFOT1VQRjlFZVN5ZExrNllQYlRqd1lLaWdYUGc2dlBHVmp4aGgK",
       "endpoints": ["https://github.com/Sorakiel/almanac-notch/releases/latest/download/latest.json"],
       "windows": {
-        "installMode": "passive"
+        "installMode": "quiet"
       }
     }
   }

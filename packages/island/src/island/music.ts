@@ -1,6 +1,7 @@
 // Music in focus: the wide player and the narrow rail of the other modules (docs/SPEC.md 2.5).
+import { hoverK } from './hover';
 import { tr } from '../i18n';
-import { clamp, ss } from '../util/math';
+import { clamp } from '../util/math';
 import { rrect, textAt, type Ctx } from '../util/draw';
 import type { IslandState } from '../sim/state';
 import { propFor } from '../mascot/props';
@@ -8,7 +9,8 @@ import { TRACKS, TRACK_LEN } from '../stub';
 import { addHit, hovering } from './hits';
 import { T_MUTED } from './half';
 import { card, cardMascot, cardTint } from './card';
-import { drawGlyph, isHot, type ModuleItem } from './modules';
+import { slime, type ModuleItem } from './modules';
+import { evRailA, evSlideK } from './eventIn';
 
 /** proto: TRACK_ART - gradient pairs of the generated covers */
 export const TRACK_ART: readonly (readonly [string, string])[] = [
@@ -118,7 +120,7 @@ export function drawMusicWide(s: IslandState, c: Ctx, X0: number, X1: number, cy
   c.beginPath();
   c.arc(tx + 3, ay + 11, 3, 0, Math.PI * 2);
   c.fill();
-  textAt(c, trk[0], tx + 12, ay + 11.5, { size: 13, weight: 600, max: right - tx - 12 });
+  textAt(c, trk[0], tx + 12, ay + 11.5, { size: 12.5, weight: 600, color: '#F5F6F8', max: right - tx - 12 });
   textAt(c, md ? trk[1] : trk[1] + ' · ' + (trk[0].split(' ')[0] as string), tx, ay + 29, {
     size: 11.5,
     weight: 400,
@@ -279,44 +281,63 @@ export function drawRail(
   cy0: number,
   cy1: number,
   items: ModuleItem[],
+  seqDt: number | null = null,
 ): void {
+  // Grok Bot's rail (docs/CHANGES.md 2026-10-19): a narrow card, the modules as a stack of round
+  // mascots in their colours, overlapping when they do not fit; hover pulls the name out to the left
   const t = s.t;
-  const n = items.length,
-    gap = 6,
-    h = (cy1 - cy0 - gap * (n - 1)) / n,
-    rw = rx1 - rx0;
-  items.forEach((it, i) => {
-    const y = cy0 + i * (h + gap),
+  const rw = rx1 - rx0,
+    n = items.length,
+    d = Math.min(rw - 12, 38),
+    pad = 7,
+    span = cy1 - cy0 - pad * 2 - d,
+    // overlapping like a stack of coins, as Grok Bot's: the faces show, the rail stays compact
+    step = n > 1 ? Math.min(d * 0.62, span / (n - 1)) : 0,
+    top = cy0 + pad + d / 2 + (span - step * (n - 1)) / 2,
+    cx = rx0 + rw / 2;
+  c.save();
+  if (seqDt !== null) c.globalAlpha *= evRailA(seqDt);
+  card(c, rx0, cy0, rw, cy1 - cy0, false);
+  c.restore();
+  const rows = items.map((it, i) => {
+    const y = top + i * step,
       st = s.railK[it.id] || (s.railK[it.id] = { k: 0, last: t });
-    c.save();
-    c.font = '500 12px Onest, system-ui, sans-serif';
-    const ext = c.measureText(it.name).width + 16;
-    c.restore();
-    const wNow = rw + ext * st.k;
-    const hov = hovering(s, rx1 - Math.max(rw, wNow), y, Math.max(rw, wNow), h);
-    st.k += ((hov ? 1 : 0) - st.k) * Math.min(1, (t - st.last) * 16);
+    // the hover zones stay on the resting stack: zones that moved with the fan would slide out from
+    // under a still pointer and rock the stack back and forth
+    const hy0 = i === 0 ? cy0 : y - step / 2,
+      hy1 = i === n - 1 ? cy1 : y + step / 2;
+    const hov = hovering(s, rx0, hy0, rw, hy1 - hy0);
+    st.k = hoverK(s, 'rail:' + it.id, hov);
     st.last = t;
-    const k = ss(0, 1, st.k),
-      w = rw + ext * k,
-      x = rx1 - w;
-    c.fillStyle = k > 0.02 ? 'rgba(48,48,52,0.97)' : isHot(it) ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.05)';
-    rrect(c, x, y, w, h, 9);
-    c.fill();
-    if (k > 0.02) {
-      c.fillStyle = 'rgba(255,255,255,' + (0.08 * k).toFixed(3) + ')';
-      rrect(c, x, y, w, h, 9);
-      c.fill();
-    }
-    drawGlyph(s, c, it, rx1 - rw / 2, y + h / 2, it.kind === 'agent' ? 7 : 6.5);
+    return { it, y, k: st.k, hy0, hy1 };
+  });
+  // The hovered mascot shows its whole face by the stack fanning open around it, not by jumping in
+  // front: the ones above slide up, the rest down, by what the one above covers of it (grown by the
+  // hover), as far as the card's free space allows. The order never changes, so nothing flips over
+  // an overlapping neighbour mid-way - lifting to the front did, twice per hover change, in one frame
+  // (strip rail-sweep, 2026-10-24, docs/CHANGES.md).
+  const free = cy1 - cy0 - pad * 2 - d - step * (n - 1);
+  const gap = Math.max(0, Math.min(d * 1.05 - step, free));
+  const fan = rows.map((_, i) => rows.reduce((a, r, j) => a + (j === i ? 0 : r.k * gap * (i < j ? -0.5 : 0.5)), 0));
+  rows.forEach((r, i) => (r.y += fan[i] as number));
+  // bottom first: the upper one sits in front, as in a stack
+  for (const { it, y, k } of [...rows].reverse()) {
+    const i = items.indexOf(it);
+    slime(s, c, it, cx, y, d * (1 + 0.1 * k), k, seqDt === null ? 1 : evSlideK(seqDt, i), i * 0.04);
+  }
+  for (const { it, y, k, hy0, hy1 } of rows) {
     if (k > 0.05) {
       c.save();
-      c.beginPath();
-      c.rect(x, y, w - rw + 2, h);
-      c.clip();
-      c.globalAlpha *= k;
-      textAt(c, it.name, x + 10, y + h / 2 + 0.5, { size: 12 });
+      c.globalAlpha *= Math.min(1, k);
+      c.font = '500 12px Onest, system-ui, sans-serif';
+      const w = c.measureText(it.name).width + 20,
+        x = rx0 - 6 - w * (0.85 + 0.15 * k);
+      c.fillStyle = 'rgba(40,40,44,0.97)';
+      rrect(c, x, y - 12, w, 24, 12);
+      c.fill();
+      textAt(c, it.name, x + 10, y + 0.5, { size: 12 });
       c.restore();
     }
-    addHit(s, c, { x, y, w, h, act: 'focus:' + it.id });
-  });
+    addHit(s, c, { x: rx0, y: hy0, w: rw, h: hy1 - hy0, act: 'focus:' + it.id });
+  }
 }

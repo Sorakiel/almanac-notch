@@ -239,3 +239,31 @@ describe('Grafana (the app, stage 8)', () => {
     expect(autoFocus(s)).toBe('github');
   });
 });
+
+describe('auto-close (owner 2026-10-24)', () => {
+  it('keeps 3/5/10 and moves the old 15 and 30 to 10', async () => {
+    const { autoCloseFrom } = await import('./focus');
+    expect([3, 5, 10].map(autoCloseFrom)).toEqual([3, 5, 10]);
+    expect(autoCloseFrom(15)).toBe(10);
+    expect(autoCloseFrom(30)).toBe(10);
+    expect(autoCloseFrom(undefined)).toBe(5);
+    expect(autoCloseFrom('15')).toBe(5);
+  });
+
+  it('counts down only in the last 60% of the delay after the pointer left', async () => {
+    const { closeCountdown } = await import('./focus');
+    const s = make();
+    s.host = { openOnHover: true, autoClose: 5, status: [], version: '', volume: 0.6 };
+    s.clickOpen = true;
+    s.hoverLeftAt = 100;
+    s.t = 101;
+    expect(closeCountdown(s)).toBeNull();
+    s.t = 102.5;
+    expect(closeCountdown(s)).toBeCloseTo(2.5 / 3);
+    s.islandHover = true;
+    expect(closeCountdown(s)).toBeNull();
+    s.islandHover = false;
+    s.t = 105;
+    expect(closeCountdown(s)).toBeNull();
+  });
+});

@@ -18,7 +18,10 @@ export {
   type AgentFeed,
   type CalFeed,
   type MediaFeed,
+  type HostPrefs,
   type GithubFeed,
+  type CiRun,
+  type CiNotify,
   type VercelFeed,
   type NotionFeed,
   type GrafanaFeed,
@@ -28,13 +31,15 @@ export {
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { tr, plural, EN, type Lang } from './i18n';
 export { update } from './sim/behavior';
-export { notchState, type NotchState } from './island/focus';
+export { AUTO_CLOSE, AUTO_CLOSE_DEFAULT, autoCloseFrom, notchState, type NotchState } from './island/focus';
 export { renderIsland } from './island/render';
+export { islandBack, islandWheel } from './island/depth';
 export { MB, NOTCH_W, islandShape, islandTargets, type IslandInputs, type IslandTargets } from './island/geometry';
 export {
   islandPointerMove,
   islandPointerLeave,
   islandPointerDown,
+  islandPointerUp,
   islandDoubleClick,
   islandRect,
   hitTest,
@@ -75,7 +80,7 @@ export function createMascot(opts: MascotOptions) {
     update: (dt: number, now: number) => update(s, dt, now),
     renderStage: (c: CanvasRenderingContext2D, dpr: number) => renderStage(s, c, dpr),
     stageCursor: () => stageCursor(s),
-    /** oc: offscreen context of an IW·2 × IH·2 canvas; ic: island canvas; lc: loupe canvas (none in the real window) */
+    /** oc: offscreen context of an IW·k × IH·k canvas (k = the drawing scale, 2 in the harness); ic: island canvas; lc: loupe canvas (none in the real window) */
     renderIsland: (ic: CanvasRenderingContext2D, oc: CanvasRenderingContext2D, lc?: CanvasRenderingContext2D) =>
       renderIsland(s, ic, oc, lc),
     trigger: (type: EventType | 'sleep', opts?: { keepView?: boolean }) => trigger(s, type, opts),

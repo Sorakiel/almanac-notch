@@ -3,14 +3,48 @@ import { tr } from '../i18n';
 import type { IslandState, ModuleId } from '../sim/state';
 import type { MascotColor } from '../sim/settings';
 import { calMins } from '../stub';
+import { startFlight } from './flight';
+import { ciWantsFocus } from './ci';
 
 export type NotchState = 'closed' | 'half' | 'open';
+
+/** the auto-close choices, seconds after the pointer leaves an island opened by a click (owner 2026-10-24) */
+export const AUTO_CLOSE = [3, 5, 10] as const;
+export const AUTO_CLOSE_DEFAULT = 5;
+
+/** a saved delay -> one of AUTO_CLOSE: the old 15 and 30 become 10, anything unknown the default */
+export function autoCloseFrom(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return AUTO_CLOSE_DEFAULT;
+  if ((AUTO_CLOSE as readonly number[]).includes(v)) return v;
+  return v > 10 ? 10 : AUTO_CLOSE_DEFAULT;
+}
+
+/**
+ * How much of the auto-close countdown is left, 1 -> 0, or null while there is none to show. It shows
+ * only in the last 60% of the delay, so the island warns before it folds and the pointer can come back
+ * in time; a whole-delay bar would be on all the time (after coucou's countdown, docs/CHANGES.md).
+ */
+export function closeCountdown(s: IslandState): number | null {
+  if (!s.host || !s.clickOpen || s.islandHover || s.hoverLeftAt <= 0) return null;
+  const left = s.host.autoClose - (s.t - s.hoverLeftAt);
+  const span = s.host.autoClose * 0.6;
+  if (left <= 0 || left >= span) return null;
+  return left / span;
+}
 
 /** proto: notchState - the "auto" rules in order */
 export function notchState(s: IslandState): NotchState {
   const { S, event, t } = s;
   if (S.nstate !== 'auto') return S.nstate as NotchState;
-  if (s.islandHover) return 'open';
+  // the app's "open on hover" and auto-close (stage 8g, docs/CHANGES.md); the harness has no host
+  // and keeps the prototype's rule: hover opens, leaving closes
+  if (s.host) {
+    if (s.islandHover) return s.host.openOnHover || s.clickOpen ? 'open' : 'half';
+    if (s.clickOpen && t - s.hoverLeftAt < s.host.autoClose) return 'open';
+    // a pointer that slips off for a moment does not slam the island shut: it closes 0.6 s after
+    // the pointer left, as coucou's (2026-10-19)
+    if (s.host.openOnHover && s.hoverLeftAt > 0 && t - s.hoverLeftAt < 0.6) return 'open';
+  } else if (s.islandHover) return 'open';
   if (event && (event.type === 'attention' || event.type === 'question' || event.type === 'greeting')) return 'open';
   if (s.overloadUntil > t || s.sp.alertA.x > 0.15) return 'open';
   if (event || (s.grab && s.grab.active) || s.grumpyUntil > t || s.hideUntil > t || s.petting) return 'half';
@@ -84,6 +118,8 @@ export function autoFocus(s: IslandState): ModuleId {
   if ((ev === 'success' || ev === 'nudge' || ev === 'dance') && s.event && s.event.src === 'almanac' && on('almanac'))
     return 'almanac';
   if ((ev === 'success' || ev === 'error') && on('github')) return 'github';
+  // a red CI nobody has seen yet takes the open island once (island/ci.ts); a prompt still wins
+  if (ev !== 'attention' && ev !== 'question' && ciWantsFocus(s) && on('github')) return 'github';
   if (claudeState(s) !== 'idle' && on('claude')) return 'claude';
   if (callMins(s) <= 30 && on('cal')) return 'cal';
   if (s.musicPlaying && on('music')) return 'music';
@@ -122,8 +158,10 @@ export function busyAside(s: IslandState): boolean {
 export function effectiveFocus(s: IslandState): ModuleId {
   const f = (s.focusId && hasModule(s, s.focusId) && s.focusId) || autoFocus(s);
   if (f !== s.shownFocus) {
+    s.prevFocus = s.shownFocus;
     s.shownFocus = f;
     s.focusStart = s.t;
+    startFlight(s);
   }
   return f;
 }

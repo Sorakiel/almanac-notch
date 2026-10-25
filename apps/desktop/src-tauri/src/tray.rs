@@ -26,7 +26,6 @@ pub fn action(app: &AppHandle, id: &str) {
     match id {
         "quit" => app.exit(0),
         "settings" => crate::settings::open(app, None),
-        "welcome" => crate::settings::open(app, Some("welcome")),
         // install right away; progress and errors show in the settings window
         "update:install" => {
             crate::settings::open(app, Some("general"));
@@ -162,13 +161,6 @@ fn menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, Vec<CheckMenuItem<Wry>>)> 
         } else {
             t("Календарь…", "Calendar…")
         },
-        true,
-        None::<&str>,
-    )?)?;
-    menu.append(&MenuItem::with_id(
-        app,
-        "welcome",
-        t("Мастер настройки…", "Setup guide…"),
         true,
         None::<&str>,
     )?)?;

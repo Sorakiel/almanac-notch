@@ -27,7 +27,16 @@ import {
   type VcState,
 } from './feeds';
 import { vercelFeed } from './feeds';
-import { AlmanacDriver, almanacFeed, dayKey, leftText, tapHabit, type AlHabit, type AlState } from './feeds';
+import {
+  AlmanacDriver,
+  almanacFeed,
+  dayKey,
+  habitStreak,
+  leftText,
+  tapHabit,
+  type AlHabit,
+  type AlState,
+} from './feeds';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EN } from '@almanac-notch/island';
@@ -55,8 +64,24 @@ describe('calendar feed', () => {
   });
   it('picks the next call, rounds minutes up, names the one after', () => {
     const c: Calendar = { access: 'ok', events: [ev('Past', -90), ev('Sync', 14), ev('Lecture', 160)] };
-    expect(calFeed(c, T0)).toEqual({ mins: 14, at: '14:44', title: 'Sync', after: 'дальше: Lecture в 17:10' });
+    expect(calFeed(c, T0)).toMatchObject({ mins: 14, at: '14:44', title: 'Sync', after: 'дальше: Lecture в 17:10' });
     expect(calFeed(c, T0 + 30_000).mins).toBe(14);
+  });
+  it('lists every meeting ahead with its place and call, for the card levels', () => {
+    const c: Calendar = {
+      access: 'ok',
+      events: [
+        ev('Past', -90),
+        { ...ev('Sync', 14), place: 'Room 4', link: 'https://zoom.us/j/1' },
+        ev('Lecture', 160),
+      ],
+    };
+    const e = calFeed(c, T0).events ?? [];
+    expect(e.map((x) => [x.title, x.at, x.place, x.link])).toEqual([
+      ['Sync', '14:44', 'Room 4', 'https://zoom.us/j/1'],
+      ['Lecture', '17:10', '', ''],
+    ]);
+    expect(new Set(e.map((x) => x.id)).size).toBe(2);
   });
   it('a started call stays 10 minutes, then the next takes over', () => {
     const c: Calendar = { access: 'ok', events: [ev('Sync', -5, 60), ev('Lecture', 160)] };
@@ -218,6 +243,11 @@ describe('github feed', () => {
     done: 5,
     total: 5,
     failed: null,
+    full: 'sora/almanac-notch',
+    sha: 'abc1234',
+    title: 'Fix the build',
+    url: 'https://github.com/sora/almanac-notch/commit/abc1234/checks',
+    run_id: 42,
     ...o,
   });
   const gh = (o: Partial<GhState> = {}): GhState => ({
@@ -285,6 +315,34 @@ describe('github feed', () => {
     expect(m.state.event?.type).toBe('error');
     expect(m.state.github?.ci).toBe('fail');
   });
+  it('the card gets every run and the newest red head, even under a newer green repository', () => {
+    const f = githubFeed(
+      gh({
+        repos: [
+          repo({ name: 'site', state: 'ok', at: T0 - min }),
+          repo({ state: 'fail', failed: 'test', at: T0 - 5 * min }),
+        ],
+      }),
+      T0,
+    );
+    expect(f.runs.map((r) => r.repo)).toEqual(['site', 'almanac-notch']);
+    expect(f.fail).toMatchObject({ key: 'almanac-notch#abc1234', check: 'test', title: 'Fix the build', rerun: true });
+    expect(githubFeed(gh({ repos: [repo({ state: 'fail', run_id: null })] }), T0).fail?.rerun).toBe(false);
+  });
+  it('driver: the event names its run and stays long enough to read; settings can silence it', () => {
+    const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
+    const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
+    d.onState(gh({ repos: [repo({ state: 'run' })] }));
+    d.onState(gh({ repos: [repo({ state: 'fail' })] }));
+    const ev = m.state.event;
+    expect(ev?.ci).toBe('almanac-notch#abc1234');
+    expect(ev ? ev.until - ev.start : 0).toBe(4);
+    m.state.event = null;
+    m.state.ciNotify = { ok: 'off', fail: 'dot' };
+    d.onState(gh({ repos: [repo({ state: 'ok' })] }));
+    d.onState(gh({ repos: [repo({ state: 'fail' })] }));
+    expect(m.state.event).toBeNull();
+  });
   it('driver: a new repository or a start of a run is not an event; a prompt holds the result back', () => {
     const m = createMascot({ settings: defaultSettings(), now: 0, greetAfter: null });
     const d = new GithubDriver(m.state, { trigger: (t) => m.trigger(t) }, () => T0);
@@ -334,7 +392,7 @@ describe('vercel feed', () => {
     expect(vercelFeed(vc([], { auth: 'net', user: null }), T0).hint[0]).toBe('Нет связи с Vercel');
     expect(vercelFeed(vc([]), T0)).toMatchObject({ short: 'нет деплоев', hint: ['деплоев пока нет', ''], rows: [] });
   });
-  it('the three newest deployments: dot, project, compact age', () => {
+  it('every deployment kept, newest first: dot, project, compact age (the card scrolls, stage 10)', () => {
     const f = vercelFeed(
       vc([
         dep({ id: 'a', state: 'building', created: T0 - 2 * min, done: null }),
@@ -350,6 +408,7 @@ describe('vercel feed', () => {
       ['almanac-site', 'run', '2 мин'],
       ['almanac-site', 'ok', '2 ч'],
       ['carcosa-guide', 'fail', '6 дн'],
+      ['almanac-site', 'ok', expect.any(String)],
     ]);
     expect(vercelFeed(vc([dep()]), T0, 'en').rows[0]?.ago).toBe('8 min');
     expect(agoText(T0, T0, 'en')).toBe('now');
@@ -419,7 +478,7 @@ describe('notion feed', () => {
       rows: [],
     });
   });
-  it('the three pages edited last: icon, title, compact age; untitled is named', () => {
+  it('the pages edited last, newest first (the card scrolls): icon, title, compact age; untitled is named', () => {
     const f = notionFeed(
       no([
         page(),
@@ -430,10 +489,10 @@ describe('notion feed', () => {
       T0,
     );
     expect(f.short).toBe('План релиза');
-    expect(f.rows.map((r) => [r.emoji, r.title, r.ago])).toEqual([
+    expect(f.rows.slice(0, 3).map((r) => [r.emoji, r.title, r.ago])).toEqual([
       ['📝', 'План релиза', '5 мин'],
       [null, 'Без названия', '2 ч'],
-      ['📝', 'Заметки со встречи…', '3 дн'],
+      ['📝', 'Заметки со встречи с дизайнером', '3 дн'],
     ]);
     expect(notionFeed(no([page({ title: null })]), T0, 'en').rows[0]?.title).toBe('Untitled');
   });
@@ -491,7 +550,7 @@ describe('grafana feed', () => {
       hint: ['Всё спокойно', 'правил: 12'],
     });
   });
-  it('firing rows first, red; pending amber; at most three, the total kept', () => {
+  it('firing rows first, red; pending amber; every rule kept (the card scrolls)', () => {
     const f = grafanaFeed(
       gf([
         al(),
@@ -504,9 +563,9 @@ describe('grafana feed', () => {
     expect(f.state).toBe('fail');
     expect(f.short).toBe('горит 2');
     expect(f.total).toBe(4);
-    expect(f.rows.map((r) => [r.name, r.state, r.ago])).toEqual([
+    expect(f.rows.slice(0, 3).map((r) => [r.name, r.state, r.ago])).toEqual([
       ['CPU > 90%', 'fail', '12 мин'],
-      ['Ошибки 5xx на ш…', 'fail', '3 мин'],
+      ['Ошибки 5xx на шлюзе платежей', 'fail', '3 мин'],
       ['Disk', 'run', ''],
     ]);
     expect(grafanaFeed(gf([al({ state: 'pending' })]), T0, 'en')).toMatchObject({ state: 'run', short: '1 pending' });
@@ -724,5 +783,29 @@ describe('almanac', () => {
     d2.onState(al([hb({ done: true })]));
     d2.tick();
     expect(m2.state.event).toBeNull();
+  });
+});
+
+describe('habitStreak, as Almanac counts it (streak.ts)', () => {
+  const pad = (tail: string) => '0'.repeat(64 - tail.length) + tail;
+  it('a daily run, today still open does not break it', () => {
+    expect(habitStreak('daily', 1, pad('1110'), '2026-10-17')).toBe(3);
+    expect(habitStreak('daily', 1, pad('1111'), '2026-10-17')).toBe(4);
+    expect(habitStreak('daily', 1, pad('1100'), '2026-10-17')).toBe(0);
+  });
+  it('a frozen day neither counts nor breaks', () => {
+    expect(habitStreak('daily', 1, pad('11f1'), '2026-10-17')).toBe(3);
+  });
+  it('weekdays skip the weekend', () => {
+    // 2026-10-19 is a Monday: Fri 1, Sat 0, Sun 0, Mon 1
+    expect(habitStreak('weekdays', 1, pad('1001'), '2026-10-19')).toBe(2);
+  });
+  it('every N days: completions no more than N apart', () => {
+    expect(habitStreak('every_n_days', 3, pad('1001000'), '2026-10-17')).toBe(2);
+    expect(habitStreak('every_n_days', 3, pad('10000'), '2026-10-17')).toBe(0);
+  });
+  it('no history, no streak', () => {
+    expect(habitStreak('daily', 1, null, '2026-10-17')).toBeNull();
+    expect(habitStreak(undefined, 1, pad('1'), '2026-10-17')).toBeNull();
   });
 });

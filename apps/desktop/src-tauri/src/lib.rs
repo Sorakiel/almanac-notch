@@ -23,7 +23,9 @@ mod outlook;
 mod platform;
 mod prefs;
 mod settings;
+mod sound;
 mod tray;
+mod uninstall;
 mod update;
 
 use std::sync::mpsc;
@@ -63,6 +65,8 @@ const FAR_PERIOD: Duration = Duration::from_millis(50);
 const NEAR_MARGIN: f64 = 120.0;
 /// How often the main thread re-checks screens and the window frame (sleep, lock, displays).
 const WATCH_PERIOD: Duration = Duration::from_secs(2);
+/// How often to look for a full-screen app in front (Windows; on the Mac AppKit hides the panel).
+const FULLSCREEN_PERIOD: Duration = Duration::from_millis(500);
 
 #[tauri::command]
 fn island_geometry(state: State<'_, SharedState>) -> Geometry {
@@ -77,6 +81,12 @@ fn set_interactive(window: WebviewWindow, state: State<'_, SharedState>, on: boo
         s.interactive = on;
         platform::set_ignore(&window, !on);
     }
+}
+
+/// The island page has drawn its first frame: the window may show (platform::ready).
+#[tauri::command]
+fn island_ready(window: WebviewWindow) {
+    platform::ready(&window);
 }
 
 /// Answer from the island to a held hook ("approve", "deny", "opt:N", "none").
@@ -139,6 +149,68 @@ async fn github_connect(token: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// The CI card's buttons: the repository's failed check page, or a re-run of its failed jobs.
+/// Looked up here by repository name, not sent by the page.
+fn gh_repo(feeds: &Arc<Mutex<Feeds>>, name: &str) -> Option<github::Repo> {
+    feeds
+        .lock()
+        .unwrap()
+        .github
+        .as_ref()
+        .and_then(|g| g.repos.iter().find(|r| r.name == name).cloned())
+}
+
+#[tauri::command]
+fn github_open(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) {
+    if let Some(r) = gh_repo(&feeds, &name) {
+        github::open(&r.url);
+    }
+}
+
+/// A PR's "Одобрить": the PR is looked up among the ones waiting for my review, not taken from
+/// the page.
+#[tauri::command]
+async fn github_approve(feeds: State<'_, Arc<Mutex<Feeds>>>, url: String) -> Result<(), String> {
+    let pr = feeds
+        .lock()
+        .unwrap()
+        .github
+        .as_ref()
+        .and_then(|g| g.review.iter().find(|p| p.url == url).cloned())
+        .ok_or_else(|| {
+            lang::t(
+                "Этот PR уже не ждёт ревью",
+                "This PR no longer waits for review",
+            )
+            .to_owned()
+        })?;
+    tauri::async_runtime::spawn_blocking(move || github::approve(&pr.full, pr.number))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// A PR or another GitHub page from the card's lists (github::open keeps to github.com).
+#[tauri::command]
+fn github_open_url(url: String) {
+    github::open(&url);
+}
+
+#[tauri::command]
+async fn github_rerun(feeds: State<'_, Arc<Mutex<Feeds>>>, name: String) -> Result<(), String> {
+    let r = gh_repo(&feeds, &name)
+        .ok_or_else(|| lang::t("Нет такого репозитория", "No such repository").to_owned())?;
+    let id = r.run_id.ok_or_else(|| {
+        lang::t(
+            "Эту проверку не перезапустить отсюда",
+            "This check can't be re-run from here",
+        )
+        .to_owned()
+    })?;
+    tauri::async_runtime::spawn_blocking(move || github::rerun(&r.full, id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn github_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
@@ -153,6 +225,33 @@ async fn vercel_connect(token: String) -> Result<String, String> {
 }
 
 /// The card's arrow: open a deployment's page; the URL is looked up here, not sent by the page.
+fn vercel_deploy(feeds: &Arc<Mutex<Feeds>>, id: &str) -> Option<vercel::Deploy> {
+    feeds
+        .lock()
+        .unwrap()
+        .vercel
+        .as_ref()
+        .and_then(|v| v.deploys.iter().find(|d| d.id == id).cloned())
+}
+
+/// A deployment's own level: "Открыть сайт" (its host, looked up here).
+#[tauri::command]
+fn vercel_site(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
+    if let Some(h) = vercel_deploy(&feeds, &id).and_then(|d| d.site) {
+        vercel::open_site(&h);
+    }
+}
+
+/// A failed deployment's "Повторить": Vercel builds it again from the same source.
+#[tauri::command]
+async fn vercel_redeploy(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) -> Result<(), String> {
+    let d = vercel_deploy(&feeds, &id)
+        .ok_or_else(|| lang::t("Нет такого деплоя", "No such deployment").to_owned())?;
+    tauri::async_runtime::spawn_blocking(move || vercel::redeploy(&d))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn vercel_open(feeds: State<'_, Arc<Mutex<Feeds>>>, id: String) {
     let url = feeds.lock().unwrap().vercel.as_ref().and_then(|v| {
@@ -226,6 +325,18 @@ async fn almanac_toggle(id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || almanac::toggle(&id))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// The calendar card's "Подключиться": the event's call link (calendar::join checks it).
+#[tauri::command]
+fn calendar_join(url: String) -> Result<(), String> {
+    calendar::join(&url)
+}
+
+/// The Almanac card's "Открыть в Almanac": the habit's page in the web app.
+#[tauri::command]
+fn almanac_open(id: String) -> Result<(), String> {
+    almanac::open_habit(&id)
 }
 
 /// Connect a Notion integration token: checked against Notion, then kept in the keychain.
@@ -413,8 +524,11 @@ fn lang_set(app: AppHandle, pick: String) -> Result<lang::Config, String> {
 #[derive(Serialize)]
 struct AppInfo {
     version: String,
+    /// the commit of this build (build.rs), empty when unknown
+    build: &'static str,
     onboarded: bool,
     updates: bool,
+    fullscreen_hide: bool,
     autostart: bool,
     update: update::State,
 }
@@ -424,8 +538,10 @@ fn app_info_of(app: &AppHandle) -> AppInfo {
     let p = prefs::get();
     AppInfo {
         version: app.package_info().version.to_string(),
+        build: env!("ALMANAC_BUILD"),
         onboarded: p.onboarded,
         updates: p.updates,
+        fullscreen_hide: p.fullscreen_hide,
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         update: update::state(),
     }
@@ -437,7 +553,7 @@ fn app_info(app: AppHandle) -> AppInfo {
     app_info_of(&app)
 }
 
-/// `key`: "autostart" | "updates" | "onboarded".
+/// `key`: "autostart" | "updates" | "onboarded" | "fullscreen".
 #[tauri::command]
 fn app_set(app: AppHandle, key: String, on: bool) -> Result<AppInfo, String> {
     use tauri_plugin_autostart::ManagerExt;
@@ -462,6 +578,9 @@ fn app_set(app: AppHandle, key: String, on: bool) -> Result<AppInfo, String> {
         }
         "onboarded" => {
             prefs::set(|p| p.onboarded = on)?;
+        }
+        "fullscreen" => {
+            prefs::set(|p| p.fullscreen_hide = on)?;
         }
         _ => return Err(format!("unknown setting {key}")),
     }
@@ -566,6 +685,20 @@ fn start_feeds(app: &AppHandle, feeds: Arc<Mutex<Feeds>>) -> Arc<media::Media> {
     }))
 }
 
+/// Hooks installed by an older build: bring our timeouts up to date (install::plan_refresh),
+/// so a prompt held behind a full-screen app is not killed by Claude Code at 45 s.
+fn refresh_hooks() {
+    let settings = almanac_hook::paths::claude_settings();
+    match almanac_hook::install::plan_refresh(&settings) {
+        Ok(plan) if plan.changed() => match almanac_hook::install::apply(&plan) {
+            Ok(b) => eprintln!("[claude] hook timeouts updated, backup: {b:?}"),
+            Err(e) => eprintln!("[claude] hook timeouts not updated: {e}"),
+        },
+        Ok(_) => {}
+        Err(e) => eprintln!("[claude] hook timeouts not checked: {e}"),
+    }
+}
+
 /// Hook server + plan usage watcher. A failure here leaves the island working without
 /// Claude Code (the hook client finds no connection file and stays silent).
 fn start_claude(app: &AppHandle, hub: Arc<Hub>, usage: Arc<Mutex<Usage>>) -> Option<u16> {
@@ -581,6 +714,7 @@ fn start_claude(app: &AppHandle, hub: Arc<Hub>, usage: Arc<Mutex<Usage>>) -> Opt
             let _ = app2.emit("island://usage", u);
         })
     });
+    refresh_hooks();
     let h = hub.clone();
     match claude::server::start(Arc::new(move |p, alive: &dyn Fn() -> bool| {
         h.handle(p, alive)
@@ -606,10 +740,21 @@ fn place_and_publish(app: &AppHandle, window: &WebviewWindow, state: &SharedStat
     let _ = app.emit("island://geometry", placement.geometry);
 }
 
-fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState) {
+fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState, hub: Arc<Hub>) {
     thread::spawn(move || {
         let mut last_watch = Instant::now();
+        let mut last_fs = Instant::now();
         loop {
+            if last_fs.elapsed() >= FULLSCREEN_PERIOD {
+                last_fs = Instant::now();
+                if let Some(hidden) =
+                    platform::fullscreen_tick(&window, prefs::get().fullscreen_hide)
+                {
+                    eprintln!("[island] full-screen app in front: {hidden}");
+                    hub.set_hidden(hidden);
+                    let _ = app.emit("island://fullscreen", hidden);
+                }
+            }
             let mut period = FAR_PERIOD;
             if let Some(c) = platform::cursor() {
                 let msg = {
@@ -656,7 +801,20 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
     });
 }
 
+/// One copy of the embedded config and pages for both the island and the uninstall window.
+fn context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
+}
+
 pub fn run() {
+    // stage 8g: `--cleanup` (hooks only) and, on Windows, the uninstall window
+    match uninstall::cli() {
+        uninstall::Cli::Exit(code) => std::process::exit(code),
+        #[cfg(windows)]
+        uninstall::Cli::Bye(dir) => return uninstall::run_window(dir, context()),
+        _ => {}
+    }
+
     #[cfg(windows)]
     platform::init_process();
 
@@ -680,7 +838,9 @@ pub fn run() {
         .manage(feeds.clone())
         .manage(usage.clone())
         .invoke_handler(tauri::generate_handler![
+            sound::sound_quiet,
             island_geometry,
+            island_ready,
             set_interactive,
             agent_answer,
             claude_usage,
@@ -689,9 +849,15 @@ pub fn run() {
             set_volume,
             github_connect,
             github_disconnect,
+            github_open,
+            github_open_url,
+            github_approve,
+            github_rerun,
             vercel_connect,
             vercel_disconnect,
             vercel_open,
+            vercel_site,
+            vercel_redeploy,
             notion_connect,
             notion_disconnect,
             notion_open,
@@ -711,6 +877,8 @@ pub fn run() {
             almanac_browser_cancel,
             almanac_available,
             almanac_toggle,
+            almanac_open,
+            calendar_join,
             calendar_config,
             calendar_choose,
             calendar_access,
@@ -724,32 +892,52 @@ pub fn run() {
             app_set,
             update_check,
             update_install,
-            open_settings
+            open_settings,
+            uninstall::open_bye,
+            uninstall::bye_info,
+            uninstall::bye_run,
+            uninstall::bye_quit
         ])
         .setup(move |app| {
             // Not in the Dock and not in Cmd-Tab.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let window = app
-                .get_webview_window("island")
-                .expect("island window missing");
+            // the island is created here, not from the config: the uninstall window process
+            // (stage 8g) shares this config and must not open it
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "island")
+                .expect("island window missing")
+                .clone();
+            let window =
+                tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?.build()?;
             // Windows: tao's version would rewrite the extended styles (platform/windows.rs).
             #[cfg(not(windows))]
             window.set_ignore_cursor_events(true)?;
             platform::setup_window(&window);
             platform::set_ignore(&window, true);
             place_and_publish(app.handle(), &window, &state);
+            // the page says when it has drawn (island_ready); a page that never does - a script
+            // error, a stuck load - must not leave the island hidden for good
+            let late = window.clone();
+            thread::spawn(move || {
+                thread::sleep(Duration::from_secs(8));
+                platform::ready(&late);
+            });
             tray::create(app.handle())?;
             let handle = app.handle().clone();
             let hub = Arc::new(Hub::new(Arc::new(move |name: &str, v| {
                 let _ = handle.emit(name, v);
             })));
             app.manage(hub.clone());
-            *port_slot.lock().unwrap() = start_claude(app.handle(), hub, usage.clone());
+            *port_slot.lock().unwrap() = start_claude(app.handle(), hub.clone(), usage.clone());
             let media = start_feeds(app.handle(), feeds.clone());
             app.manage(media);
-            spawn_cursor_poller(app.handle().clone(), window, state.clone());
+            spawn_cursor_poller(app.handle().clone(), window, state.clone(), hub);
             update::start(app.handle());
             // first run: the guide (language, Claude Code, calendar, modules, launch at login)
             if !prefs::get().onboarded {
@@ -763,7 +951,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("error while building tauri application");
     app.run(move |_, e| {
         if let RunEvent::Exit = e {

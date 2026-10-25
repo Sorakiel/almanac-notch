@@ -9,6 +9,7 @@ import {
   type CalFeed,
   type EventType,
   type GithubFeed,
+  type CiRun,
   type GrafanaFeed,
   type IslandState,
   type Lang,
@@ -23,6 +24,9 @@ export interface CalEvent {
   /** epoch ms */
   start: number;
   end: number;
+  /** where, and the call to join (stage 10; absent from an older build) */
+  place?: string | null;
+  link?: string | null;
 }
 
 export interface Calendar {
@@ -84,6 +88,16 @@ export function calFeed(cal: Calendar | null, now: number, lang: Lang = 'ru'): C
   if (!next) return empty('Встреч нет', 'ни сегодня, ни завтра');
   const after = ahead.find((e) => e.start >= next.end) ?? ahead[1];
   return {
+    // the card's levels: every meeting ahead, each one with its place and call (stage 10)
+    events: ahead.map((e, i) => ({
+      id: `${e.start}:${i}`,
+      title: clip(e.title || tr(L, 'Без названия'), 40),
+      start: e.start,
+      end: e.end,
+      at: whenText(e.start, now, lang),
+      place: e.place ?? '',
+      link: e.link ?? '',
+    })),
     mins: Math.max(0, Math.ceil((next.start - now) / 60_000)),
     at: whenText(next.start, now, lang),
     title: clip(next.title || tr(L, 'Без названия'), TITLE_MAX),
@@ -98,8 +112,18 @@ export function calFeed(cal: Calendar | null, now: number, lang: Lang = 'ru'): C
   };
 }
 
+/** A service's state as a dot of the island's settings card (stage 8g). */
+export type Dot = 'ok' | 'bad' | 'off';
+export function authDot(auth: 'off' | 'ok' | 'bad' | 'net' | undefined): Dot {
+  return auth === 'ok' ? 'ok' : auth === 'bad' || auth === 'net' ? 'bad' : 'off';
+}
+
 export class CalDriver {
   private cal: Calendar | null = null;
+  dot(): Dot {
+    const a = this.cal?.access;
+    return a === 'ok' ? 'ok' : a === 'denied' ? 'bad' : 'off';
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   constructor(
@@ -366,6 +390,13 @@ export interface GhRepo {
   done: number;
   total: number;
   failed: string | null;
+  /** owner/name */
+  full: string;
+  sha: string;
+  title: string;
+  url: string;
+  /** an Actions run: the card can re-run its failed jobs */
+  run_id: number | null;
 }
 
 export interface GhState {
@@ -376,6 +407,19 @@ export interface GhState {
   prs: number;
   /** my commits of 7 days, epoch ms */
   commits: number[];
+  /** the PRs waiting for my review (absent from an older app build) */
+  review?: GhPr[];
+}
+
+export interface GhPr {
+  repo: string;
+  full: string;
+  number: number;
+  title: string;
+  author: string | null;
+  created: number;
+  url: string;
+  draft: boolean;
 }
 
 /** characters of the CI line that stay readable next to the glyph (the prototype's longest is 20) */
@@ -424,6 +468,9 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
     prText: '',
     commits: [0, 0, 0, 0, 0, 0, 0],
     hint: [tr(L, hint[0]), tr(L, hint[1])],
+    runs: [],
+    fail: null,
+    review: [],
   });
   if (!g || g.auth === 'off') return empty(['GitHub не подключён', SETTINGS_HINT], 'нет токена');
   if (g.auth === 'bad') return empty(['GitHub не принял токен', SETTINGS_HINT], 'токен не принят');
@@ -431,6 +478,17 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
   const withCi = g.repos.filter((r): r is GhRepo & { state: 'run' | 'fail' | 'ok' } => r.state !== 'none'),
     latest = withCi.reduce<(typeof withCi)[number] | null>((a, r) => (!a || r.at > a.at ? r : a), null);
   const commits = commitDays(g.commits, now);
+  const runs = withCi.map(ciRunOf).sort((a, b) => b.at - a.at),
+    fail = runs.find((r) => r.state === 'fail') ?? null;
+  const review = (g.review ?? []).map((p) => ({
+    repo: p.repo,
+    num: p.number,
+    title: p.title,
+    author: p.author ?? '',
+    at: p.created,
+    url: p.url,
+    draft: p.draft,
+  }));
   if (!latest)
     return {
       auth: 'ok',
@@ -441,6 +499,9 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
       prText: prText(g.prs, L),
       commits,
       hint: ['', ''],
+      runs,
+      fail,
+      review,
     };
   // the card line is narrow: the status is short, the repository gets what is left
   const st =
@@ -462,19 +523,46 @@ export function githubFeed(g: GhState | null, now: number, lang: Lang = 'ru'): G
     prText: prText(g.prs, L),
     commits,
     hint: ['', ''],
+    runs,
+    fail,
+    review,
   };
 }
+
+/** one repository's head as the CI card shows it (packages/island/src/island/ci.ts) */
+export function ciRunOf(r: GhRepo & { state: 'run' | 'fail' | 'ok' }): CiRun {
+  return {
+    key: r.name + '#' + r.sha,
+    state: r.state,
+    repo: r.name,
+    branch: r.branch,
+    check: r.failed ?? '',
+    sha: r.sha,
+    title: r.title,
+    done: r.done,
+    total: r.total,
+    at: r.at,
+    rerun: r.state === 'fail' && r.run_id !== null,
+  };
+}
+
+/** how long a CI result pops up, s: long enough to read its card (a failure has more to read)
+ * and the buttons to be reached; the pointer on the island holds it (island/ci.ts) */
+export const CI_POP = { ok: 3, fail: 4 };
 
 /** Prompts keep the island; a CI result waits until they are answered. */
 const PROMPTS: readonly string[] = ['attention', 'question'];
 
 export class GithubDriver {
   private g: GhState | null = null;
+  dot(): Dot {
+    return authDot(this.g?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** last CI state per repository; a change to ok or fail is an event */
   private seen = new Map<string, GhRepo['state']>();
-  private pending: { type: EventType; label: string } | null = null;
+  private pending: { type: EventType; label: string; key: string } | null = null;
   constructor(
     private s: IslandState,
     private m: { trigger: (t: EventType) => void },
@@ -486,7 +574,7 @@ export class GithubDriver {
   onState(g: GhState): void {
     // the first read after start only seeds the states: no event for what was already so
     const first = this.seen.size === 0 && this.g === null;
-    let hit: { type: EventType; label: string } | null = null;
+    let hit: { type: EventType; label: string; key: string } | null = null;
     if (g.login) {
       for (const r of g.repos) {
         const key = r.name + '#' + r.branch,
@@ -494,9 +582,15 @@ export class GithubDriver {
         this.seen.set(key, r.state);
         if (first || was === undefined || was === r.state || r.state === 'run' || r.state === 'none') continue;
         const type: EventType = r.state === 'ok' ? 'success' : 'error';
+        // the person chose how CI results reach them (settings): only "pop" brings the event
+        if ((type === 'success' ? this.s.ciNotify.ok : this.s.ciNotify.fail) !== 'pop') continue;
         // a failure outranks a success from another repository in the same read
         if (!hit || type === 'error')
-          hit = { type, label: tr(this.s, type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12) };
+          hit = {
+            type,
+            label: tr(this.s, type === 'success' ? 'CI прошёл' : 'CI упал') + ' · ' + clip(r.name, 12),
+            key: r.name + '#' + r.sha,
+          };
       }
     } else if (g.auth === 'off' || g.auth === 'bad') this.seen.clear();
     this.g = g;
@@ -519,7 +613,12 @@ export class GithubDriver {
     if (p && !(ev && PROMPTS.includes(ev.type))) {
       this.pending = null;
       this.m.trigger(p.type);
-      if (this.s.event) this.s.event.label = p.label;
+      const ev = this.s.event;
+      if (ev) {
+        ev.label = p.label;
+        ev.ci = p.key;
+        ev.until = ev.start + CI_POP[p.type === 'success' ? 'ok' : 'fail'];
+      }
     }
   }
 }
@@ -536,6 +635,9 @@ export interface VcDeploy {
   done: number | null;
   target: 'production' | 'preview';
   branch: string | null;
+  /** stage 10 (absent from an older build): the commit's first line, the deployment's host */
+  commit?: string | null;
+  site?: string | null;
 }
 
 export interface VcState {
@@ -576,11 +678,16 @@ export function vercelFeed(v: VcState | null, now: number, lang: Lang = 'ru'): V
   return {
     auth: 'ok',
     state: st === 'off' ? 'none' : st,
-    rows: v.deploys.slice(0, 3).map((x) => ({
+    // every deployment kept: the card scrolls them, each one opens (stage 10)
+    rows: v.deploys.map((x) => ({
       id: x.id,
       name: clip(x.project, 22),
       state: VC_STATE[x.state],
       ago: agoText(x.state === 'building' ? x.created : (x.done ?? x.created), now, lang),
+      target: x.target,
+      branch: x.branch ?? '',
+      commit: x.commit ?? '',
+      site: !!x.site,
     })),
     short: d
       ? tr(
@@ -598,6 +705,9 @@ export function vercelFeed(v: VcState | null, now: number, lang: Lang = 'ru'): V
  */
 export class VercelDriver {
   private v: VcState | null = null;
+  dot(): Dot {
+    return authDot(this.v?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** deployment id -> last state; null until the first read */
@@ -640,14 +750,37 @@ export class VercelDriver {
     this.tick();
   }
 
+  /** A deployment's "Повторить": asks Vercel, then the card says how it went for a few seconds. */
+  redeploy(id: string, send: (id: string) => Promise<unknown>): void {
+    this.note = { id, text: tr(this.s, 'запускаю заново…'), err: false, until: this.now() + 60_000 };
+    this.lastMin = -1;
+    send(id).then(
+      () => {
+        this.note = { id, text: tr(this.s, 'запущен заново'), err: false, until: this.now() + NOTE_MS };
+        this.lastMin = -1;
+      },
+      (e: unknown) => {
+        this.note = { id, text: String(e), err: true, until: this.now() + NOTE_MS * 2 };
+        this.lastMin = -1;
+      },
+    );
+  }
+  private note: { id: string; text: string; err: boolean; until: number } | null = null;
+
   /** Per frame: the relative times, a waiting deploy event. */
   tick(): void {
     const now = this.now(),
       min = Math.floor(now / 60_000);
+    if (this.note && now >= this.note.until) {
+      this.note = null;
+      this.lastMin = -1;
+    }
     if (min !== this.lastMin || this.s.lang !== this.lang) {
       this.lastMin = min;
       this.lang = this.s.lang;
-      this.s.vercel = vercelFeed(this.v, now, this.lang);
+      const f = vercelFeed(this.v, now, this.lang);
+      if (this.note) f.note = { id: this.note.id, text: this.note.text, err: this.note.err };
+      this.s.vercel = f;
     }
     const p = this.pending,
       ev = this.s.event;
@@ -704,11 +837,14 @@ export function notionFeed(n: NoState | null, now: number, lang: Lang = 'ru'): N
   const p = n.pages[0];
   return {
     auth: 'ok',
-    rows: n.pages.slice(0, 3).map((x) => ({
+    // every page kept: the card scrolls them (stage 10)
+    rows: n.pages.slice(0, 12).map((x) => ({
       id: x.id,
-      title: clip(title(x), 20),
+      title: clip(title(x), 40),
       emoji: x.emoji,
       ago: agoText(x.edited, now, lang),
+      // who touched it last, by the name Notion gives (stage 10: the list's quiet line)
+      by: (x.by && n.people.find((u) => u.id === x.by)?.name) || '',
     })),
     short: p ? clip(title(p), 16) : tr(L, 'нет страниц'),
     hint: p ? ['', ''] : [tr(L, 'страниц пока нет'), tr(L, 'дайте интеграции доступ к странице')],
@@ -722,6 +858,9 @@ export function notionFeed(n: NoState | null, now: number, lang: Lang = 'ru'): N
  */
 export class NotionDriver {
   private n: NoState | null = null;
+  dot(): Dot {
+    return authDot(this.n?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** page id -> last edit time; null until the first read */
@@ -894,9 +1033,10 @@ export function grafanaFeed(g: GfState | null, now: number, lang: Lang = 'ru'): 
     state: firing ? 'fail' : 'run',
     total: g.alerts.length,
     board,
-    rows: g.alerts.slice(0, 3).map((a) => ({
+    // every rule firing or pending: the card scrolls them (stage 10)
+    rows: g.alerts.map((a) => ({
       id: a.id,
-      name: clip(a.name, 16),
+      name: clip(a.name, 40),
       state: a.state === 'firing' ? 'fail' : 'run',
       ago: a.since === null ? '' : agoText(a.since, now, lang),
     })),
@@ -912,6 +1052,9 @@ export function grafanaFeed(g: GfState | null, now: number, lang: Lang = 'ru'): 
  */
 export class GrafanaDriver {
   private g: GfState | null = null;
+  dot(): Dot {
+    return authDot(this.g?.auth);
+  }
   private lastMin = -1;
   private lang: Lang = 'ru';
   /** rule id -> name while firing; null until the first read */
@@ -977,6 +1120,12 @@ export interface AlHabit {
   count: number;
   goal: number;
   done: boolean;
+  /** Almanac 0041: the schedule and the last 64 days ('1' done, 'f' frozen, '0' else, today last);
+   *  absent from an older Almanac - then the card shows no streak and no week */
+  slot?: 'morning' | 'afternoon' | 'evening' | 'anytime' | 'week' | null;
+  frequency?: string | null;
+  target?: number | null;
+  history?: string | null;
 }
 
 export interface AlState {
@@ -995,6 +1144,16 @@ const AL_HINT = 'Настройки → Almanac';
 /** the evening reminder: from this hour, once a day, while habits are left */
 export const EVENING_HOUR = 20;
 const AL_NAME_MAX = 28;
+/** when in the day a habit is, as Almanac groups them */
+const SLOT_WORD = {
+  morning: 'утро',
+  afternoon: 'день',
+  evening: 'вечер',
+  anytime: 'в течение дня',
+  week: 'на неделе',
+} as const;
+/** how long the card says a tap did not go through, ms */
+const NOTE_MS = 3500;
 
 /** "2026-10-18" for a local time */
 export function dayKey(t: number): string {
@@ -1040,17 +1199,72 @@ export function almanacFeed(a: AlState | null, lang: Lang = 'ru'): AlmanacFeed {
   }
   return {
     auth: 'ok',
-    rows: a.habits.map((h) => ({
-      id: h.id,
-      name: clip(h.name, AL_NAME_MAX),
-      done: h.done,
-      progress: h.goal > 1 && !h.done ? h.count + '/' + h.goal : '',
-    })),
+    rows: a.habits.map((h) => {
+      // today's mark follows a tap at once, before Almanac answers
+      const hist = h.history ? h.history.slice(0, -1) + (h.done ? '1' : h.history.endsWith('f') ? 'f' : '0') : null;
+      return {
+        id: h.id,
+        name: clip(h.name, AL_NAME_MAX),
+        done: h.done,
+        progress: h.goal > 1 && !h.done ? h.count + '/' + h.goal : '',
+        count: h.count,
+        goal: h.goal,
+        streak: habitStreak(h.frequency, h.target, hist, a.date),
+        slot: h.slot ? tr(L, SLOT_WORD[h.slot]) : '',
+        week: hist && hist.length >= 7 ? hist.slice(-7) : null,
+      };
+    }),
     done: a.done,
     total: a.total,
     short: tr(L, 'привычки {0} из {1}', a.done, a.total),
     hint: ['', ''],
   };
+}
+
+/**
+ * The streak as Almanac shows it - a port of currentStreak (almanac-app
+ * src/features/habits/lib/streak.ts) over today_habits' history, so the island and the app never
+ * disagree. `history` runs oldest first and ends on `date` ("2026-10-18"); null when there is none.
+ */
+export function habitStreak(
+  frequency: string | null | undefined,
+  target: number | null | undefined,
+  history: string | null | undefined,
+  date: string | null,
+): number | null {
+  if (!history || !date || !frequency) return null;
+  const n = history.length;
+  const doneOn = (i: number): boolean => history[i] === '1',
+    frozenOn = (i: number): boolean => history[i] === 'f';
+  const interval =
+    frequency === 'every_n_days' ? (target ?? 1) : frequency === 'every_n_weeks' ? (target ?? 1) * 7 : null;
+  if (interval !== null) {
+    // intervalStreak: completions no more than N days apart; a frozen day bridges without counting
+    const marks: { i: number; done: boolean }[] = [];
+    for (let i = 0; i < n; i++) if (doneOn(i) || frozenOn(i)) marks.push({ i, done: doneOn(i) });
+    const last = marks[marks.length - 1];
+    if (!last || n - 1 - last.i > interval) return 0;
+    let run = last.done ? 1 : 0;
+    for (let j = marks.length - 1; j > 0; j--) {
+      if ((marks[j] as { i: number }).i - (marks[j - 1] as { i: number }).i > interval) break;
+      if ((marks[j - 1] as { done: boolean }).done) run++;
+    }
+    return run;
+  }
+  // dailyStreak; a weekdays habit walks its weekdays only
+  const day0 = new Date(date + 'T12:00:00');
+  if (Number.isNaN(day0.getTime())) return null;
+  const weekday = (i: number): number => (day0.getDay() - (n - 1 - i) + 7 * 64) % 7;
+  let streak = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    if (frequency === 'weekdays' && (weekday(i) === 0 || weekday(i) === 6)) continue;
+    // today is still open: it neither counts nor breaks the run yet
+    if (i === n - 1 && !doneOn(i)) continue;
+    if (doneOn(i)) streak++;
+    else if (frozenOn(i)) continue;
+    else break;
+  }
+  return streak;
 }
 
 /** One tap, as Almanac counts it: a done habit clears, an open one gets one more. */
@@ -1093,6 +1307,9 @@ function setRemindedDay(day: string): void {
  */
 export class AlmanacDriver {
   private a: AlState | null = null;
+  dot(): Dot {
+    return authDot(this.a?.auth);
+  }
   private lang: Lang = 'ru';
   /** done habits of the last read day; null until the first read */
   private seen: Set<string> | null = null;
@@ -1102,6 +1319,8 @@ export class AlmanacDriver {
   /** the day the celebration already ran */
   private cheered: string | null = null;
   private pending: { type: EventType; label: string } | null = null;
+  /** the line after a failed tap, until when (now()) */
+  private note: { text: string; until: number } | null = null;
   constructor(
     private s: IslandState,
     private m: { trigger: (t: EventType) => void },
@@ -1158,7 +1377,12 @@ export class AlmanacDriver {
       if (f && --f.n <= 0) this.inflight.delete(id);
       this.show();
     };
-    this.send(id).then(settle, settle);
+    // a tap that did not reach Almanac: the row goes back and the card says so, briefly
+    const failed = (): void => {
+      this.note = { text: 'не отмечено · нет связи', until: this.now() + NOTE_MS };
+      settle();
+    };
+    this.send(id).then(settle, failed);
   }
 
   /** The last read with the taps still on their way laid over it. */
@@ -1171,12 +1395,18 @@ export class AlmanacDriver {
 
   private show(): void {
     this.lang = this.s.lang;
-    this.s.almanac = almanacFeed(this.view(), this.lang);
+    const f = almanacFeed(this.view(), this.lang);
+    if (this.note && this.now() < this.note.until) f.note = tr(this.s, this.note.text);
+    this.s.almanac = f;
   }
 
   /** Per frame: the language, a waiting event, the evening reminder. */
   tick(): void {
     if (this.s.lang !== this.lang) this.show();
+    if (this.note && this.now() >= this.note.until) {
+      this.note = null;
+      this.show();
+    }
     const ev = this.s.event;
     if (ev && PROMPTS.includes(ev.type)) return;
     const p = this.pending;

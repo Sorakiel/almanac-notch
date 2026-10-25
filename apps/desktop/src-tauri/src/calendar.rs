@@ -2,8 +2,9 @@
 //!
 //! Mac (stage 5): EventKit with full access to events (asked once at launch, again from the tray).
 //! A thread reads the next 48 hours every 30 s and sends `island://calendar` when the list or
-//! the access changed. The frontend picks the next call and counts the minutes. Only titles
-//! and times leave this module; nothing goes to the network.
+//! the access changed. The frontend picks the next call and counts the minutes. Titles, times,
+//! the place and a call link (stage 10: the card's "Подключиться") leave this module, to the
+//! island only; nothing goes to the network.
 //! Windows (stage 7): the source picked in settings - classic Outlook (COM, `outlook.rs`),
 //! an iCal link (`ical.rs`) or nothing (`mod choice` below). Same message, plus `source`.
 
@@ -15,6 +16,78 @@ pub struct Event {
     /// epoch ms
     pub start: f64,
     pub end: f64,
+    /// where it is, as the calendar says it (a room, an address); a bare link is not a place
+    pub place: Option<String>,
+    /// the video call to join: the first known call link of the event
+    pub link: Option<String>,
+}
+
+/// Hosts of video calls: a link to one of them is the event's call. Any other link in a
+/// description (a doc, an agenda) is not offered as "Подключиться".
+const CALL_HOSTS: &[&str] = &[
+    "zoom.us",
+    "meet.google.com",
+    "teams.microsoft.com",
+    "teams.live.com",
+    "telemost.yandex.ru",
+    "telemost.360.yandex.ru",
+    "webex.com",
+    "whereby.com",
+    "meet.jit.si",
+    "around.co",
+    "app.gather.town",
+    "discord.gg",
+    "discord.com",
+    "salutejazz.ru",
+    "ktalk.ru",
+];
+
+/// The first call link in `texts`, in order: https only, a known call host (or its subdomain).
+pub fn call_link(texts: &[&str]) -> Option<String> {
+    for text in texts {
+        let mut rest = *text;
+        while let Some(i) = rest.find("https://") {
+            let tail = &rest[i..];
+            let end = tail
+                .find(|c: char| {
+                    c.is_whitespace() || matches!(c, '"' | '<' | '>' | ')' | ']' | '\\')
+                })
+                .unwrap_or(tail.len());
+            let url = tail[..end].trim_end_matches(['.', ',', ';']);
+            let host = url[8..].split(['/', '?', '#', ':']).next().unwrap_or("");
+            if CALL_HOSTS
+                .iter()
+                .any(|h| host == *h || host.ends_with(&format!(".{h}")))
+            {
+                return Some(url.to_owned());
+            }
+            rest = &tail[end.max(8)..];
+        }
+    }
+    None
+}
+
+/// The card's "Подключиться": opens a call link, and only one `call_link` itself would give.
+pub fn join(url: &str) -> Result<(), String> {
+    if call_link(&[url]).as_deref() != Some(url) {
+        return Err("not a call link".into());
+    }
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(url).spawn();
+    #[cfg(windows)]
+    let _ = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .spawn();
+    Ok(())
+}
+
+/// A place worth showing: trimmed, one line, not just a link (that one is the call), not empty.
+pub fn place_of(s: Option<&str>) -> Option<String> {
+    let s = s?.split_whitespace().collect::<Vec<_>>().join(" ");
+    if s.is_empty() || s.starts_with("https://") || s.starts_with("http://") {
+        return None;
+    }
+    Some(s.chars().take(80).collect())
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -402,7 +475,7 @@ pub use mac::{open_access, start};
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use super::{Calendar, Event};
+    use super::{call_link, place_of, Calendar, Event};
     use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
     use std::sync::Mutex;
     use std::thread;
@@ -517,10 +590,22 @@ mod mac {
                 if end <= t0 {
                     continue;
                 }
+                let location = ev.location().map(|s| s.to_string());
+                let url = ev
+                    .URL()
+                    .and_then(|u| u.absoluteString())
+                    .map(|s| s.to_string());
+                let notes = ev.notes().map(|s| s.to_string());
                 out.push(Event {
                     title: ev.title().to_string(),
                     start: start * 1000.0,
                     end: end * 1000.0,
+                    link: call_link(&[
+                        url.as_deref().unwrap_or(""),
+                        location.as_deref().unwrap_or(""),
+                        notes.as_deref().unwrap_or(""),
+                    ]),
+                    place: place_of(location.as_deref()),
                 });
             }
         }
@@ -566,5 +651,41 @@ mod mac {
         if crate::prefs::get().onboarded {
             request_access();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn call_links_are_known_call_hosts_only() {
+        let notes =
+            "Agenda: https://docs.google.com/d/1\nJoin: https://us02web.zoom.us/j/123?pwd=x.\n";
+        assert_eq!(
+            call_link(&["", notes]).as_deref(),
+            Some("https://us02web.zoom.us/j/123?pwd=x")
+        );
+        assert_eq!(
+            call_link(&["https://meet.google.com/abc-defg-hij"]).as_deref(),
+            Some("https://meet.google.com/abc-defg-hij")
+        );
+        assert_eq!(
+            call_link(&["http://zoom.us/j/1", "https://zoom.us.evil.com/x"]),
+            None
+        );
+        assert_eq!(call_link(&["see https://evilzoom.us/j/1"]), None);
+        assert!(join("https://example.com/").is_err());
+    }
+
+    #[test]
+    fn a_place_is_text_not_a_link() {
+        assert_eq!(
+            place_of(Some("  Room 4,\n floor 2 ")).as_deref(),
+            Some("Room 4, floor 2")
+        );
+        assert_eq!(place_of(Some("https://zoom.us/j/1")), None);
+        assert_eq!(place_of(Some("  ")), None);
+        assert_eq!(place_of(None), None);
     }
 }

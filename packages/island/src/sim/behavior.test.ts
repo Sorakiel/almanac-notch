@@ -4,6 +4,7 @@ import { defaultSettings } from './settings';
 import { mulberry32, PARITY_SEED } from './rng';
 import type { IslandState } from './state';
 import { notchState } from '../island/focus';
+import { islandPointerDown, islandPointerLeave, islandPointerMove, islandPointerUp } from '../island/input';
 
 const DT = 1 / 60;
 
@@ -203,5 +204,96 @@ describe('events and the open view', () => {
     m.setFocus('github');
     m.trigger('working', { keepView: true });
     expect([m.state.tab, m.state.focusId, m.state.event?.type]).toEqual(['settings', 'github', 'working']);
+  });
+});
+
+describe("the app's open on hover and auto-close (stage 8g)", () => {
+  function host(openOnHover: boolean) {
+    const m = make();
+    m.run(80);
+    m.touch();
+    m.s.host = { openOnHover, autoClose: 10, status: [], version: '', volume: 0.6 };
+    return m;
+  }
+
+  it('off: hovering only peeks, a click opens, leaving keeps it open for the delay', () => {
+    const { s, run, touch } = host(false);
+    s.islandHover = true;
+    run(1);
+    expect(notchState(s)).toBe('half');
+    islandPointerDown(s, { x: 0, y: 0 });
+    run(0.1);
+    expect(notchState(s)).toBe('open');
+    islandPointerLeave(s);
+    touch();
+    run(9.5);
+    expect(notchState(s)).toBe('open');
+    run(1);
+    // the delay ran out: back to the half-open hold, and the next visit only peeks again
+    expect(notchState(s)).toBe('half');
+    expect(s.clickOpen).toBe(false);
+    s.islandHover = true;
+    run(0.1);
+    expect(notchState(s)).toBe('half');
+  });
+
+  // 2026-10-19 (docs/CHANGES.md): not at once as in the prototype - 0.6 s later, as coucou's
+  it('on: hovering opens and leaving folds 0.6 s later', () => {
+    const { s, run } = host(true);
+    s.islandHover = true;
+    run(1);
+    expect(notchState(s)).toBe('open');
+    islandPointerLeave(s);
+    run(0.3);
+    expect(notchState(s)).toBe('open');
+    run(0.4);
+    expect(notchState(s)).toBe('half');
+  });
+
+  it('sound: the switch and the speaker are one state, both saved by the host', () => {
+    const { s } = host(true);
+    s.hits = [
+      { x: 0, y: 0, w: 20, h: 20, act: 'host:sound' },
+      { x: 30, y: 0, w: 20, h: 20, act: 'mute' },
+    ];
+    islandPointerDown(s, { x: 5, y: 5 });
+    expect(s.muted).toBe(true);
+    islandPointerDown(s, { x: 35, y: 5 });
+    expect(s.muted).toBe(false);
+    expect(s.requests).toEqual(['host:sound', 'host:sound']);
+  });
+
+  it('volume: a press sets it, a drag follows past the track, the release saves once', () => {
+    const { s } = host(true);
+    s.hits = [{ x: 100, y: 0, w: 100, h: 20, act: 'host:vol', bx0: 100, bx1: 200 }];
+    islandPointerDown(s, { x: 125, y: 5 });
+    expect(s.host?.volume).toBe(0.25);
+    expect(s.requests).toEqual([]);
+    islandPointerMove(s, { x: 260, y: 40 }, 0);
+    expect(s.host?.volume).toBe(1);
+    islandPointerMove(s, { x: 150, y: 40 }, 0);
+    expect(s.host?.volume).toBe(0.5);
+    islandPointerUp(s);
+    islandPointerUp(s);
+    expect(s.requests).toEqual(['host:vol']);
+    islandPointerMove(s, { x: 100, y: 5 }, 0);
+    expect(s.host?.volume).toBe(0.5);
+  });
+
+  it('the harness (no host): the speaker only mutes, as in the prototype', () => {
+    const { s, run } = make();
+    run(80);
+    s.hits = [{ x: 0, y: 0, w: 20, h: 20, act: 'mute' }];
+    islandPointerDown(s, { x: 5, y: 5 });
+    expect(s.muted).toBe(true);
+    expect(s.requests).toEqual([]);
+  });
+
+  it('the harness (no host) ignores clicks for opening', () => {
+    const { s, run } = make();
+    run(80);
+    s.islandHover = true;
+    islandPointerDown(s, { x: 0, y: 0 });
+    expect(s.clickOpen).toBe(false);
   });
 });

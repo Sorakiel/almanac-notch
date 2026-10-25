@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Установка Almanac Notch</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+    <link rel="stylesheet" href="/src/solo.css" />
+  </head>
+  <body>
+    <div class="pane welcome solo" id="setup">
+      <div class="w-glow" aria-hidden="true"></div>
+      <div class="w-drag" data-tauri-drag-region></div>
+      <button class="w-close" id="close" title="Закрыть" aria-label="Закрыть">×</button>
+      <canvas class="w-stage" id="stage"></canvas>
+      <div class="w-steps">
+        <section class="step" id="ask">
+          <h1>Almanac Notch</h1>
+          <p class="lead" id="lead-new">
+            Живой остров у выреза камеры: ближайший созвон, музыка и модули, которые вы выберете сами.
+          </p>
+          <p class="lead" id="lead-over" hidden></p>
+          <div class="group">
+            <div class="g-row">
+              <span class="grow"
+                >Папка<small class="path"><bdi dir="ltr" id="dir"></bdi></small></span
+              ><button class="link" id="pick">Изменить</button>
+            </div>
+            <label class="g-row"
+              ><span>Ярлык на рабочем столе</span><input type="checkbox" class="toggle" id="desktop"
+            /></label>
+          </div>
+          <p class="note" id="error"></p>
+          <div class="w-actions">
+            <button class="pill primary" id="go">Установить</button>
+          </div>
+        </section>
+        <section class="step" id="busy" hidden>
+          <h1>Установка…</h1>
+          <p class="lead">Займёт несколько секунд.</p>
+          <div class="bar" id="bar"><i></i></div>
+          <span class="pct" id="pct">0%</span>
+        </section>
+        <section class="step" id="done" hidden>
+          <h1>Готово</h1>
+          <p class="lead">Almanac Notch установлен. Остров живёт у верхнего края экрана, по центру.</p>
+          <div class="w-actions">
+            <button class="pill primary" id="open">Открыть</button>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/src/setup.ts"></script>
+  </body>
+</html>
