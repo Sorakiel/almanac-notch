@@ -37,7 +37,7 @@ import {
   type ModuleId,
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
-import { KEYS_STORAGE, normCombo, readKeys, type KeyAction } from './keys';
+import { KEY_DEFAULTS, KEYS_STORAGE, comboLabel, normCombo, readKeys, type KeyAction } from './keys';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
 import { ShelfDriver } from './shelf';
 import {
@@ -237,8 +237,11 @@ window.addEventListener('storage', (e) => {
     // the settings window's slider or switch: hear what was chosen, as with the card's own
     if (wasMuted !== s.muted || (!s.muted && wasVol !== s.host?.volume)) previewSound();
   }
-  // new answer keys: the next sync registers them afresh
-  if (e.key === KEYS_STORAGE) keysChanged = true;
+  // new answer keys: the next sync registers them afresh, the buttons show them
+  if (e.key === KEYS_STORAGE) {
+    keysChanged = true;
+    showKeyHints();
+  }
 });
 
 // a call: asked from the app every few seconds, only while sound is on (src-tauri sound.rs)
@@ -465,6 +468,15 @@ async function syncHotkeys(): Promise<void> {
     hotkeysBusy = false;
   }
 }
+/** the permission card's buttons show the keys that answer: the prototype's letter while it is
+ *  the shipped ⌥Y / ⌥N, the whole combination once changed, nothing when switched off */
+function showKeyHints(): void {
+  const k = readKeys();
+  const hint = (a: 'approve' | 'deny'): string =>
+    !k[a].on ? '' : k[a].combo === KEY_DEFAULTS[a] ? KEY_DEFAULTS[a].slice(-1) : comboLabel(k[a].combo, isMac);
+  s.keyHints = { approve: hint('approve'), deny: hint('deny') };
+}
+if (inTauri) showKeyHints();
 /** the key the prompt understands for each action (answerKey) */
 const ANSWER_OF: Record<KeyAction, string> = { approve: 'y', deny: 'n', opt1: '1', opt2: '2', opt3: '3' };
 island.addEventListener('dblclick', (e) => {

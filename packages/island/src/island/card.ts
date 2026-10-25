@@ -193,9 +193,12 @@ export function kbdButton(
   c.save();
   c.font = '500 12px Onest, system-ui, sans-serif';
   const lw = c.measureText(label).width;
+  // a combination the person chose ("⌃⌥K") is wider than the prototype's one letter
+  c.font = '500 9.5px "JetBrains Mono", ui-monospace, monospace';
+  const kt = key.length > 1 ? c.measureText(key).width + 8 : 16;
   c.restore();
   // no shortcut (the panel never takes the keyboard outside prompts): the label alone
-  const kw = key ? 16 : 0,
+  const kw = key ? Math.max(16, kt) : 0,
     total = key ? lw + 6 + kw : lw,
     lx = x + (w - total) / 2;
   textAt(c, label, lx, y + h / 2 + 0.5, { size: 12, color: primary ? '#000' : 'rgba(255,255,255,0.92)' });

@@ -453,6 +453,9 @@ export interface IslandState {
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
   settingsLink: boolean;
+  /** the shortcut shown on the permission card's buttons; the app sets its own answer keys
+   *  (stage 9f), '' = that key is switched off */
+  keyHints: { approve: string; deny: string };
   /** the app's own settings card (stage 8g, docs/CHANGES.md): its real settings; null = the
    *  prototype's card (harness) */
   host: HostPrefs | null;
@@ -626,6 +629,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     },
     requests: [],
     settingsLink: false,
+    keyHints: { approve: 'Y', deny: 'N' },
     host: null,
     clickOpen: false,
     hoverLeftAt: 0,
