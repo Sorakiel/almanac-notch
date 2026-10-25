@@ -27,6 +27,8 @@ export {
   type GrafanaFeed,
   type AlmanacFeed,
   type MascotEvent,
+  type ShelfItem,
+  type ShelfKind,
 } from './sim/state';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { tr, plural, EN, type Lang } from './i18n';
@@ -34,6 +36,7 @@ export { update } from './sim/behavior';
 export { AUTO_CLOSE, AUTO_CLOSE_DEFAULT, autoCloseFrom, notchState, type NotchState } from './island/focus';
 export { renderIsland } from './island/render';
 export { islandBack, islandWheel } from './island/depth';
+export { SHELF_LIFE, extOf, shelfCarry, shelfDrop, shelfRemove, type ShelfIn } from './island/shelf';
 export { MB, NOTCH_W, islandShape, islandTargets, type IslandInputs, type IslandTargets } from './island/geometry';
 export {
   islandPointerMove,
@@ -41,6 +44,7 @@ export {
   islandPointerDown,
   islandPointerUp,
   islandDoubleClick,
+  islandContextMenu,
   islandRect,
   hitTest,
   habitTicked,

@@ -15,6 +15,7 @@ mod vercel;
 // on Mac only its tests use it: the choice of sources is Windows-only
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 mod ical;
+mod identity;
 mod lang;
 mod media;
 mod modules;
@@ -22,7 +23,9 @@ mod modules;
 mod outlook;
 mod platform;
 mod prefs;
+mod secrets;
 mod settings;
+mod shelf;
 mod sound;
 mod tray;
 mod uninstall;
@@ -45,6 +48,9 @@ use platform::{Geometry, Placement};
 pub struct Point {
     x: f64,
     y: f64,
+    /// the left button and what it carries (shelf::drag_state): the island opens onto the shelf
+    /// when a file comes near, before the OS drop reaches the window
+    drag: u8,
 }
 
 #[derive(Default)]
@@ -141,7 +147,7 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
     }
 }
 
-/// Connect a GitHub token: checked against GitHub, then kept in the keychain. Returns the login.
+/// Connect a GitHub token: checked against GitHub, then kept in secrets.rs. Returns the login.
 #[tauri::command]
 async fn github_connect(token: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || github::connect(&token))
@@ -216,7 +222,7 @@ async fn github_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
 }
 
-/// Connect a Vercel token: checked against Vercel, then kept in the keychain. Returns the username.
+/// Connect a Vercel token: checked against Vercel, then kept in secrets.rs. Returns the username.
 #[tauri::command]
 async fn vercel_connect(token: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || vercel::connect(&token))
@@ -339,7 +345,7 @@ fn almanac_open(id: String) -> Result<(), String> {
     almanac::open_habit(&id)
 }
 
-/// Connect a Notion integration token: checked against Notion, then kept in the keychain.
+/// Connect a Notion integration token: checked against Notion, then kept in secrets.rs.
 /// Returns the workspace name.
 #[tauri::command]
 async fn notion_connect(token: String) -> Result<String, String> {
@@ -374,7 +380,7 @@ async fn notion_disconnect() {
 }
 
 /// Connect Grafana: the address and service account token are checked, then kept in the
-/// keychain. Returns the organisation's name.
+/// secrets.rs. Returns the organisation's name.
 #[tauri::command]
 async fn grafana_connect(url: String, token: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || grafana::connect(&url, &token))
@@ -765,6 +771,7 @@ fn spawn_cursor_poller(app: AppHandle, window: WebviewWindow, state: SharedState
                     let p = Point {
                         x: (c.0 - pl.origin.0) / pl.scale,
                         y: (c.1 - pl.origin.1) / pl.scale,
+                        drag: shelf::drag_state(),
                     };
                     let near =
                         pl.scale > 0.0 && distance(0.0, 0.0, g.win_w, g.win_h, p) < NEAR_MARGIN;
@@ -815,6 +822,9 @@ pub fn run() {
         _ => {}
     }
 
+    // before any window: the webview's storage moves with the rest
+    identity::migrate();
+
     #[cfg(windows)]
     platform::init_process();
 
@@ -842,6 +852,12 @@ pub fn run() {
             island_geometry,
             island_ready,
             set_interactive,
+            shelf::shelf_add_text,
+            shelf::shelf_drop_point,
+            shelf::shelf_open,
+            shelf::shelf_drag,
+            shelf::shelf_quicklook,
+            shelf::shelf_menu,
             agent_answer,
             claude_usage,
             feeds_state,
@@ -913,13 +929,17 @@ pub fn run() {
                 .find(|w| w.label == "island")
                 .expect("island window missing")
                 .clone();
-            let window =
-                tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?.build()?;
+            let builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+            // Windows: WebView2 takes drops itself, Tauri's handler misses Explorer's (shelf/win.rs)
+            #[cfg(windows)]
+            let builder = builder.disable_drag_drop_handler();
+            let window = builder.build()?;
             // Windows: tao's version would rewrite the extended styles (platform/windows.rs).
             #[cfg(not(windows))]
             window.set_ignore_cursor_events(true)?;
             platform::setup_window(&window);
             platform::set_ignore(&window, true);
+            shelf::init(app.handle(), &window);
             place_and_publish(app.handle(), &window, &state);
             // the page says when it has drawn (island_ready); a page that never does - a script
             // error, a stuck load - must not leave the island hidden for good

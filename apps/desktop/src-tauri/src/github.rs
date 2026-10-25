@@ -1,6 +1,6 @@
 //! GitHub (stage 6): CI of the default branch, PRs waiting for my review, my commits of 7 days.
 //!
-//! The fine-grained token lives only in the system keychain (service `dev.almanac.notch`).
+//! The fine-grained token lives only in secrets.rs (a private file on the Mac, Credential Manager on Windows).
 //! A thread asks `api.github.com/graphql` once a minute (and right after a token change) and
 //! sends `island://github` when the result changed. Only repo names, check states, a PR count
 //! and commit times leave this module; the token never goes to the frontend or to a log.
@@ -14,7 +14,6 @@ use std::time::Duration;
 use serde::Serialize;
 use serde_json::{json, Value};
 
-const SERVICE: &str = "dev.almanac.notch";
 const ACCOUNT: &str = "github-token";
 const ENDPOINT: &str = "https://api.github.com/graphql";
 const PERIOD: Duration = Duration::from_secs(60);
@@ -124,14 +123,10 @@ impl State {
     }
 }
 
-// ---------- keychain ----------
-
-fn entry() -> Result<keyring::Entry, keyring::Error> {
-    keyring::Entry::new(SERVICE, ACCOUNT)
-}
+// ---------- secrets (secrets.rs) ----------
 
 fn token() -> Option<String> {
-    entry().ok()?.get_password().ok().filter(|t| !t.is_empty())
+    crate::secrets::get(ACCOUNT)
 }
 
 // ---------- reading ----------
@@ -555,7 +550,7 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
     });
 }
 
-/// Check the token against GitHub, then keep it in the keychain. Returns the login.
+/// Check the token against GitHub, then keep it in secrets.rs. Returns the login.
 pub fn connect(token: &str) -> Result<String, String> {
     let token = token.trim();
     if token.is_empty() {
@@ -573,10 +568,10 @@ pub fn connect(token: &str) -> Result<String, String> {
         )
         .to_owned(),
     })?;
-    entry().and_then(|e| e.set_password(token)).map_err(|_| {
+    crate::secrets::set(ACCOUNT, token).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
-            "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
+            "Не удалось сохранить токен на этом компьютере, попробуйте ещё раз",
+            "Cannot save the token on this computer, try again",
         )
         .to_owned()
     })?;
@@ -675,9 +670,7 @@ pub fn open(url: &str) {
 }
 
 pub fn disconnect() {
-    if let Ok(e) = entry() {
-        let _ = e.delete_credential();
-    }
+    crate::secrets::remove(ACCOUNT);
     poke();
 }
 

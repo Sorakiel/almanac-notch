@@ -2,8 +2,8 @@
 //!
 //! Always: our hooks leave `~/.claude/settings.json` (other hooks stay; otherwise Claude Code keeps
 //! calling a deleted hook client), launch at login is turned off, the copied hook client goes.
-//! With "remove settings and data": the app's folders and every secret in the Keychain /
-//! Credential Manager. Then the app itself goes: Mac - the bundle to the Trash;
+//! With "remove settings and data": the app's folders and every secret (secrets.rs: the file,
+//! old Keychain items, Credential Manager). Then the app itself goes: Mac - the bundle to the Trash;
 //! Windows - Tauri's NSIS uninstaller, run silently (files, shortcuts, the "Apps" entry).
 //!
 //! Windows entry points (the NSIS hooks in `windows/hooks.nsh` call them):
@@ -22,19 +22,6 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use almanac_hook::{install, paths};
 
 use crate::lang::t;
-
-const SERVICE: &str = "dev.almanac.notch";
-/// Every Keychain / Credential Manager entry the app writes (github.rs, vercel.rs, notion.rs,
-/// grafana.rs, almanac.rs, calendar.rs).
-const SECRETS: [&str; 7] = [
-    "github-token",
-    "vercel-token",
-    "notion-token",
-    "grafana-token",
-    "grafana-url",
-    "almanac-refresh",
-    "calendar-ical",
-];
 
 /// What the window shows when it is done: problems that did not stop the removal.
 #[derive(Clone, Debug, Default, Serialize)]
@@ -64,23 +51,27 @@ fn home() -> PathBuf {
         .unwrap_or_default()
 }
 
-/// Everything the app (and its webviews) keeps on disk.
+/// Everything the app (and its webviews) keeps on disk, under the current identifier and the
+/// one before it (identity.rs), in case the move never ran.
 fn data_paths() -> Vec<PathBuf> {
-    let mut v = vec![paths::app_dir()];
-    if cfg!(target_os = "macos") {
-        let lib = home().join("Library");
-        v.push(lib.join("Caches").join(SERVICE));
-        v.push(lib.join("WebKit").join(SERVICE));
-        v.push(lib.join("HTTPStorages").join(SERVICE));
-        v.push(
-            lib.join("Saved Application State")
-                .join(format!("{SERVICE}.savedState")),
-        );
-        v.push(lib.join("Preferences").join(format!("{SERVICE}.plist")));
-    } else if cfg!(windows) {
-        // the webview's folder (EBWebView) lives in Local, the app data in Roaming
-        if let Some(local) = env::var_os("LOCALAPPDATA") {
-            v.push(PathBuf::from(local).join(SERVICE));
+    let mut v = Vec::new();
+    for id in [paths::APP_ID, paths::OLD_APP_ID] {
+        v.push(paths::app_dir_for(id));
+        if cfg!(target_os = "macos") {
+            let lib = home().join("Library");
+            v.push(lib.join("Caches").join(id));
+            v.push(lib.join("WebKit").join(id));
+            v.push(lib.join("HTTPStorages").join(id));
+            v.push(
+                lib.join("Saved Application State")
+                    .join(format!("{id}.savedState")),
+            );
+            v.push(lib.join("Preferences").join(format!("{id}.plist")));
+        } else if cfg!(windows) {
+            // the webview's folder (EBWebView) lives in Local, the app data in Roaming
+            if let Some(local) = env::var_os("LOCALAPPDATA") {
+                v.push(PathBuf::from(local).join(id));
+            }
         }
     }
     v
@@ -104,25 +95,22 @@ fn remove_path(p: &PathBuf, warnings: &mut Vec<String>) {
 }
 
 fn wipe(warnings: &mut Vec<String>) {
-    for name in SECRETS {
-        if let Ok(e) = keyring::Entry::new(SERVICE, name) {
-            match e.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => {}
-                Err(err) => warnings.push(format!(
-                    "{} {name}: {err}",
-                    t("Не удалось удалить секрет", "Could not remove the secret")
-                )),
-            }
-        }
+    for err in crate::secrets::wipe() {
+        warnings.push(format!(
+            "{} {err}",
+            t("Не удалось удалить секрет", "Could not remove the secret")
+        ));
     }
     for p in data_paths() {
         remove_path(&p, warnings);
     }
     // Mac: forget the calendar permission too (it belongs to the app, not to the user's data)
     #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("/usr/bin/tccutil")
-        .args(["reset", "All", SERVICE])
-        .output();
+    for id in [paths::APP_ID, paths::OLD_APP_ID] {
+        let _ = std::process::Command::new("/usr/bin/tccutil")
+            .args(["reset", "All", id])
+            .output();
+    }
 }
 
 /// Without "remove data": only what is not the user's - the copied hook client and the

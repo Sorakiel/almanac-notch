@@ -17,6 +17,7 @@ import {
   createMascot,
   defaultSettings,
   hitTest,
+  islandContextMenu,
   islandDoubleClick,
   islandPointerDown,
   islandPointerUp,
@@ -26,6 +27,9 @@ import {
   islandPointerMove,
   islandRect,
   notchState,
+  shelfCarry,
+  shelfDrop,
+  shelfRemove,
   tr,
   type EventType,
   type HostPrefs,
@@ -34,6 +38,7 @@ import {
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
+import { ShelfDriver } from './shelf';
 import {
   ALL_TIERS,
   DEFAULT_VOLUME,
@@ -288,15 +293,47 @@ function setInteractive(on: boolean): void {
 
 /** The window takes the mouse only over the strip or a clickable zone (e.g. the mascot). */
 function updateInteractive(): void {
+  // something carried to the island: the window must take the drop (and on Windows the drag
+  // must reach the WebView at all - its dragenter starts the carry there)
+  if (carrying || (lastDrag === 1 && !isMac && ptr && dragZone(ptr))) return setInteractive(true);
   if (!ptr) return setInteractive(false);
   const r = islandRect(s);
   const inRect = ptr.x >= r.x && ptr.x <= r.x + r.w && ptr.y >= r.y && ptr.y <= r.y + r.h;
   setInteractive(inRect || hitTest(s, ptr) !== null);
 }
 
+// ---------- something carried to the island (the shelf) ----------
+const isMac = navigator.userAgent.includes('Mac');
+/** the cursor stream's button state: 0 up, 1 held, 2 carrying something (macOS only) */
+let lastDrag = 0;
+let carrying = false;
+let leaveTimer = 0;
+/** "a little wider than the island" (docs/PLAN.md): the island opens before the file reaches it */
+function dragZone(p: IslandPoint): boolean {
+  // more room below than at the sides: a hand bringing a file to the notch comes up from
+  // under it, and a closed island is only a strip
+  const r = islandRect(s);
+  return p.x >= r.x - 48 && p.x <= r.x + r.w + 48 && p.y <= r.y + r.h + 64;
+}
+function carryFromCursor(p: (IslandPoint & { drag?: number }) | null): void {
+  const d = p?.drag ?? 0;
+  if (d === 2 && p && dragZone(p)) {
+    clearTimeout(leaveTimer);
+    carrying = true;
+    shelfCarry(s, p);
+  } else if (carrying) {
+    carrying = false;
+    // let go over the island: the drop is on its way from Rust and ends the carry itself;
+    // carried away: the island goes back after a moment
+    leaveTimer = window.setTimeout(() => shelfCarry(s, null), d === 0 ? 400 : 120);
+  }
+}
+
 /** proto: island pointermove / pointerleave - the window is the prototype's island canvas */
 function pointer(p: IslandPoint | null): void {
   wake();
+  lastDrag = (p as { drag?: number } | null)?.drag ?? 0;
+  if (inTauri && isMac) carryFromCursor(p);
   const inside = !!p && p.x >= 0 && p.y >= 0 && p.x < s.IW && p.y < s.IH;
   if (inside && p) {
     ptr = p;
@@ -322,7 +359,7 @@ island.addEventListener('pointerdown', (e) => {
     act = hitTest(s, p);
   // the control's sound depends on its state before the click (a habit ticked or unticked)
   if (act) sounds.click(s, act);
-  islandPointerDown(s, p);
+  islandPointerDown(s, p, e.metaKey || e.ctrlKey || e.shiftKey);
   // the volume slider keeps following the pointer outside its zone until release
   if (s.host?.volDrag) island.setPointerCapture(e.pointerId);
 });
@@ -340,6 +377,11 @@ island.addEventListener(
   { passive: false },
 );
 island.addEventListener('pointercancel', () => islandPointerUp(s));
+// a right click: the menu of a shelf tile (the host opens a native one)
+island.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (islandContextMenu(s, domPoint(e))) wake();
+});
 
 // proto: keydown - the answer keys Y/N and 1-3 (SPEC 2.10). The panel never takes the keyboard
 // (it would steal focus), so in the window they are global ⌥Y / ⌥N / ⌥1-3, registered only
@@ -437,6 +479,9 @@ async function decodeArt(b64: string): Promise<CanvasImageSource | null> {
 
 const MODULE_IDS: ModuleId[] = ['claude', 'cal', 'music', 'github', 'almanac', 'vercel', 'notion', 'grafana'];
 
+// the filmstrips drive the shelf without a real drag (tools/strip.mjs shelf-*)
+const shelfApi = { carry: shelfCarry, drop: shelfDrop, remove: shelfRemove };
+
 // ---------- debug (tray) ----------
 const isEvent = (v: string): v is EventType | 'sleep' => v === 'sleep' || EVENT_TYPES.includes(v as EventType);
 function debug(id: string): void {
@@ -447,6 +492,10 @@ function debug(id: string): void {
   if (kind === 'ev' && isEvent(v)) m.trigger(v);
   else if (kind === 'nstate' && ['auto', 'closed', 'half', 'open'].includes(v)) S.nstate = v;
 }
+
+// the "+" tab's shelf: drops in, drags out, the menu (src/shelf.ts)
+const shelf = new ShelfDriver(s, inTauri, domPoint, () => wake());
+await shelf.start();
 
 if (inTauri) {
   await listen<Geometry>('island://geometry', (e) => applyGeometry(e.payload));
@@ -556,7 +605,7 @@ if (inTauri) {
   applyGeometry(geo);
   island.addEventListener('pointermove', (e) => pointer(domPoint(e)));
   island.addEventListener('pointerleave', () => pointer(null));
-  Object.assign(window, { __debug: debug, __state: s });
+  Object.assign(window, { __debug: debug, __state: s, __shelf: shelfApi });
 }
 window.addEventListener('resize', resize);
 // a display-scale change keeps the window's CSS size, so 'resize' may not fire: watch the density itself
@@ -634,7 +683,8 @@ function tick(now: number, id: number): void {
   grafana?.tick();
   almanac?.tick();
   for (const r of s.requests.splice(0))
-    if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
+    if (r.startsWith('shelf:')) shelf.request(r);
+    else if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
     else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
     else if (r.startsWith('vcsite:')) void invoke('vercel_site', { id: r.slice(7) });
     else if (r.startsWith('vcredo:')) vercel?.redeploy(r.slice(7), (id) => invoke('vercel_redeploy', { id }));

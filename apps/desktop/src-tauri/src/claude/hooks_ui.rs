@@ -27,7 +27,7 @@ fn cancel_btn() -> &'static str {
 
 /// The hook client binary to copy: next to the app's executable (bundle), or the
 /// release build of apps/desktop/hook in a dev checkout.
-fn client_source() -> Option<PathBuf> {
+pub(crate) fn client_source() -> Option<PathBuf> {
     let name = paths::installed_hook()
         .file_name()
         .map(PathBuf::from)

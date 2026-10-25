@@ -262,6 +262,46 @@ export interface AlmanacFeed {
   hint: [string, string];
 }
 
+/** What lies on the shelf (island/shelf.ts): a file by reference, text or a link saved by the app. */
+export type ShelfKind = 'file' | 'folder' | 'image' | 'text' | 'link';
+
+export interface ShelfItem {
+  id: string;
+  kind: ShelfKind;
+  name: string;
+  /** bytes; null for a folder or when unknown */
+  size: number | null;
+  /** a link's host or a text's first words: the tile's second line */
+  note: string;
+  /** when it leaves the shelf by itself (s.t) */
+  until: number;
+  /** a preview from the host (Quick Look, the shell); null = a glyph of its type */
+  thumb: CanvasImageSource | null;
+}
+
+/** The shelf of the "+" tab (island/shelf.ts). */
+export interface ShelfState {
+  items: ShelfItem[];
+  /** ids picked by a click; a drag or the menu takes them all */
+  sel: string[];
+  /** something is being carried over the island: where (island px), how many if known */
+  carry: { x: number; y: number; n: number } | null;
+  /** the tab before a carry opened the shelf, to go back to when it is carried away again */
+  tabBefore: Tab | null;
+  /** the last drop: where it landed (island px), when (s.t), the ids it brought */
+  drop: { x: number; y: number; at: number; ids: string[] } | null;
+  /** tiles on their way out: drawn fading where they were */
+  gone: { item: ShelfItem; at: number; x: number; i: number; how: 'sent' | 'expired' | 'removed' }[];
+  /** a press on a tile that may become a drag out: where it started */
+  press: { id: string; x: number; y: number } | null;
+  /** where the shelf's mascot glances for a moment: a tile landing or fading (island px, s.t) */
+  look: { x: number; y: number; until: number } | null;
+  /** how the shelf's mascot meets a carried file (variants for the owner, island/shelf.ts) */
+  style: ShelfStyle;
+}
+
+export type ShelfStyle = 'old' | 'catch' | 'reach' | 'breath';
+
 /** Levels inside a module card (island/depth.ts). The card itself is level ''. */
 export interface DepthState {
   /** the module the levels belong to; another focus or a closed island clears them */
@@ -409,6 +449,10 @@ export interface IslandState {
   almanac: AlmanacFeed | null;
   /** levels inside a module card: list -> item -> back (island/depth.ts, stage 10) */
   depth: DepthState;
+  /** the "+" tab: files, text and links kept for 10 minutes (island/shelf.ts, stage 9) */
+  shelf: ShelfState;
+  /** preview only (2026-10-25, waits for the owner): cat ears on the mascot, 0 = none */
+  ears: number;
   /** an action that asks for a second click (a PR's "Одобрить"): which, until when (s.t) */
   confirm: { act: string; until: number } | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
@@ -576,6 +620,18 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     almanac: null,
     confirm: null,
     depth: { mod: null, stack: [], from: null, dir: 1, at: -1, scroll: {}, swipe: { dx: 0, at: -1 } },
+    ears: 0,
+    shelf: {
+      items: [],
+      sel: [],
+      carry: null,
+      tabBefore: null,
+      drop: null,
+      gone: [],
+      press: null,
+      look: null,
+      style: 'catch',
+    },
     requests: [],
     settingsLink: false,
     host: null,

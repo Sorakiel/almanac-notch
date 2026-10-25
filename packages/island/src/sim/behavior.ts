@@ -10,6 +10,7 @@ import { moduleMood } from './mood';
 import { after } from './state';
 import { busyAside, effectiveFocus, notchState } from '../island/focus';
 import { ciAlert, ciEvent, ciTick } from '../island/ci';
+import { shelfTick } from '../island/shelf';
 
 /**
  * proto: update - one frame of behaviour. Targets T are rebuilt layer by layer
@@ -20,6 +21,7 @@ export function update(s: IslandState, dt: number, now: number): void {
   const { S, sp, ptr, T, rng } = s;
   s.t += dt;
   stepMusic(s, dt);
+  shelfTick(s);
   for (let i = s.timers.length - 1; i >= 0; i--) {
     const tm = s.timers[i];
     if (tm && tm.at <= s.t) {
@@ -170,6 +172,23 @@ export function update(s: IslandState, dt: number, now: number): void {
   } else if (s.happyUntil > t) {
     T.happy = 1;
     L.ia = 'радуется';
+  }
+  // the shelf (island/shelf.ts): something carried over the island - the mascot opens its eyes,
+  // leans and looks at it, waiting to catch; then glances at a tile landing or fading
+  const sh = s.shelf,
+    M = s.islandMascot;
+  if (sh.carry && M && s.tab === 'add') {
+    T.wide = Math.max(T.wide, 0.45);
+    T.happy = Math.max(T.happy, 0.3);
+    T.lookX = Math.tanh((sh.carry.x - M.x) / (M.R * 2.6)) * S.lookRange;
+    T.lookY = Math.tanh((sh.carry.y - M.y) / (M.R * 1.8)) * S.lookRange;
+    T.lean = clamp((sh.carry.x - M.x) / (M.R * 14), -0.22, 0.22);
+    // stands a little taller, ready
+    T.sq = Math.max(T.sq, 1.05);
+    if (!L.ia) L.ia = 'ждёт файл';
+  } else if (sh.look && sh.look.until > t && M) {
+    T.lookX = Math.tanh((sh.look.x - M.x) / (M.R * 2.6)) * S.lookRange;
+    T.lookY = Math.tanh((sh.look.y - M.y) / (M.R * 1.8)) * S.lookRange;
   }
   if (s.squintUntil > t) {
     T.lid = Math.min(T.lid, 0.18);

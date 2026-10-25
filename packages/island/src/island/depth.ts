@@ -49,6 +49,9 @@ export function depthPush(s: IslandState, mod: ModuleId, key: string): void {
     d.stack = [];
   }
   if (d.stack[d.stack.length - 1] === key) return;
+  // a fresh way in from the card starts every list at its top; back and forth inside keeps it.
+  // Not on the way out: the leaving level would jump while it still fades.
+  if (!d.stack.length) d.scroll = {};
   d.from = d.stack[d.stack.length - 1] ?? '';
   d.stack.push(key);
   d.dir = 1;
@@ -194,6 +197,22 @@ export function scrollList(
   c.restore();
 }
 
+/** A scroll zone without rows of its own (the shelf's tiles, sideways): the offset this frame. */
+export function scrollZone(
+  s: IslandState,
+  c: Ctx,
+  key: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  max: number,
+): number {
+  const sc = scrollOf(s, key, max);
+  addHit(s, c, { x, y, w, h, act: 'scroll:' + key });
+  return sc.y;
+}
+
 /** the scroll of list `key` this frame: it springs towards the wheel's target, past an end back */
 function scrollOf(s: IslandState, key: string, max: number): { y: number } {
   const all = s.depth.scroll;
@@ -224,6 +243,8 @@ function scrollOf(s: IslandState, key: string, max: number): { y: number } {
  */
 export function islandWheel(s: IslandState, p: { x: number; y: number }, dx: number, dy: number): boolean {
   const d = s.depth;
+  // the shelf scrolls sideways: a sideways swipe or the plain wheel move its row
+  if (listAt(s, p) === 'shelf') return wheelScroll(s, 'shelf', Math.abs(dx) > Math.abs(dy) ? dx : dy);
   // the swipe back: mostly sideways, to the right, far enough within a short time
   if (Math.abs(dx) > Math.abs(dy) * 1.5) {
     if (s.t - d.swipe.at > SWIPE_WINDOW) d.swipe = { dx: 0, at: s.t };
@@ -236,8 +257,11 @@ export function islandWheel(s: IslandState, p: { x: number; y: number }, dx: num
     return d.stack.length > 0;
   }
   const zone = listAt(s, p);
-  if (!zone) return false;
-  const sc = d.scroll[zone];
+  return zone ? wheelScroll(s, zone, dy) : false;
+}
+
+function wheelScroll(s: IslandState, zone: string, dy: number): boolean {
+  const sc = s.depth.scroll[zone];
   if (!sc) return false;
   // a mouse wheel steps ~100 px a notch: one notch moves about a row and a half, a trackpad's
   // small deltas pass as they are

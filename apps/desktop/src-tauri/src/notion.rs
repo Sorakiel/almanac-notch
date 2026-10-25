@@ -1,7 +1,7 @@
 //! Notion (stage 8): the pages edited last among those shared with my integration (the card
 //! shows three, like coucou).
 //!
-//! The internal integration token lives only in the system keychain (service `dev.almanac.notch`),
+//! The internal integration token lives only in secrets.rs (a private file on the Mac, Credential Manager on Windows),
 //! like GitHub's and Vercel's. A thread asks `api.notion.com` once a minute (and right after a
 //! token change) and sends `island://notion` when the result changed. Only page titles, icons,
 //! edit times, who edited and links leave this module; page contents are never read, and the
@@ -21,7 +21,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const SERVICE: &str = "dev.almanac.notch";
 const ACCOUNT: &str = "notion-token";
 const API: &str = "https://api.notion.com";
 /// the API version the answers below are parsed for
@@ -122,14 +121,10 @@ fn resolve_me(picked: Option<String>, people: &[Person]) -> Option<String> {
     }
 }
 
-// ---------- keychain ----------
-
-fn entry() -> Result<keyring::Entry, keyring::Error> {
-    keyring::Entry::new(SERVICE, ACCOUNT)
-}
+// ---------- secrets (secrets.rs) ----------
 
 fn token() -> Option<String> {
-    entry().ok()?.get_password().ok().filter(|t| !t.is_empty())
+    crate::secrets::get(ACCOUNT)
 }
 
 // ---------- reading ----------
@@ -395,7 +390,7 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
     });
 }
 
-/// Check the token against Notion, then keep it in the keychain. Returns the workspace name.
+/// Check the token against Notion, then keep it in secrets.rs. Returns the workspace name.
 pub fn connect(token: &str) -> Result<String, String> {
     let token = token.trim();
     if token.is_empty() {
@@ -413,10 +408,10 @@ pub fn connect(token: &str) -> Result<String, String> {
         )
         .to_owned(),
     })?;
-    entry().and_then(|e| e.set_password(token)).map_err(|_| {
+    crate::secrets::set(ACCOUNT, token).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
-            "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
+            "Не удалось сохранить токен на этом компьютере, попробуйте ещё раз",
+            "Cannot save the token on this computer, try again",
         )
         .to_owned()
     })?;
@@ -425,9 +420,7 @@ pub fn connect(token: &str) -> Result<String, String> {
 }
 
 pub fn disconnect() {
-    if let Ok(e) = entry() {
-        let _ = e.delete_credential();
-    }
+    crate::secrets::remove(ACCOUNT);
     poke();
 }
 

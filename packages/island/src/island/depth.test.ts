@@ -25,6 +25,19 @@ describe('levels inside a card', () => {
     expect(depthAct(s, 'almanac:x')).toBe(false);
   });
 
+  it('a list entered again from the card starts at its top; back from an item keeps it', () => {
+    const s = make();
+    depthAct(s, 'depth:github:ci');
+    s.depth.scroll['github:ci'] = { y: 40, v: 0, target: 40, max: 80, wheelAt: -1, t: s.t };
+    depthAct(s, 'depth:github:run:1');
+    depthBack(s);
+    expect(s.depth.scroll['github:ci']?.y).toBe(40);
+    depthBack(s);
+    expect(s.depth.scroll['github:ci']?.y).toBe(40);
+    depthAct(s, 'depth:github:ci');
+    expect(s.depth.scroll['github:ci']).toBeUndefined();
+  });
+
   it('settles a level change in about a quarter second, without a big overshoot', () => {
     expect(springStep(0)).toBe(0);
     expect(springStep(0.25)).toBeGreaterThan(0.9);

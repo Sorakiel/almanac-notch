@@ -12,7 +12,8 @@ import { card, cardTint, haloTint } from './card';
 import { ciAlert } from './ci';
 import { drawAlert, drawAsk, drawFocusCard, drawLaunch } from './cards';
 import { drawMusicWide, drawRail } from './music';
-import { drawAdd, drawChat, drawSettings } from './tabs';
+import { drawChat, drawSettings } from './tabs';
+import { drawShelf, shelfBadge } from './shelf';
 import { drawLeaving, layer, shared, springK, tabOutA } from './reveal';
 import { deepCol, focusTint, isHot, miniFor, modules, type ModuleItem } from './modules';
 import { MODULE_COL } from './focus';
@@ -269,6 +270,8 @@ export function topBar(s: IslandState, c: Ctx, x0: number, x1: number, y: number
       hk = clamp(hoverK(s, 'bar:' + k, !on && hov, 0.2, 1), 0, 1);
     if (hk > 0.01) pill(x, hk, true);
     icon(s, c, k, x, y, on, hk);
+    // the shelf's count on "+": something is waiting there (island/shelf.ts)
+    if (k === 'add' && !on) shelfBadge(c, s.shelf.items.length, x + 9, y - 8);
     addHit(s, c, { x: x - CAP_W / 2, y: y - CAP_H / 2, w: CAP_W, h: CAP_H, act });
   };
   tabs.forEach(([k, act], i) => item(k, act, x0 + BAR_L + i * BAR_STEP, s.tab === k));
@@ -414,10 +417,10 @@ export function drawOpenBody(
 function drawBody(s: IslandState, c: Ctx, X0: number, X1: number, cy0: number, cy1: number, fx: WorkFx | null): void {
   if (s.tab !== 'home') {
     c.save();
-    // chat and settings layer their own rows; the add tab is one layer until the shelf replaces it
+    // chat and settings layer their own rows; the shelf comes in as one layer
     if (s.tab === 'add') layer(s, c, 0);
     if (s.tab === 'chat' && !s.chatOff) drawChat(s, c, X0, X1, cy0, cy1);
-    else if (s.tab === 'add') drawAdd(s, c, X0, X1, cy0, cy1);
+    else if (s.tab === 'add') drawShelf(s, c, X0, X1, cy0, cy1);
     else if (s.tab === 'settings') drawSettings(s, c, X0, X1, cy0, cy1);
     c.restore();
     if (s.tab !== 'chat' || !s.chatOff) return;

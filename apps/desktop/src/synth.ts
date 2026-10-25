@@ -658,6 +658,15 @@ const SPECS = {
     level: lvl(0.03),
     vary: 0.8,
   }),
+  /** things put on the shelf: two soft knocks going down, as something set onto wood - placed,
+   * not celebrated (a drop happens often; the habit's bright glint would wear thin) */
+  shelve: (): Spec => ({
+    len: 0.35,
+    parts: [d(0, 'E5', 0.03, 0.6, { fm: [2, 1, 0.01] }), d(0.07, 'A4', 0.07, 1, { timbre: 'sine', attack: 0.004 })],
+    level: lvl(0.022),
+    reverb: 0.08,
+    vary: 0.6,
+  }),
 };
 
 export type SoundName = keyof typeof SPECS;
@@ -691,6 +700,7 @@ export const TIER: Record<SoundName, Tier> = {
   toggle: 'ui',
   approve: 'ui',
   check: 'ui',
+  shelve: 'ui',
 };
 
 /** does a sound differ from play to play */
