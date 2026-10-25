@@ -36,6 +36,8 @@ export function closeCountdown(s: IslandState): number | null {
 export function notchState(s: IslandState): NotchState {
   const { S, event, t } = s;
   if (S.nstate !== 'auto') return S.nstate as NotchState;
+  // something carried towards the island opens it onto the shelf (island/shelf.ts)
+  if (s.shelf.carry) return 'open';
   // the app's "open on hover" and auto-close (stage 8g, docs/CHANGES.md); the harness has no host
   // and keeps the prototype's rule: hover opens, leaving closes
   if (s.host) {

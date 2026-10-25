@@ -325,6 +325,19 @@ export const EN: Readonly<Record<string, string>> = {
   'Осталась {0} привычка': '{0} habit left',
   'Осталось {0} привычки': '{0} habits left',
   'Осталось {0} привычек': '{0} habits left',
+  // the shelf of the "+" tab (island/shelf.ts)
+  'Бросьте сюда файлы, текст или ссылку': 'Drop files, text or a link here',
+  'Отпустите - положу на полку': 'Let go - I will shelve it',
+  'Полежат 10 минут. Оригиналы останутся на месте': 'Kept for 10 minutes. Originals stay where they are',
+  'ещё минута': 'a minute left',
+  'ещё {0} мин': '{0} min left',
+  Ссылка: 'Link',
+  Текст: 'Text',
+  Папка: 'Folder',
+  Б: 'B',
+  КБ: 'KB',
+  МБ: 'MB',
+  ГБ: 'GB',
 };
 
 function fill(text: string, args: readonly (string | number)[]): string {

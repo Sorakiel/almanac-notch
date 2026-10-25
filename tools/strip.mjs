@@ -1,7 +1,9 @@
 // Stage 9 filmstrip: the app page on a virtual clock, one action, then the island every 1/60 s.
 // node tools/strip.mjs <scene> [out-dir]  - scenes: open, focus, ev-error, ev-attention, focus-back, tab-chat, tab-settings, tab-home,
 //   rail-sweep (the pointer down the focus card's mascot stack and back up), autoclose (click-open, leave, fold),
-//   almanac-depth (Almanac's list: wheel, into a habit, back)
+//   almanac-depth (Almanac's list: wheel, into a habit, back),
+//   shelf-drop (three things carried onto the closed island and let go), shelf-more (one more onto a full shelf),
+//   shelf-out (a tile dragged out), shelf-expire (the last minute of a tile, then it leaves)
 // Writes frames to <out-dir>/<scene>/NNN.png and a contact sheet <out-dir>/<scene>.png (ffmpeg).
 import { chromium } from 'playwright';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -49,7 +51,103 @@ async function shoot() {
   }
 }
 
-if (scene === 'hover-mascot') {
+// shelf scenes: the page's __shelf drives carry and drop without an OS drag
+const SHELF3 = [
+  { id: 'a', kind: 'file', name: 'Квартальный отчёт 2026 Q3.pdf', size: 2_480_000, note: '' },
+  { id: 'b', kind: 'image', name: 'IMG_4127.jpeg', size: 3_900_000, note: '' },
+  { id: 'c', kind: 'link', name: 'github.com', size: null, note: 'github.com' },
+];
+async function addThumbs() {
+  // a photo-like preview for the image, as the host's would be
+  await p.evaluate(async () => {
+    const cv = new OffscreenCanvas(108, 80),
+      g = cv.getContext('2d'),
+      gr = g.createLinearGradient(0, 0, 108, 80);
+    gr.addColorStop(0, '#5B7FD6');
+    gr.addColorStop(1, '#E3A86B');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 108, 80);
+    g.fillStyle = '#2B3A2E';
+    g.beginPath();
+    g.moveTo(0, 80);
+    g.lineTo(40, 40);
+    g.lineTo(70, 62);
+    g.lineTo(108, 30);
+    g.lineTo(108, 80);
+    g.fill();
+    window.__thumb = await createImageBitmap(cv);
+  });
+}
+async function carryPath(from, to, frames) {
+  for (let i = 0; i < frames; i++) {
+    const k = i / (frames - 1),
+      e = 1 - Math.pow(1 - k, 2);
+    const x = from[0] + (to[0] - from[0]) * e,
+      y = from[1] + (to[1] - from[1]) * e;
+    await p.evaluate(([x, y]) => window.__shelf.carry(window.__state, { x, y }, 3), [x, y]);
+    await shootOne();
+  }
+}
+async function shootOne() {
+  const i = frame++;
+  await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png`, clip: { x: 30, y: 0, width: 620, height: 190 } });
+  await p.clock.runFor(1000 / 60);
+}
+async function dropAt(items, x, y) {
+  await p.evaluate(
+    ([items, x, y]) => {
+      const s = window.__state;
+      window.__shelf.drop(s, items.map((it) => ({ ...it, thumb: it.kind === 'image' ? window.__thumb : null })), { x, y });
+    },
+    [items, x, y],
+  );
+}
+
+if (scene.startsWith('shelf-')) {
+  await addThumbs();
+  await p.evaluate(() => (window.__state.host.openOnHover = false));
+  if (scene === 'shelf-drop') {
+    await carryPath([660, 225], [300, 110], 24);
+    for (let i = 0; i < 12; i++) await shootOne();
+    await dropAt(SHELF3, 300, 110);
+    await shoot();
+  } else {
+    await dropAt(SHELF3, 300, 110);
+    await p.clock.runFor(2000);
+    await p.mouse.move(340, 12);
+    await p.clock.runFor(800);
+    await p.mouse.down();
+    await p.mouse.up();
+    await p.clock.runFor(1500);
+    if (scene === 'shelf-more') {
+      await carryPath([660, 225], [200, 100], 20);
+      for (let i = 0; i < 10; i++) await shootOne();
+      await dropAt([{ id: 'd', kind: 'text', name: 'Позвонить в 15:00 насчёт договора', size: null, note: 'Позвонить в 15:00' }], 200, 100);
+      await shoot();
+    } else if (scene === 'shelf-out') {
+      await p.mouse.move(185, 100);
+      await p.clock.runFor(500);
+      for (let i = 0; i < 6; i++) await shootOne();
+      await p.evaluate(() => window.__shelf.remove(window.__state, ['b'], 'sent'));
+      await shoot();
+    } else if (scene === 'shelf-expire') {
+      // the first tile 70 s before its end, the pointer over it, then its last second
+      await p.evaluate(() => {
+        const s = window.__state;
+        s.shelf.items[0].until = s.t + 70;
+      });
+      await p.mouse.move(185, 100);
+      await p.clock.runFor(600);
+      for (let i = 0; i < 6; i++) await shootOne();
+      await p.mouse.move(340, 12);
+      await p.evaluate(() => {
+        const s = window.__state;
+        s.shelf.items[0].until = s.t + 0.05;
+      });
+      await shoot();
+    }
+  }
+} else if (scene === 'hover-mascot') {
   // the agent working, the pointer onto the card's mascot, then off it
   await p.mouse.move(340, 12);
   await p.clock.runFor(800);

@@ -57,32 +57,6 @@ export function drawChat(s: IslandState, c: Ctx, X0: number, X1: number, y0: num
   c.restore();
 }
 
-/** proto: drawAdd */
-export function drawAdd(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
-  const list = [tr(s, 'Почта'), 'Notion', 'Obsidian', 'n8n', 'Vercel', 'Grafana'];
-  const gap = 8,
-    w = (X1 - X0 - gap * 2) / 3,
-    h = (y1 - y0 - gap) / 2;
-  list.forEach((name, i) => {
-    const x = X0 + (i % 3) * (w + gap),
-      y = y0 + Math.floor(i / 3) * (h + gap),
-      hov = hovering(s, x, y, w, h);
-    c.fillStyle = hov ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)';
-    rrect(c, x, y, w, h, 12);
-    c.fill();
-    c.strokeStyle = 'rgba(255,255,255,0.6)';
-    c.lineWidth = 1.5;
-    c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(x + 14, y + h / 2);
-    c.lineTo(x + 24, y + h / 2);
-    c.moveTo(x + 19, y + h / 2 - 5);
-    c.lineTo(x + 19, y + h / 2 + 5);
-    c.stroke();
-    textAt(c, name, x + 32, y + h / 2 + 0.5, { size: 12, max: w - 38 });
-  });
-}
-
 /** proto: drawSettings */
 export function drawSettings(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number): void {
   if (s.host) return drawHostSettings(s, c, X0, X1, y0, y1, s.host);

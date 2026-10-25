@@ -11,6 +11,7 @@ import { habitsDone, habitsTotal } from './focus';
 import { hitAt } from './hits';
 import { ciHide } from './ci';
 import { depthAct } from './depth';
+import { pickOf, shelfMove, shelfPress } from './shelf';
 
 export interface IslandPoint {
   x: number;
@@ -28,6 +29,7 @@ export function islandPointerMove(s: IslandState, p: IslandPoint, now: number): 
   const drag = s.host?.volDrag;
   if (s.host && drag) s.host.volume = clamp((p.x - drag.bx0) / (drag.bx1 - drag.bx0), 0, 1);
   const cursor = hitAt(s, p) ? 'pointer' : 'default';
+  if (s.shelf.press) shelfMove(s, p);
   s.ptr.lastMoveReal = now;
   s.ptr.seen = true;
   if (s.sleeping && !s.forcedSleep) wake(s, true);
@@ -60,14 +62,17 @@ export function habitTicked(s: IslandState, checked: boolean, src?: 'almanac'): 
   }
 }
 
-/** proto: island pointerdown */
-export function islandPointerDown(s: IslandState, p: IslandPoint): void {
+/** proto: island pointerdown; `multi`: a modifier held (adds a shelf tile to the pick) */
+export function islandPointerDown(s: IslandState, p: IslandPoint, multi = false): void {
   // the app: a click inside opens the island (it only peeks without "open on hover") and keeps it
   // open after the pointer leaves, like coucou's
   if (s.host && s.islandHover) s.clickOpen = true;
   const h = hitAt(s, p);
+  // a click beside the shelf's tiles drops the pick
+  if (s.tab === 'add' && (!h || !h.act.startsWith('shelf:'))) s.shelf.sel = [];
   if (!h) return;
   const act = h.act;
+  if (act.startsWith('shelf:')) return shelfPress(s, act.slice(6), p, multi);
   s.pressAct = act;
   s.pressAt = s.t;
   // levels inside a module card (island/depth.ts)
@@ -177,6 +182,7 @@ function mediaAct(s: IslandState, act: string, h: Hit, p: IslandPoint): void {
 
 /** Not in the prototype: the end of a press - finishes a drag of the settings card's volume. */
 export function islandPointerUp(s: IslandState): void {
+  s.shelf.press = null;
   if (!s.host?.volDrag) return;
   s.host.volDrag = null;
   s.requests.push('host:vol');
@@ -185,6 +191,12 @@ export function islandPointerUp(s: IslandState): void {
 /** proto: island dblclick - joy from the island's mascot (no burst, unlike the stage) */
 export function islandDoubleClick(s: IslandState, p: IslandPoint): void {
   const h = hitAt(s, p);
+  // a shelf tile opens in its app, as in Finder
+  if (h && h.act.startsWith('shelf:')) {
+    s.shelf.press = null;
+    s.requests.push('shelf:open:' + h.act.slice(6));
+    return;
+  }
   if (h && h.act === 'mascot') {
     s.pokes = [];
     s.grumpyUntil = 0;
@@ -192,6 +204,17 @@ export function islandDoubleClick(s: IslandState, p: IslandPoint): void {
     s.happyUntil = s.t + 1.1;
     hop(s, 5.6);
   }
+}
+
+/** Not in the prototype: a right click. On a shelf tile it asks the host for the menu of the pick
+ * (the tile joins it, or becomes it, as in Finder). True when the island used it. */
+export function islandContextMenu(s: IslandState, p: IslandPoint): boolean {
+  const h = hitAt(s, p);
+  if (!h || !h.act.startsWith('shelf:')) return false;
+  const id = h.act.slice(6);
+  if (!s.shelf.sel.includes(id)) s.shelf.sel = [id];
+  s.requests.push('shelf:menu:' + pickOf(s, id).join(','));
+  return true;
 }
 
 /** The black strip as drawn on the last frame, island CSS px. The window takes clicks only here and on hits. */
