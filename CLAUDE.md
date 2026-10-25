@@ -70,7 +70,7 @@
 ## Стек
 
 - TypeScript strict, канвас 2D, без React в цикле кадра. Пакет рендера - `packages/island`.
-- Tauri 2 + Rust для окна, системных API, хуков и провайдеров данных. Секреты - только в Keychain и Credential Manager.
+- Tauri 2 + Rust для окна, системных API, хуков и провайдеров данных. Секреты - только через `secrets.rs`: на Mac файл с правами 0600, а не Keychain (решение владельца 2026-10-25: без подписи Apple Keychain спрашивает пароль после каждого обновления), на Windows - Credential Manager. Идентификатор приложения - `com.almanac.notch` (до 0.2.0 - `dev.almanac.notch`, переезд - `identity.rs`).
 - npm workspaces, Vite, Vitest, Playwright.
 - Шрифты Onest и JetBrains Mono локально (`@fontsource/*`), без запросов к Google.
 

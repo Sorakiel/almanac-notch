@@ -17,8 +17,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Почта и пароль от Almanac.': 'Your Almanac email and password.',
   'Если в Almanac вы входите по ссылке из письма: «Код из письма» → «Прислать код», введите код из письма.':
     'If you sign in to Almanac with an email link: "Code from the email" → "Send a code", then enter the code.',
-  'Привычки на сегодня из вашего аккаунта Almanac: название, сколько отмечено и сколько нужно за день. Нажатие на привычку в острове отмечает её в Almanac, как нажатие в самом Almanac. Заметки, серии, тренировки и другие данные не читаются. Запросы идут только на сервер Almanac, раз в минуту и только при включённом модуле. Пароль не сохраняется; ключ входа хранится в связке ключей системы, почта - в файле настроек приложения. В остров не попадают ни пароль, ни ключ.':
-    "Today's habits from your Almanac account: the name, how many taps are done and how many the day needs. Tapping a habit on the island marks it in Almanac, the same as a tap in Almanac. Notes, streaks, workouts and other data are not read. Requests go only to the Almanac server, once a minute and only while the module is on. The password is not kept; the sign-in key is kept in the system keychain, the email in the app's settings file. Neither the password nor the key reaches the island.",
+  'Привычки на сегодня из вашего аккаунта Almanac: название, сколько отмечено и сколько нужно за день. Нажатие на привычку в острове отмечает её в Almanac, как нажатие в самом Almanac. Заметки, серии, тренировки и другие данные не читаются. Запросы идут только на сервер Almanac, раз в минуту и только при включённом модуле. Пароль не сохраняется; ключ входа хранится только на этом компьютере (его может прочитать только ваша учётная запись), почта - в файле настроек приложения. В остров не попадают ни пароль, ни ключ.':
+    "Today's habits from your Almanac account: the name, how many taps are done and how many the day needs. Tapping a habit on the island marks it in Almanac, the same as a tap in Almanac. Notes, streaks, workouts and other data are not read. Requests go only to the Almanac server, once a minute and only while the module is on. The password is not kept; the sign-in key stays on this computer (only your user account can read it), the email in the app's settings file. Neither the password nor the key reaches the island.",
   'Способ входа': 'Sign-in method',
   'Пример из прототипа': 'Prototype sample',
   'Вход истёк - войдите снова': 'Signed out - sign in again',
@@ -138,8 +138,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'On a Mac the island reads the system Calendar: it already has your Google, iCloud and Exchange accounts (System Settings → Internet Accounts).',
   'Доступ к календарю…': 'Calendar access…',
   'Что читается и куда уходит': 'What is read and where it goes',
-  'Только название и время встреч на 48 часов вперёд. Outlook читается на этом компьютере, без сети. Ссылка iCal открывается раз в 5 минут, других запросов нет; сама ссылка - секрет и хранится в системном хранилище паролей.':
-    'Only the title and time of meetings for the next 48 hours. Outlook is read on this computer, without the network. The iCal link is opened every 5 minutes, nothing else is requested; the link itself is a secret and is kept in the system credential store.',
+  'Только название и время встреч на 48 часов вперёд. Outlook читается на этом компьютере, без сети. Ссылка iCal открывается раз в 5 минут, других запросов нет; сама ссылка - секрет: она хранится только на этом компьютере, и прочитать её может только ваша учётная запись.':
+    'Only the title and time of meetings for the next 48 hours. Outlook is read on this computer, without the network. The iCal link is opened every 5 minutes, nothing else is requested; the link itself is a secret: it stays on this computer and only your user account can read it.',
   'Что играет в системе: название, исполнитель, альбом, обложка, позиция, и громкость. Обложку отдаёт сам плеер, сети нет. Кнопки острова управляют тем плеером, который сейчас играет.':
     'What is playing in the system: title, artist, album, cover, position, and the volume. The cover comes from the player itself, no network. The island buttons control the player that is playing now.',
   'Токен доступа': 'Access token',
@@ -151,12 +151,12 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Repository access: all repositories or only the ones you need.',
   'Права только на чтение: Contents, Pull requests, Commit statuses, Actions (Metadata добавится сама).':
     'Read-only permissions: Contents, Pull requests, Commit statuses, Actions (Metadata is added by itself).',
-  'Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
-    'Repository names, the check status of the latest commits, the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.',
+  'Названия репозиториев, статус проверок последнего коммита основной ветки, число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится только на этом компьютере, его может прочитать только ваша учётная запись, и в остров он не попадает.':
+    'Repository names, the check status of the latest commits, the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token stays on this computer, only your user account can read it, and it never gets into the island.',
   'Чтобы перезапускать упавшие проверки из острова, дайте Actions право на запись.':
     'To re-run failed checks from the island, give Actions write access.',
-  'Названия репозиториев, статус проверок последних коммитов (название упавшей проверки, ветка, первая строка сообщения коммита), число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
-    "Repository names, the check status of the latest commits (the failed check's name, the branch, the first line of the commit message), the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token is kept in the system keychain and never gets into files or the island.",
+  'Названия репозиториев, статус проверок последних коммитов (название упавшей проверки, ветка, первая строка сообщения коммита), число PR, ждущих вашего ревью, и время ваших коммитов за 7 дней. Запросы идут только на api.github.com раз в минуту. Токен хранится только на этом компьютере, его может прочитать только ваша учётная запись, и в остров он не попадает.':
+    "Repository names, the check status of the latest commits (the failed check's name, the branch, the first line of the commit message), the number of PRs waiting for your review, and the times of your commits over 7 days. Requests go only to api.github.com, once a minute. The token stays on this computer, only your user account can read it, and it never gets into the island.",
   'Результат CI': 'CI result',
   'Проверки прошли': 'Checks passed',
   'Проверка упала': 'A check failed',
@@ -175,8 +175,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Откройте vercel.com → Account Settings → Tokens → Create Token.':
     'Open vercel.com → Account Settings → Tokens → Create Token.',
   'Scope: личный аккаунт или команда, срок - на ваш выбор.': 'Scope: your personal account or a team, any expiration.',
-  'Имя пользователя, список команд и последние деплои ваших проектов: название проекта, состояние сборки, продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на api.vercel.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров.':
-    'Your username, team list and the latest deployments of your projects: project name, build state, production or preview, branch and time. Code, environment variables and logs are not read. Requests go only to api.vercel.com, once a minute, and only while the module is on. The token is kept in the system keychain and never gets into files or the island.',
+  'Имя пользователя, список команд и последние деплои ваших проектов: название проекта, состояние сборки, продакшен или превью, ветка и время. Код, переменные окружения и логи не читаются. Запросы идут только на api.vercel.com раз в минуту и только при включённом модуле. Токен хранится только на этом компьютере, его может прочитать только ваша учётная запись, и в остров он не попадает.':
+    'Your username, team list and the latest deployments of your projects: project name, build state, production or preview, branch and time. Code, environment variables and logs are not read. Requests go only to api.vercel.com, once a minute, and only while the module is on. The token stays on this computer, only your user account can read it, and it never gets into the island.',
   'Vercel не принял сохранённый токен': 'Vercel rejected the saved token',
   // Grafana
   'Адрес Grafana': 'Grafana address',
@@ -191,8 +191,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'In the service account: Add service account token → Generate token, copy the token (glsa_…).',
   'Вставьте сюда адрес Grafana, как в браузере (например, https://имя.grafana.net), и токен.':
     'Paste the Grafana address as in your browser (for example, https://name.grafana.net) and the token here.',
-  'Название организации, правила алертов (название, состояние, с какого времени горит), список дашбордов для выбора и у выбранного дашборда - название и данные одной панели за последний час. Другие данные, логи и настройки Grafana не читаются. Запросы идут только на адрес, который вы ввели, раз в минуту и только при включённом модуле. Адрес и токен хранятся в связке ключей системы и не попадают ни в файлы, ни в остров; выбранный дашборд - в файле настроек приложения. По http можно подключить только адрес в локальной сети.':
-    "The organization name, alert rules (name, state, since when it fires), the dashboard list to pick from and, for the picked dashboard, its title and one panel's data for the last hour. Other data, logs and Grafana settings are not read. Requests go only to the address you entered, once a minute, and only while the module is on. The address and token are kept in the system keychain and never get into files or the island; the picked dashboard is kept in the app's settings file. Plain http works only for an address on your local network.",
+  'Название организации, правила алертов (название, состояние, с какого времени горит), список дашбордов для выбора и у выбранного дашборда - название и данные одной панели за последний час. Другие данные, логи и настройки Grafana не читаются. Запросы идут только на адрес, который вы ввели, раз в минуту и только при включённом модуле. Адрес и токен хранятся только на этом компьютере, их может прочитать только ваша учётная запись, и в остров они не попадают; выбранный дашборд - в файле настроек приложения. По http можно подключить только адрес в локальной сети.':
+    "The organization name, alert rules (name, state, since when it fires), the dashboard list to pick from and, for the picked dashboard, its title and one panel's data for the last hour. Other data, logs and Grafana settings are not read. Requests go only to the address you entered, once a minute, and only while the module is on. The address and token stay on this computer, only your user account can read them, and they never get into the island; the picked dashboard is kept in the app's settings file. Plain http works only for an address on your local network.",
   'Не подключена': 'Not connected',
   'Grafana не приняла сохранённый токен': 'Grafana rejected the saved token',
   ' · горит {0}': ' · {0} firing',
@@ -210,8 +210,8 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'Under Capabilities keep only Read content and Read user information without email, then copy the Internal Integration Secret.',
   'В Notion на нужной странице: ••• → Connections → ваша интеграция. Остров увидит эту страницу и её подстраницы.':
     'In Notion, on the page you want: ••• → Connections → your integration. The island will see that page and its subpages.',
-  'Название рабочего пространства, имена его участников и страницы, к которым вы дали доступ интеграции: название, значок, кто и когда правил последним, ссылка. Содержимое страниц и почта участников не читаются. Запросы идут только на api.notion.com раз в минуту и только при включённом модуле. Токен хранится в связке ключей системы и не попадает ни в файлы, ни в остров. Строка карточки открывает страницу на notion.so в браузере.':
-    "The workspace name, its members' names and the pages you shared with the integration: title, icon, who edited last and when, link. Page contents and members' emails are not read. Requests go only to api.notion.com, once a minute, and only while the module is on. The token is kept in the system keychain and never gets into files or the island. A card row opens the page on notion.so in your browser.",
+  'Название рабочего пространства, имена его участников и страницы, к которым вы дали доступ интеграции: название, значок, кто и когда правил последним, ссылка. Содержимое страниц и почта участников не читаются. Запросы идут только на api.notion.com раз в минуту и только при включённом модуле. Токен хранится только на этом компьютере, его может прочитать только ваша учётная запись, и в остров он не попадает. Строка карточки открывает страницу на notion.so в браузере.':
+    "The workspace name, its members' names and the pages you shared with the integration: title, icon, who edited last and when, link. Page contents and members' emails are not read. Requests go only to api.notion.com, once a minute, and only while the module is on. The token stays on this computer, only your user account can read it, and it never gets into the island. A card row opens the page on notion.so in your browser.",
   'Notion не принял сохранённый токен': 'Notion rejected the saved token',
   ' · нет доступа к страницам': ' · no pages shared',
   'Это вы': 'This is you',
@@ -261,8 +261,7 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
   'Хуки Claude Code и запуск при входе будут сняты, программа и её ярлыки - удалены.':
     'The Claude Code hooks and launch at login will be removed, along with the app and its shortcuts.',
   'Удалить настройки и данные': 'Remove settings and data',
-  'Подключения, токены в связке ключей, кэш и доступ к календарю':
-    'Connections, tokens in the keychain, the cache and calendar access',
+  'Подключения, токены, кэш и доступ к календарю': 'Connections, tokens, the cache and calendar access',
   'Подключения, токены в диспетчере учётных данных и кэш': 'Connections, tokens in Credential Manager and the cache',
   Закрыть: 'Close',
   Удалить: 'Uninstall',

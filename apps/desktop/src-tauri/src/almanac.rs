@@ -5,8 +5,7 @@
 //! PKCE and a loopback redirect, client `almanac-notch`, scopes habits:read habits:write; Almanac's
 //! docs/API.md), or as a fallback with the password or a code from the sign-in email - and asks two functions of Almanac's integration API (for any client): `today_habits(p_date)` - today's
 //! habits counted the way Almanac counts them - and `toggle_habit(p_habit, p_date)` - one tap,
-//! as in Almanac. The refresh token lives only in the system keychain (service
-//! `dev.almanac.notch`), the access token only in memory; neither reaches the frontend or a log.
+//! as in Almanac. The refresh token lives only in secrets.rs (a private file on the Mac, Credential Manager on Windows), the access token only in memory; neither reaches the frontend or a log.
 //! The address and the public (anon) key come from the build (`.env.almanac`, see build.rs).
 //! A thread asks once a minute (and right after a sign-in or a tap) and sends `island://almanac`
 //! when the result changed. Signed out, or with the module switched off, nothing is requested.
@@ -123,7 +122,7 @@ fn set_oauth(oauth: bool) {
     save_config(&Config { oauth, ..config() });
 }
 
-// ---------- keychain and session ----------
+// ---------- secrets and session ----------
 
 fn refresh_token() -> Option<String> {
     crate::secrets::get(ACCOUNT)
@@ -201,7 +200,7 @@ fn keep(v: &Value) -> Result<(), Failure> {
     Ok(())
 }
 
-/// A valid access token: the one in memory, or a fresh one from the keychain's refresh token.
+/// A valid access token: the one in memory, or a fresh one from the stored refresh token.
 fn access() -> Result<String, Failure> {
     if let Some(s) = SESSION.lock().unwrap().as_ref() {
         if Instant::now() < s.until {
@@ -506,8 +505,8 @@ fn signed_in(v: &Value) -> Result<String, String> {
     set_oauth(false);
     keep(v).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать вход в Связку ключей",
-            "Cannot save the sign-in to the system keychain",
+            "Не удалось сохранить вход на этом компьютере",
+            "Cannot save the sign-in on this computer",
         )
         .to_owned()
     })?;
@@ -523,7 +522,7 @@ fn no_build() -> String {
     .into()
 }
 
-/// Sign out: the session ends on the server too (best effort), the keychain forgets it.
+/// Sign out: the session ends on the server too (best effort), the stored token is forgotten.
 pub fn sign_out() {
     if config().oauth {
         if let Some(refresh) = refresh_token() {
@@ -845,8 +844,8 @@ pub fn sign_in_browser() -> Result<String, String> {
     })?;
     keep(&v).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать вход в Связку ключей",
-            "Cannot save the sign-in to the system keychain",
+            "Не удалось сохранить вход на этом компьютере",
+            "Cannot save the sign-in on this computer",
         )
         .to_owned()
     })?;

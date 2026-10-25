@@ -15,6 +15,7 @@ mod vercel;
 // on Mac only its tests use it: the choice of sources is Windows-only
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 mod ical;
+mod identity;
 mod lang;
 mod media;
 mod modules;
@@ -142,7 +143,7 @@ fn feeds_state(feeds: State<'_, Arc<Mutex<Feeds>>>) -> FeedsSnapshot {
     }
 }
 
-/// Connect a GitHub token: checked against GitHub, then kept in the keychain. Returns the login.
+/// Connect a GitHub token: checked against GitHub, then kept in secrets.rs. Returns the login.
 #[tauri::command]
 async fn github_connect(token: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || github::connect(&token))
@@ -217,7 +218,7 @@ async fn github_disconnect() {
     let _ = tauri::async_runtime::spawn_blocking(github::disconnect).await;
 }
 
-/// Connect a Vercel token: checked against Vercel, then kept in the keychain. Returns the username.
+/// Connect a Vercel token: checked against Vercel, then kept in secrets.rs. Returns the username.
 #[tauri::command]
 async fn vercel_connect(token: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || vercel::connect(&token))
@@ -340,7 +341,7 @@ fn almanac_open(id: String) -> Result<(), String> {
     almanac::open_habit(&id)
 }
 
-/// Connect a Notion integration token: checked against Notion, then kept in the keychain.
+/// Connect a Notion integration token: checked against Notion, then kept in secrets.rs.
 /// Returns the workspace name.
 #[tauri::command]
 async fn notion_connect(token: String) -> Result<String, String> {
@@ -375,7 +376,7 @@ async fn notion_disconnect() {
 }
 
 /// Connect Grafana: the address and service account token are checked, then kept in the
-/// keychain. Returns the organisation's name.
+/// secrets.rs. Returns the organisation's name.
 #[tauri::command]
 async fn grafana_connect(url: String, token: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || grafana::connect(&url, &token))
@@ -815,6 +816,9 @@ pub fn run() {
         uninstall::Cli::Bye(dir) => return uninstall::run_window(dir, context()),
         _ => {}
     }
+
+    // before any window: the webview's storage moves with the rest
+    identity::migrate();
 
     #[cfg(windows)]
     platform::init_process();

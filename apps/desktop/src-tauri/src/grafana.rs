@@ -1,8 +1,7 @@
 //! Grafana (stage 8): the alert rules firing or pending right now, and one dashboard the user
 //! picked - a link to it and a small graph of one of its panels over the last hour.
 //!
-//! The address and the service account token live only in the system keychain (service
-//! `dev.almanac.notch`), like the other tokens. A thread asks that address - and nothing else -
+//! The address and the service account token live only in secrets.rs (a private file on the Mac, Credential Manager on Windows), like the other tokens. A thread asks that address - and nothing else -
 //! once a minute (and right after a change) and sends `island://grafana` when the result changed.
 //! Only rule names, states and times, the dashboard's title and one panel's numbers leave this
 //! module; the token never goes to the frontend or to a log. Without an address and a token, or
@@ -182,7 +181,7 @@ pub fn normalize(addr: &str) -> Result<String, &'static str> {
     Ok(format!("{scheme}://{rest}"))
 }
 
-// ---------- keychain ----------
+// ---------- secrets (secrets.rs) ----------
 
 fn secret(account: &str) -> Option<String> {
     crate::secrets::get(account)
@@ -194,7 +193,7 @@ fn creds() -> Option<(String, String)> {
     Some((base, secret(ACCOUNT_TOKEN)?))
 }
 
-/// For the settings window: the saved address (not secret, the token stays in the keychain).
+/// For the settings window: the saved address (not secret, the token stays in secrets.rs).
 pub fn address() -> Option<String> {
     secret(ACCOUNT_URL)
 }
@@ -643,7 +642,7 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
     });
 }
 
-/// Check the address and token against Grafana, then keep both in the keychain. Returns the
+/// Check the address and token against Grafana, then keep both in secrets.rs. Returns the
 /// organisation's name.
 pub fn connect(addr: &str, token: &str) -> Result<String, String> {
     let base = normalize(addr).map_err(str::to_owned)?;
@@ -663,8 +662,8 @@ pub fn connect(addr: &str, token: &str) -> Result<String, String> {
         .and_then(|_| crate::secrets::set(ACCOUNT_TOKEN, token))
         .map_err(|_| {
             crate::lang::t(
-                "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
-                "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
+                "Не удалось сохранить токен на этом компьютере, попробуйте ещё раз",
+                "Cannot save the token on this computer, try again",
             )
             .to_owned()
         })?;

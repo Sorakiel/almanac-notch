@@ -1,6 +1,6 @@
 //! Vercel (stage 8): the latest deployments of my projects (the card shows three, like coucou).
 //!
-//! The token lives only in the system keychain (service `dev.almanac.notch`), like GitHub's.
+//! The token lives only in secrets.rs (a private file on the Mac, Credential Manager on Windows), like GitHub's.
 //! A thread asks `api.vercel.com` once a minute (and right after a token change) and sends
 //! `island://vercel` when the result changed. Only project names, deployment states, targets,
 //! branches and times leave this module; the token never goes to the frontend or to a log.
@@ -73,7 +73,7 @@ impl State {
     }
 }
 
-// ---------- keychain ----------
+// ---------- secrets (secrets.rs) ----------
 
 fn token() -> Option<String> {
     crate::secrets::get(ACCOUNT)
@@ -378,7 +378,7 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
     });
 }
 
-/// Check the token against Vercel, then keep it in the keychain. Returns the username.
+/// Check the token against Vercel, then keep it in secrets.rs. Returns the username.
 pub fn connect(token: &str) -> Result<String, String> {
     let token = token.trim();
     if token.is_empty() {
@@ -398,8 +398,8 @@ pub fn connect(token: &str) -> Result<String, String> {
     })?;
     crate::secrets::set(ACCOUNT, token).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
-            "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
+            "Не удалось сохранить токен на этом компьютере, попробуйте ещё раз",
+            "Cannot save the token on this computer, try again",
         )
         .to_owned()
     })?;

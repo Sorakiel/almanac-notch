@@ -1,7 +1,7 @@
 //! Notion (stage 8): the pages edited last among those shared with my integration (the card
 //! shows three, like coucou).
 //!
-//! The internal integration token lives only in the system keychain (service `dev.almanac.notch`),
+//! The internal integration token lives only in secrets.rs (a private file on the Mac, Credential Manager on Windows),
 //! like GitHub's and Vercel's. A thread asks `api.notion.com` once a minute (and right after a
 //! token change) and sends `island://notion` when the result changed. Only page titles, icons,
 //! edit times, who edited and links leave this module; page contents are never read, and the
@@ -121,7 +121,7 @@ fn resolve_me(picked: Option<String>, people: &[Person]) -> Option<String> {
     }
 }
 
-// ---------- keychain ----------
+// ---------- secrets (secrets.rs) ----------
 
 fn token() -> Option<String> {
     crate::secrets::get(ACCOUNT)
@@ -390,7 +390,7 @@ pub fn start(emit: impl Fn(&State) + Send + 'static) {
     });
 }
 
-/// Check the token against Notion, then keep it in the keychain. Returns the workspace name.
+/// Check the token against Notion, then keep it in secrets.rs. Returns the workspace name.
 pub fn connect(token: &str) -> Result<String, String> {
     let token = token.trim();
     if token.is_empty() {
@@ -410,8 +410,8 @@ pub fn connect(token: &str) -> Result<String, String> {
     })?;
     crate::secrets::set(ACCOUNT, token).map_err(|_| {
         crate::lang::t(
-            "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
-            "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
+            "Не удалось сохранить токен на этом компьютере, попробуйте ещё раз",
+            "Cannot save the token on this computer, try again",
         )
         .to_owned()
     })?;
