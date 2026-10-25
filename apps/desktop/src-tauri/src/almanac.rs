@@ -20,7 +20,6 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const SERVICE: &str = "dev.almanac.notch";
 const ACCOUNT: &str = "almanac-refresh";
 const PERIOD: Duration = Duration::from_secs(60);
 const MAX_BACKOFF: Duration = Duration::from_secs(300);
@@ -126,12 +125,8 @@ fn set_oauth(oauth: bool) {
 
 // ---------- keychain and session ----------
 
-fn entry() -> Result<keyring::Entry, keyring::Error> {
-    keyring::Entry::new(SERVICE, ACCOUNT)
-}
-
 fn refresh_token() -> Option<String> {
-    entry().ok()?.get_password().ok().filter(|t| !t.is_empty())
+    crate::secrets::get(ACCOUNT)
 }
 
 struct Session {
@@ -192,9 +187,7 @@ fn keep(v: &Value) -> Result<(), Failure> {
         return Err(Failure::Bad(0));
     };
     let ttl = v["expires_in"].as_u64().unwrap_or(3600);
-    entry()
-        .and_then(|e| e.set_password(refresh))
-        .map_err(|_| Failure::Bad(0))?;
+    crate::secrets::set(ACCOUNT, refresh).map_err(|_| Failure::Bad(0))?;
     if let Some(m) = v["user"]["email"]
         .as_str()
         .or_else(|| v["account"]["email"].as_str())
@@ -250,9 +243,7 @@ fn access() -> Result<String, Failure> {
 
 fn forget() {
     *SESSION.lock().unwrap() = None;
-    if let Ok(e) = entry() {
-        let _ = e.delete_credential();
-    }
+    crate::secrets::remove(ACCOUNT);
 }
 
 // ---------- the two functions ----------

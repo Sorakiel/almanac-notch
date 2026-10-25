@@ -22,6 +22,7 @@ mod modules;
 mod outlook;
 mod platform;
 mod prefs;
+mod secrets;
 mod settings;
 mod sound;
 mod tray;

@@ -17,7 +17,6 @@ use serde_json::{json, Value};
 
 use crate::lang;
 
-const SERVICE: &str = "dev.almanac.notch";
 const ACCOUNT: &str = "vercel-token";
 const API: &str = "https://api.vercel.com";
 const PERIOD: Duration = Duration::from_secs(60);
@@ -76,12 +75,8 @@ impl State {
 
 // ---------- keychain ----------
 
-fn entry() -> Result<keyring::Entry, keyring::Error> {
-    keyring::Entry::new(SERVICE, ACCOUNT)
-}
-
 fn token() -> Option<String> {
-    entry().ok()?.get_password().ok().filter(|t| !t.is_empty())
+    crate::secrets::get(ACCOUNT)
 }
 
 // ---------- reading ----------
@@ -401,7 +396,7 @@ pub fn connect(token: &str) -> Result<String, String> {
         )
         .to_owned(),
     })?;
-    entry().and_then(|e| e.set_password(token)).map_err(|_| {
+    crate::secrets::set(ACCOUNT, token).map_err(|_| {
         crate::lang::t(
             "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
             "Cannot save the token to the system keychain. Allow access if the system asks, and try again",
@@ -413,9 +408,7 @@ pub fn connect(token: &str) -> Result<String, String> {
 }
 
 pub fn disconnect() {
-    if let Ok(e) = entry() {
-        let _ = e.delete_credential();
-    }
+    crate::secrets::remove(ACCOUNT);
     poke();
 }
 

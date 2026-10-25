@@ -19,7 +19,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-const SERVICE: &str = "dev.almanac.notch";
 const ACCOUNT_TOKEN: &str = "grafana-token";
 const ACCOUNT_URL: &str = "grafana-url";
 const PERIOD: Duration = Duration::from_secs(60);
@@ -185,16 +184,8 @@ pub fn normalize(addr: &str) -> Result<String, &'static str> {
 
 // ---------- keychain ----------
 
-fn entry(account: &str) -> Result<keyring::Entry, keyring::Error> {
-    keyring::Entry::new(SERVICE, account)
-}
-
 fn secret(account: &str) -> Option<String> {
-    entry(account)
-        .ok()?
-        .get_password()
-        .ok()
-        .filter(|t| !t.is_empty())
+    crate::secrets::get(account)
 }
 
 /// The saved address and token, both or nothing.
@@ -668,10 +659,8 @@ pub fn connect(addr: &str, token: &str) -> Result<String, String> {
         .to_owned(),
         Failure::Missing | Failure::Net => offline(),
     })?;
-    entry(ACCOUNT_URL)
-        .and_then(|e| e.set_password(&base))
-        .and_then(|_| entry(ACCOUNT_TOKEN))
-        .and_then(|e| e.set_password(token))
+    crate::secrets::set(ACCOUNT_URL, &base)
+        .and_then(|_| crate::secrets::set(ACCOUNT_TOKEN, token))
         .map_err(|_| {
             crate::lang::t(
                 "Не удалось записать токен в Связку ключей. Разрешите доступ, если система спросит, и попробуйте ещё раз",
@@ -685,9 +674,7 @@ pub fn connect(addr: &str, token: &str) -> Result<String, String> {
 
 pub fn disconnect() {
     for a in [ACCOUNT_TOKEN, ACCOUNT_URL] {
-        if let Ok(e) = entry(a) {
-            let _ = e.delete_credential();
-        }
+        crate::secrets::remove(a);
     }
     let _ = fs::remove_file(cfg_path());
     poke();

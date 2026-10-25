@@ -49,6 +49,9 @@ export function depthPush(s: IslandState, mod: ModuleId, key: string): void {
     d.stack = [];
   }
   if (d.stack[d.stack.length - 1] === key) return;
+  // a fresh way in from the card starts every list at its top; back and forth inside keeps it.
+  // Not on the way out: the leaving level would jump while it still fades.
+  if (!d.stack.length) d.scroll = {};
   d.from = d.stack[d.stack.length - 1] ?? '';
   d.stack.push(key);
   d.dir = 1;

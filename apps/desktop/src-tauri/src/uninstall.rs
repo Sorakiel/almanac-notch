@@ -24,17 +24,6 @@ use almanac_hook::{install, paths};
 use crate::lang::t;
 
 const SERVICE: &str = "dev.almanac.notch";
-/// Every Keychain / Credential Manager entry the app writes (github.rs, vercel.rs, notion.rs,
-/// grafana.rs, almanac.rs, calendar.rs).
-const SECRETS: [&str; 7] = [
-    "github-token",
-    "vercel-token",
-    "notion-token",
-    "grafana-token",
-    "grafana-url",
-    "almanac-refresh",
-    "calendar-ical",
-];
 
 /// What the window shows when it is done: problems that did not stop the removal.
 #[derive(Clone, Debug, Default, Serialize)]
@@ -104,16 +93,11 @@ fn remove_path(p: &PathBuf, warnings: &mut Vec<String>) {
 }
 
 fn wipe(warnings: &mut Vec<String>) {
-    for name in SECRETS {
-        if let Ok(e) = keyring::Entry::new(SERVICE, name) {
-            match e.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => {}
-                Err(err) => warnings.push(format!(
-                    "{} {name}: {err}",
-                    t("Не удалось удалить секрет", "Could not remove the secret")
-                )),
-            }
-        }
+    for err in crate::secrets::wipe() {
+        warnings.push(format!(
+            "{} {err}",
+            t("Не удалось удалить секрет", "Could not remove the secret")
+        ));
     }
     for p in data_paths() {
         remove_path(&p, warnings);

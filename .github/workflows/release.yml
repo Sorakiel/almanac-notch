@@ -4,7 +4,7 @@
 #
 # Repository secrets:
 #   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD - updater key (README, "Релиз")
-#   ALMANAC_URL, ALMANAC_KEY - Almanac project address and public key (optional)
+#   ALMANAC_URL, ALMANAC_KEY - Almanac project address and public key (required)
 #   MAC_CERT_P12 (base64), MAC_CERT_PASSWORD - the self-signed "Almanac Notch" code signing
 #     certificate (~/.tauri/almanac-notch-sign.*); without them the Mac build is ad-hoc signed
 # Apple signing and notarization are off (owner, 2026-10-18); to turn them on add APPLE_CERTIFICATE,
@@ -53,6 +53,19 @@ jobs:
             apps/desktop/src-tauri -> target
             apps/desktop/hook -> target
             apps/setup -> target
+
+      # 0.2.0 shipped without them and the Almanac module silently fell back to the prototype's
+      # sample habits; a release must not
+      - name: Almanac address
+        shell: bash
+        env:
+          ALMANAC_URL: ${{ secrets.ALMANAC_URL }}
+          ALMANAC_KEY: ${{ secrets.ALMANAC_KEY }}
+        run: |
+          if [ -z "$ALMANAC_URL" ] || [ -z "$ALMANAC_KEY" ]; then
+            echo "::error::ALMANAC_URL and ALMANAC_KEY secrets are missing: the build would show sample habits"
+            exit 1
+          fi
 
       - run: npm ci
 

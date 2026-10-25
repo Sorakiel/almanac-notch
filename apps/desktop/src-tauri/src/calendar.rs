@@ -184,7 +184,6 @@ mod choice {
     /// Outlook that is not running is started headless only this often.
     const OUTLOOK_COLD_EVERY: Duration = Duration::from_secs(5 * 60);
 
-    const SERVICE: &str = "dev.almanac.notch";
     const ACCOUNT: &str = "calendar-ical";
 
     /// true = fetch the link again now (it was just changed)
@@ -218,12 +217,8 @@ mod choice {
             .map_err(crate::lang::save_failed)
     }
 
-    fn entry() -> Option<keyring::Entry> {
-        keyring::Entry::new(SERVICE, ACCOUNT).ok()
-    }
-
     fn link() -> Option<String> {
-        entry()?.get_password().ok()
+        crate::secrets::get(ACCOUNT)
     }
 
     fn outlook_installed() -> bool {
@@ -264,18 +259,12 @@ mod choice {
                     .into(),
                 })?;
                 let n = ical::parse(&text, from, to).len();
-                entry()
-                    .ok_or(crate::lang::t(
-                        "Хранилище паролей недоступно",
-                        "The credential store is unavailable",
-                    ))?
-                    .set_password(&url)
-                    .map_err(|e| {
-                        format!(
-                            "{} {e}",
-                            crate::lang::t("Не удалось сохранить ссылку:", "Cannot save the link:")
-                        )
-                    })?;
+                crate::secrets::set(ACCOUNT, &url).map_err(|e| {
+                    format!(
+                        "{} {e}",
+                        crate::lang::t("Не удалось сохранить ссылку:", "Cannot save the link:")
+                    )
+                })?;
                 Some(n)
             }
             "outlook" => {
@@ -308,9 +297,7 @@ mod choice {
             _ => return Err(crate::lang::t("Неизвестный источник", "Unknown source").into()),
         };
         if src != "ical" {
-            if let Some(e) = entry() {
-                let _ = e.delete_credential();
-            }
+            crate::secrets::remove(ACCOUNT);
         }
         save_source(src)?;
         poke(true);
