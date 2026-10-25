@@ -17,7 +17,7 @@ use objc2_app_kit::{
     NSDraggingItem, NSDraggingSession, NSDraggingSource, NSEventType, NSImage, NSPasteboard,
     NSPasteboardNameDrag, NSPasteboardTypePNG, NSPasteboardTypeString, NSPasteboardTypeTIFF,
     NSPasteboardTypeURL, NSPasteboardWriting, NSSharingService, NSSharingServiceDelegate,
-    NSSharingServiceNameComposeEmail, NSView, NSWorkspace,
+    NSSharingServiceNameComposeEmail, NSWorkspace,
 };
 use objc2_core_foundation::CGSize;
 use objc2_foundation::{
@@ -191,11 +191,8 @@ thread_local! {
 
 /// Main thread. Files go as file URLs (a copy where they land), links as web URLs (a link in a
 /// chat, a .webloc in Finder), text as text - each the way its target expects it.
-pub fn drag(app: &AppHandle, window: &WebviewWindow, items: Vec<Item>) {
+pub fn drag(app: &AppHandle, _window: &WebviewWindow, items: Vec<Item>) {
     let mtm = MainThreadMarker::new().expect("main thread");
-    let Ok(ptr) = window.ns_view() else { return };
-    // SAFETY: the webview's view, alive as long as the window (it lives in our panel).
-    let view: &NSView = unsafe { &*(ptr as *const NSView) };
     let app_ns = NSApplication::sharedApplication(mtm);
     let Some(event) = app_ns.currentEvent().filter(|e| {
         matches!(
@@ -203,6 +200,13 @@ pub fn drag(app: &AppHandle, window: &WebviewWindow, items: Vec<Item>) {
             NSEventType::LeftMouseDown | NSEventType::LeftMouseDragged
         )
     }) else {
+        return;
+    };
+    // The window that got the press is our panel; Tauri's `ns_view()` is the empty view left in
+    // its hidden window when the webview moved to the panel, so a session started there drew the
+    // image away from the cursor and took a drop into Finder or a chat for a drop back home.
+    let Some(win) = event.window(mtm) else { return };
+    let Some(view) = win.contentView() else {
         return;
     };
     let at = view.convertPoint_fromView(event.locationInWindow(), None);
@@ -231,7 +235,7 @@ pub fn drag(app: &AppHandle, window: &WebviewWindow, items: Vec<Item>) {
         unsafe { di.setDraggingFrame_contents(frame, Some(&icon)) };
         list.push(di);
     }
-    let home = view.window().map(|w| w.frame()).unwrap_or(NSRect::ZERO);
+    let home = win.frame();
     let source = DragSource::alloc(mtm).set_ivars(SourceIvars {
         app: app.clone(),
         ids: items.iter().map(|it| it.id.clone()).collect(),
