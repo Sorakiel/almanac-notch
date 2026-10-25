@@ -75,7 +75,6 @@ function renderCard(): void {
   // the volume and the tiers mean nothing while sound is off: shown, but quiet
   $('sound').classList.toggle('muted', !c.sound);
   $('li-sound').textContent = c.sound ? t('Включён · {0} %', Math.round(c.volume * 100)) : t('Выключен');
-  document.dispatchEvent(new CustomEvent('settings:sound', { detail: c.sound }));
 }
 
 hover.addEventListener('change', () => {

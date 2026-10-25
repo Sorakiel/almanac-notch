@@ -412,18 +412,6 @@ function showTab(name: string): void {
     if (name === 'general' || !document.querySelector('.detail > main:not([hidden])')) showModule('general');
   }
 }
-// the sidebar's mascot (stage 9f): the island's character in the window, not a form's
-const sideMascot = welcomeMascot($<HTMLCanvasElement>('side-mascot'), true);
-sideMascot.setRunning(true);
-// sound switched off: it dozes off; back on: it wakes
-document.addEventListener('settings:sound', (e) => {
-  if (!statusSettled) return;
-  if ((e as CustomEvent<boolean>).detail) sideMascot.poke();
-  else sideMascot.react('sleep');
-});
-/** the first statuses have arrived: from now on a change is news */
-let statusSettled = false;
-window.setTimeout(() => (statusSettled = true), 2500);
 /** the page on screen in the modules pane */
 let current: HTMLElement | null = null;
 function showModule(name: string): void {
@@ -473,11 +461,7 @@ const STATUS: Record<string, [string, string]> = {
 for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   const copy = (): void => {
     $('li-' + k).textContent = $(textId).textContent;
-    const was = $('li-' + k + '-dot').className,
-      now = $(dotId).className;
-    $('li-' + k + '-dot').className = now;
-    // a module just connected: the sidebar's mascot is glad with the person (not on the first read)
-    if (statusSettled && !was.includes(' ok') && now.includes(' ok')) sideMascot.react('success');
+    $('li-' + k + '-dot').className = $(dotId).className;
   };
   const o = new MutationObserver(copy);
   o.observe($(textId), { childList: true, characterData: true, subtree: true });

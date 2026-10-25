@@ -56,6 +56,6 @@ for (let i = 0; i < N; i++) {
 }
 await b.close();
 // a contact sheet, six frames a row, and a 60 fps clip
-execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', `${dir}/%03d.png`, '-vf', 'scale=410:-2,tile=6x' + Math.ceil(N / 6), '-frames:v', '1', `${dir}.png`]);
+if (N <= 60) execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', `${dir}/%03d.png`, '-vf', 'scale=410:-2,tile=6x' + Math.ceil(N / 6), '-frames:v', '1', `${dir}.png`]);
 execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', `${dir}/%03d.png`, '-pix_fmt', 'yuv420p', `${dir}.mp4`]);
 console.log(`${N} frames → ${dir}/, ${dir}.png, ${dir}.mp4`);

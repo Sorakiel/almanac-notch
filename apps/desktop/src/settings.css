@@ -127,13 +127,7 @@ body {
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
-.side-mascot {
-  flex: none;
-  display: block;
-  width: 100%;
-  height: 64px;
-  margin: -12px 0 6px;
-}
+
 .mod:active {
   transform: none;
 }

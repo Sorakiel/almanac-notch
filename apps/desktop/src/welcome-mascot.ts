@@ -18,8 +18,8 @@ export interface WelcomeMascot {
   setRunning: (on: boolean) => void;
 }
 
-/** `small`: a sidebar's corner (stage 9f) - the stage takes the canvas's own size, however small */
-export function welcomeMascot(canvas: HTMLCanvasElement, small = false): WelcomeMascot {
+/** `k` < 1: a small canvas (stage 9f) - the stage is drawn at 1/k of the canvas and scaled down */
+export function welcomeMascot(canvas: HTMLCanvasElement, k = 1): WelcomeMascot {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const m = createMascot({ settings: defaultSettings(reduced), now: performance.now(), greetAfter: null });
   const s = m.state;
@@ -36,7 +36,8 @@ export function welcomeMascot(canvas: HTMLCanvasElement, small = false): Welcome
   let dpr = 1;
   // the stage's mascot is never smaller than the prototype's R = 46 (pose.ts geo): a small corner
   // draws the stage at 1/K of the size and scales it down
-  const K = small ? 0.42 : 1;
+  const K = k;
+  const small = k < 1;
   function resize(): void {
     const r = canvas.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
