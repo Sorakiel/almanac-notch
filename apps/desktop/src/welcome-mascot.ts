@@ -12,13 +12,14 @@ import {
 
 export interface WelcomeMascot {
   /** play an event: greeting, success, dance... */
-  react: (type: EventType) => void;
+  react: (type: EventType | 'sleep') => void;
   poke: () => void;
   /** run or pause the frame loop (the guide is hidden behind settings) */
   setRunning: (on: boolean) => void;
 }
 
-export function welcomeMascot(canvas: HTMLCanvasElement): WelcomeMascot {
+/** `small`: a sidebar's corner (stage 9f) - the stage takes the canvas's own size, however small */
+export function welcomeMascot(canvas: HTMLCanvasElement, small = false): WelcomeMascot {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const m = createMascot({ settings: defaultSettings(reduced), now: performance.now(), greetAfter: null });
   const s = m.state;
@@ -33,20 +34,23 @@ export function welcomeMascot(canvas: HTMLCanvasElement): WelcomeMascot {
   };
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
   let dpr = 1;
+  // the stage's mascot is never smaller than the prototype's R = 46 (pose.ts geo): a small corner
+  // draws the stage at 1/K of the size and scales it down
+  const K = small ? 0.42 : 1;
   function resize(): void {
     const r = canvas.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
-    s.W = Math.max(200, r.width);
-    s.H = Math.max(120, r.height);
-    canvas.width = Math.round(s.W * dpr);
-    canvas.height = Math.round(s.H * dpr);
+    s.W = small ? Math.max(1, r.width) / K : Math.max(200, r.width);
+    s.H = small ? Math.max(1, r.height) / K : Math.max(120, r.height);
+    canvas.width = Math.round(s.W * K * dpr);
+    canvas.height = Math.round(s.H * K * dpr);
   }
   new ResizeObserver(resize).observe(canvas);
   resize();
 
   const point = (e: PointerEvent | MouseEvent) => {
     const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    return { x: (e.clientX - r.left) / K, y: (e.clientY - r.top) / K };
   };
   window.addEventListener('pointermove', (e) => stagePointerMove(s, point(e), performance.now()), { passive: true });
   canvas.addEventListener('pointerdown', (e) => {
@@ -63,7 +67,7 @@ export function welcomeMascot(canvas: HTMLCanvasElement): WelcomeMascot {
     last = now;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    m.renderStage(ctx, dpr);
+    m.renderStage(ctx, dpr * K);
     canvas.style.cursor = m.stageCursor();
     if (running) raf = requestAnimationFrame(frame);
   }

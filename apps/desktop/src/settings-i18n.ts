@@ -3,6 +3,40 @@
 import { EN, type Lang } from '@almanac-notch/island';
 
 export const SETTINGS_EN: Readonly<Record<string, string>> = {
+  // the island, sound, keys and app pages (stage 9f)
+  Клавиши: 'Keys',
+  'Открытие и закрытие': 'Opening and closing',
+  'Остров открывается, когда курсор подходит к вырезу.': 'The island opens when the pointer comes to the notch.',
+  'Остров только выглядывает; открывает его клик.': 'The island only peeks out; a click opens it.',
+  'Закрывать после ухода курсора': 'Close after the pointer leaves',
+  'Если остров открыли кликом. Открытый наведением закрывается почти сразу.':
+    'When the island was opened with a click. Opened by hovering, it closes almost at once.',
+  'Где остров': 'Where the island is',
+  Громкость: 'Volume',
+  'Что звучит': 'What makes a sound',
+  'Во время звонка звуки молчат, под музыку кнопки молчат, а остальное тише; ночью (с 22 до 8) всё на треть тише.':
+    'During a call nothing sounds; with music on, buttons are silent and the rest is quieter; at night (22 to 8) everything is a third quieter.',
+  'Включён · {0} %': 'On · {0} %',
+  Выключен: 'Off',
+  'Отвечают Claude Code из любого приложения, пока в острове открыт вопрос или разрешение. Нажмите на сочетание и затем новые клавиши: Esc отменяет.':
+    'They answer Claude Code from any app while a question or a permission is open on the island. Click a combination, then press the new keys: Esc cancels.',
+  'Вариант 1': 'Option 1',
+  'Вариант 2': 'Option 2',
+  'Вариант 3': 'Option 3',
+  'Нажмите клавиши…': 'Press the keys…',
+  'Новое сочетание для «{0}». Esc - отмена.': 'A new combination for "{0}". Esc cancels.',
+  '«{0}» уже занято: сначала смените одно из сочетаний.':
+    '"{0}" is already taken: change one of the combinations first.',
+  'Нужен хотя бы один модификатор: {0}.': 'It needs at least one modifier: {0}.',
+  '⌥, ⌃ или ⌘': '⌥, ⌃ or ⌘',
+  'Alt, Ctrl или Win': 'Alt, Ctrl or Win',
+  '{0} уже отвечает «{1}». Выберите другое сочетание.': '{0} already answers "{1}". Choose another combination.',
+  '{0} занято другим приложением - сочетание не изменено.':
+    '{0} is held by another app - the combination is unchanged.',
+  '«{0}» теперь {1}.': '"{0}" is now {1}.',
+  'Вернуть как было': 'Restore the defaults',
+  '{0} из 5': '{0} of 5',
+  Обновления: 'Updates',
   // Almanac
   'В этой сборке нет адреса Almanac: остров показывает пример привычек. Адрес задаётся при сборке (файл .env.almanac).':
     'This build has no Almanac address: the island shows sample habits. The address is set at build time (the .env.almanac file).',

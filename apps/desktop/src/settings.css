@@ -95,8 +95,44 @@ body {
 .mod:hover {
   background: rgba(255, 255, 255, 0.05);
 }
-.mod.on {
+.list {
+  position: relative;
+}
+/* the selection is one object that travels between rows on the island's tab spring
+   (settings-motion.ts selectRow), not a background that blinks from row to row */
+.side-sel {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
+  z-index: 0;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+  opacity: 0;
+  pointer-events: none;
+}
+.side-sel.on {
+  opacity: 1;
+}
+.mod {
+  position: relative;
+  z-index: 1;
+}
+.mod.on:hover {
+  background: transparent;
+}
+#mod-count {
+  margin-left: 4px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.side-mascot {
+  flex: none;
+  display: block;
+  width: 100%;
+  height: 64px;
+  margin: -12px 0 6px;
 }
 .mod:active {
   transform: none;
@@ -153,13 +189,15 @@ main {
   flex: 1;
   padding: 0 32px 28px;
   overflow: auto;
-  animation: page-in 0.22s var(--ease) both;
 }
-@keyframes page-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
+/* the page being left lies over the new one while it fades (settings-motion.ts) */
+.detail {
+  position: relative;
+}
+main.leaving {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .page-head {
   position: sticky;
@@ -882,4 +920,86 @@ body:not(.dev) .dev-only {
 }
 .w-cal-slot .help {
   display: none;
+}
+
+/* ---------- sound (stage 9f) ---------- */
+.vol {
+  --v: 0.6;
+  flex: none;
+  width: 200px;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.vol::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--text) calc(var(--v) * 100%), rgba(255, 255, 255, 0.14) 0);
+}
+.vol::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  -webkit-appearance: none;
+  transition: transform 0.15s var(--ease);
+}
+.vol:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+/* sound off: the level and the tiers stay visible, but quiet - they wait for the switch */
+#sound.muted .vol,
+#sound.muted #snd-tiers {
+  opacity: 0.4;
+  transition: opacity 0.2s var(--ease);
+}
+
+/* ---------- answer keys (stage 9f) ---------- */
+.key-row > span {
+  flex: 1;
+}
+.key-row.off > span {
+  color: var(--faint);
+}
+.key-chip {
+  min-width: 64px;
+  height: 26px;
+  margin-right: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  color: var(--text);
+  font:
+    500 12px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.key-chip:hover:not(:disabled) {
+  background: var(--card-hover);
+}
+.key-chip:disabled {
+  color: var(--faint);
+}
+.key-chip.rec {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-family: 'Onest', system-ui, sans-serif;
+}
+.key-chip.clash {
+  box-shadow: inset 0 0 0 1px var(--bad);
+}
+#key-note {
+  color: var(--muted);
+}
+#key-note.err {
+  color: var(--bad);
 }

@@ -10,6 +10,8 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { AlState, Calendar, GfState, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
+import { leavePage, revealPage, selectRow } from './settings-motion';
+import { redrawPrefs } from './settings-prefs';
 import { welcomeMascot, type WelcomeMascot } from './welcome-mascot';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -410,21 +412,36 @@ function showTab(name: string): void {
     if (name === 'general' || !document.querySelector('.detail > main:not([hidden])')) showModule('general');
   }
 }
+// the sidebar's mascot (stage 9f): the island's character in the window, not a form's
+const sideMascot = welcomeMascot($<HTMLCanvasElement>('side-mascot'), true);
+sideMascot.setRunning(true);
+// sound switched off: it dozes off; back on: it wakes
+document.addEventListener('settings:sound', (e) => {
+  if (!statusSettled) return;
+  if ((e as CustomEvent<boolean>).detail) sideMascot.poke();
+  else sideMascot.react('sleep');
+});
+/** the first statuses have arrived: from now on a change is news */
+let statusSettled = false;
+window.setTimeout(() => (statusSettled = true), 2500);
+/** the page on screen in the modules pane */
+let current: HTMLElement | null = null;
 function showModule(name: string): void {
   $('tab-welcome').hidden = true;
   $('tab-modules').hidden = false;
   mascot?.setRunning(false);
-  for (const m of mods) m.classList.toggle('on', m.dataset.module === name);
-  for (const m of document.querySelectorAll<HTMLElement>('.detail > main')) {
-    const show = m.id === name;
-    if (show && m.hidden) {
-      // a short fade-in, like a native settings pane
-      m.style.animation = 'none';
-      void m.offsetWidth;
-      m.style.animation = '';
-    }
-    m.hidden = !show;
-  }
+  const row = mods.find((m) => m.dataset.module === name);
+  for (const m of mods) m.classList.toggle('on', m === row);
+  if (row) selectRow(row, !!current);
+  const next = document.querySelector<HTMLElement>(`.detail > main#${name}`);
+  if (!next || next === current) return;
+  const old = current;
+  current = next;
+  // the island's tab change: the old page leaves fast, the new one comes in by layers
+  if (old) leavePage(old, () => (old.hidden = old !== current));
+  next.hidden = false;
+  next.scrollTop = 0;
+  revealPage(next, !!old);
 }
 for (const m of mods) m.addEventListener('click', () => showModule(m.dataset.module ?? 'general'));
 // each module page's header shows the module's icon from the sidebar
@@ -438,6 +455,7 @@ showModule('general');
 function showSection(sec: string): void {
   if (sec === 'welcome') showWelcome();
   else if (mods.some((m) => m.dataset.module === sec)) showModule(sec);
+  // "island" (the island's card) and anything unknown open the island's page
   else showModule('general');
 }
 
@@ -455,7 +473,11 @@ const STATUS: Record<string, [string, string]> = {
 for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   const copy = (): void => {
     $('li-' + k).textContent = $(textId).textContent;
-    $('li-' + k + '-dot').className = $(dotId).className;
+    const was = $('li-' + k + '-dot').className,
+      now = $(dotId).className;
+    $('li-' + k + '-dot').className = now;
+    // a module just connected: the sidebar's mascot is glad with the person (not on the first read)
+    if (statusSettled && !was.includes(' ok') && now.includes(' ok')) sideMascot.react('success');
   };
   const o = new MutationObserver(copy);
   o.observe($(textId), { childList: true, characterData: true, subtree: true });
@@ -832,6 +854,9 @@ function renderStep(back = false): void {
 function renderModCount(): void {
   const n = toggles.filter((x) => x.closest('.w-tiles') && x.checked).length;
   $('w-mods-count').textContent = t('Выбрано {0} из 4', n);
+  // the sidebar: how many of the island's 5 places are taken (modules.rs MAX_ON)
+  const on = Object.values(MOD_OF).filter((id) => !modCfg.off.includes(id)).length;
+  $('mod-count').textContent = t('{0} из 5', on);
 }
 function goStep(to: number): void {
   const back = to < step;
@@ -932,6 +957,8 @@ function renderLang(c: LangCfg): void {
   setLang(c.lang === 'en' ? 'en' : 'ru');
   for (const r of langs) r.checked = r.value === c.pick;
   translatePage(document.body);
+  redrawPrefs();
+  renderModCount();
   $('music-src').textContent = t(
     navigator.userAgent.includes('Windows')
       ? 'Windows: системный медиа-сеанс - любой плеер, который показывает себя в регуляторе громкости (Spotify, браузеры, Я.Музыка).'

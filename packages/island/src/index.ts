@@ -102,3 +102,5 @@ export function createMascot(opts: MascotOptions) {
   };
 }
 export type Mascot = ReturnType<typeof createMascot>;
+// the island's motion, shared with the settings window (stage 9f): one language of movement
+export { LAYER_IN, LAYER_STEP, RISE, TAB_OUT, springK } from './island/reveal';

@@ -3,5 +3,10 @@
   "identifier": "settings",
   "description": "Settings window: state events and its own commands",
   "windows": ["settings"],
-  "permissions": ["core:event:default", "core:default", "core:window:allow-start-dragging", "core:window:allow-close"]
+  "permissions": [
+    "core:event:default", "core:default", "core:window:allow-start-dragging", "core:window:allow-close",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered"
+  ]
 }
