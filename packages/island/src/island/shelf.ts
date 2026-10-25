@@ -9,6 +9,7 @@ import { after } from '../sim/state';
 import { hop } from '../sim/actions';
 import { tr } from '../i18n';
 import { card, cardMascot } from './card';
+import { drawMascot } from '../mascot/body';
 import { addHit, hovering } from './hits';
 import { hoverK, pressScale } from './hover';
 import { springK, switchTab } from './reveal';
@@ -182,7 +183,7 @@ export function drawShelf(s: IslandState, c: Ctx, X0: number, X1: number, y0: nu
   }
   // the outline that says "let go here" while something is carried over a full shelf
   if (carryK > 0.01) dropFrame(s, c, X0, y0, X1 - X0, H, carryK, dissolve ? 1 : 0);
-  cardMascot(s, c, X0, y0, y1, null, null);
+  keeper(s, c, X0, X1, y0, y1, carryK);
   const rx0 = X0 + KEEPER_W,
     rw = X1 - rx0,
     // a carried file opens a slot at the front: where it will land
@@ -227,12 +228,13 @@ function drawEmpty(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y
     H = y1 - y0;
   card(c, X0, y0, W, H, false);
   dropFrame(s, c, X0, y0, W, H, carryK, 1);
-  cardMascot(s, c, X0, y0, y1, null, null);
+  keeper(s, c, X0, X1, y0, y1, carryK);
   emptyText(s, c, X0, X1, y0, y1, carryK);
 }
 
 function emptyText(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number, carryK: number): void {
-  const tx = X0 + KEEPER_W + 8,
+  // the bigger mascot of the new styles needs a little more room before the words
+  const tx = X0 + KEEPER_W + (s.shelf.style === 'old' ? 8 : 18),
     cy = (y0 + y1) / 2,
     max = X1 - tx - 16;
   // what to do, then the two rules the person needs before trusting it with a file
@@ -254,6 +256,92 @@ function mixWhite(k: number): string {
   return `rgb(${r},${g},${b})`;
 }
 
+/** The shelf's colour for its frame and picks. The first version's blue (Almanac's mascot halo)
+ * read as a colour of its own with no meaning here (owner, 2026-10-25); the variants use a soft
+ * white - the island's own light. */
+function acc(s: IslandState): string {
+  return s.shelf.style === 'old' ? SHELF_ACC : '#E6EAF0';
+}
+
+/** the shelf's mascot: bigger than a card's (it is the only figure on the tab) */
+const KEEPER_R = 30;
+
+/** The mascot that keeps the shelf (owner, 2026-10-25: the card mascot was small, did not react
+ * to a carried file and had a blue halo that meant nothing here). Three ways to meet a file:
+ * - catch: it grows towards a carried file, a light under it brightens as the file comes nearer,
+ *   one ring goes out when it lands - "it comes to me, I have it";
+ * - reach: it leans and slides towards the file, the spot where the file will land lights up -
+ *   "there, that is where it goes";
+ * - breath: the card's edge glows in the mascot's breathing rhythm while a file is carried -
+ *   calm, the shelf and the mascot are one thing. */
+function keeper(s: IslandState, c: Ctx, X0: number, X1: number, y0: number, y1: number, carryK: number): void {
+  const sh = s.shelf,
+    st = sh.style;
+  if (st === 'old') return cardMascot(s, c, X0, y0, y1, null, null);
+  const a = clamp(carryK, 0, 1),
+    R = KEEPER_R,
+    mx = X0 + KEEPER_W / 2,
+    cy = (y0 + y1) / 2 + 2,
+    gy = cy + R * 0.92,
+    near = sh.carry ? 1 - clamp(Math.hypot(sh.carry.x - mx, sh.carry.y - cy) / 360, 0, 1) : 0,
+    age = sh.drop ? s.t - sh.drop.at : 9;
+  let grow = 1,
+    dx = 0;
+  c.save();
+  if (st === 'catch') {
+    grow = 1 + 0.12 * a * (0.5 + 0.5 * near);
+    const la = 0.05 + 0.26 * a * (0.35 + 0.65 * near),
+      g = c.createRadialGradient(mx, gy, 2, mx, gy, R * 2.3);
+    g.addColorStop(0, `rgba(255,255,255,${la})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.fillRect(mx - R * 2.4, gy - R * 2.4, R * 4.8, R * 4.8);
+  } else if (st === 'reach') {
+    if (sh.carry) {
+      dx = clamp((sh.carry.x - mx) * 0.05, -6, 14) * a;
+      const g = c.createRadialGradient(sh.carry.x, sh.carry.y, 4, sh.carry.x, sh.carry.y, 80);
+      g.addColorStop(0, `rgba(255,255,255,${0.16 * a})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g;
+      c.fillRect(sh.carry.x - 80, sh.carry.y - 80, 160, 160);
+    }
+    grow = 1 + 0.05 * a;
+  } else if (st === 'breath' && a > 0.01) {
+    const pulse = 0.5 + 0.5 * Math.sin((s.t * 2 * Math.PI) / 3.6),
+      ea = a * (0.14 + 0.16 * pulse);
+    c.shadowColor = `rgba(255,255,255,${ea})`;
+    c.shadowBlur = 18;
+    c.strokeStyle = `rgba(255,255,255,${ea})`;
+    c.lineWidth = 1.5;
+    rrect(c, X0 + 1, y0 + 1, X1 - X0 - 2, y1 - y0 - 2, 13);
+    c.stroke();
+    c.shadowBlur = 0;
+    grow = 1 + 0.06 * a;
+  }
+  // the landing: one ring, from the mascot (catch, breath) or from where the file fell (reach)
+  if (age < 0.6 && sh.drop) {
+    const e = 1 - Math.pow(1 - age / 0.6, 3),
+      rx = st === 'reach' ? sh.drop.x : mx,
+      ry = st === 'reach' ? sh.drop.y : cy;
+    c.strokeStyle = `rgba(255,255,255,${0.32 * (1 - age / 0.6)})`;
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.arc(rx, ry, R * 1.05 + 46 * e, 0, Math.PI * 2);
+    c.stroke();
+  }
+  c.restore();
+  const x = mx + dx;
+  c.save();
+  c.translate(x, gy);
+  c.scale(grow, grow);
+  c.translate(-x, -gy);
+  drawMascot(s, c, x, gy, R, 'card', '#141415', null);
+  c.restore();
+  s.mascotSpots.push({ x, y: gy - R, a: c.globalAlpha });
+  if (c.globalAlpha > 0.5) s.islandMascot = { x, y: cy, R };
+  addHit(s, c, { x: x - R * 1.1, y: gy - R * 2, w: R * 2.2, h: R * 2, act: 'mascot', cx: x, cy, R });
+}
+
 /** The dashed outline: barely there at rest (an empty shelf still reads as a place), the shelf's
  * blue and slowly moving while something is carried over it, with light from below. */
 function dropFrame(s: IslandState, c: Ctx, x: number, y: number, w: number, h: number, k: number, rest: number): void {
@@ -261,8 +349,8 @@ function dropFrame(s: IslandState, c: Ctx, x: number, y: number, w: number, h: n
   c.save();
   if (a > 0.01) {
     const g = c.createRadialGradient(x + w / 2, y + h + 20, 10, x + w / 2, y + h + 20, w * 0.6);
-    g.addColorStop(0, hexA(SHELF_ACC, 0.16 * a));
-    g.addColorStop(1, hexA(SHELF_ACC, 0));
+    g.addColorStop(0, hexA(acc(s), 0.16 * a));
+    g.addColorStop(1, hexA(acc(s), 0));
     c.fillStyle = g;
     rrect(c, x, y, w, h, 14);
     c.fill();
@@ -271,7 +359,7 @@ function dropFrame(s: IslandState, c: Ctx, x: number, y: number, w: number, h: n
   // moving only while carried: a still frame at rest does not pull the eye
   c.lineDashOffset = -s.t * 16 * a;
   c.lineWidth = 1.25;
-  c.strokeStyle = a > 0.01 ? hexA(SHELF_ACC, 0.12 * rest * (1 - a) + 0.7 * a) : `rgba(255,255,255,${0.13 * rest})`;
+  c.strokeStyle = a > 0.01 ? hexA(acc(s), 0.12 * rest * (1 - a) + 0.7 * a) : `rgba(255,255,255,${0.13 * rest})`;
   rrect(c, x + 0.75, y + 0.75, w - 1.5, h - 1.5, 13.5);
   c.stroke();
   c.restore();
@@ -284,10 +372,10 @@ function placeholder(s: IslandState, c: Ctx, x: number, y: number, h: number, k:
   c.setLineDash([4, 5]);
   c.lineDashOffset = -s.t * 16;
   c.lineWidth = 1.25;
-  c.strokeStyle = hexA(SHELF_ACC, 0.6);
+  c.strokeStyle = hexA(acc(s), 0.6);
   rrect(c, x + 0.75, y + 0.75, TILE_W - 1.5, h - 1.5, 12);
   c.stroke();
-  c.strokeStyle = hexA(SHELF_ACC, 0.8);
+  c.strokeStyle = hexA(acc(s), 0.8);
   c.setLineDash([]);
   c.lineWidth = 1.5;
   c.lineCap = 'round';
@@ -334,7 +422,7 @@ function tile(s: IslandState, c: Ctx, it: ShelfItem, x: number, y: number, h: nu
   c.fill();
   if (sel) {
     c.lineWidth = 1.5;
-    c.strokeStyle = hexA(SHELF_ACC, 0.8);
+    c.strokeStyle = hexA(acc(s), 0.8);
     rrect(c, x + 0.75, y + 0.75, TILE_W - 1.5, h - 1.5, 11.25);
     c.stroke();
   }

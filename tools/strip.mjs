@@ -105,6 +105,15 @@ async function dropAt(items, x, y) {
 
 if (scene.startsWith('shelf-')) {
   await addThumbs();
+  // STYLE=old|catch|reach|breath, EARS=1: the shelf mascot variants (owner, 2026-10-25)
+  await p.evaluate(
+    ([st, ears]) => {
+      const s = window.__state;
+      if (st) s.shelf.style = st;
+      s.ears = ears ? 1 : 0;
+    },
+    [process.env.STYLE ?? '', process.env.EARS ?? ''],
+  );
   await p.evaluate(() => (window.__state.host.openOnHover = false));
   if (scene === 'shelf-drop') {
     await carryPath([660, 225], [300, 110], 24);

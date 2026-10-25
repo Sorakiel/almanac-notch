@@ -296,7 +296,11 @@ export interface ShelfState {
   press: { id: string; x: number; y: number } | null;
   /** where the shelf's mascot glances for a moment: a tile landing or fading (island px, s.t) */
   look: { x: number; y: number; until: number } | null;
+  /** how the shelf's mascot meets a carried file (variants for the owner, island/shelf.ts) */
+  style: ShelfStyle;
 }
+
+export type ShelfStyle = 'old' | 'catch' | 'reach' | 'breath';
 
 /** Levels inside a module card (island/depth.ts). The card itself is level ''. */
 export interface DepthState {
@@ -447,6 +451,8 @@ export interface IslandState {
   depth: DepthState;
   /** the "+" tab: files, text and links kept for 10 minutes (island/shelf.ts, stage 9) */
   shelf: ShelfState;
+  /** preview only (2026-10-25, waits for the owner): cat ears on the mascot, 0 = none */
+  ears: number;
   /** an action that asks for a second click (a PR's "Одобрить"): which, until when (s.t) */
   confirm: { act: string; until: number } | null;
   /** requests for the host app, drained by the shell each frame: "settings:" */
@@ -614,7 +620,18 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     almanac: null,
     confirm: null,
     depth: { mod: null, stack: [], from: null, dir: 1, at: -1, scroll: {}, swipe: { dx: 0, at: -1 } },
-    shelf: { items: [], sel: [], carry: null, tabBefore: null, drop: null, gone: [], press: null, look: null },
+    ears: 0,
+    shelf: {
+      items: [],
+      sel: [],
+      carry: null,
+      tabBefore: null,
+      drop: null,
+      gone: [],
+      press: null,
+      look: null,
+      style: 'catch',
+    },
     requests: [],
     settingsLink: false,
     host: null,

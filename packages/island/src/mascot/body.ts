@@ -58,6 +58,7 @@ export function drawSeed(s: IslandState, c: Ctx, P: Pose, col: MascotColor, ring
   c.scale(P.sx, P.sy);
   c.translate(0, -P.b);
   const hd = clamp(s.sp.hand.x, 0, 1.2);
+  if (s.ears > 0) drawEars(s, c, P, col);
   bodyPath(c, P.R, P.b);
   c.fillStyle = col.body;
   c.fill();
@@ -93,6 +94,46 @@ export function drawSeed(s: IslandState, c: Ctx, P: Pose, col: MascotColor, ring
   eyesOrSpin(s, c, E0, col.eye, false, spinK);
   c.restore();
   drawBadge(s, c, P, ring);
+}
+
+/** Preview (2026-10-25): cat ears in the body's own space, so they squash, lean and hide with
+ * it. They perk up when the mascot is alert and fold back when it sulks or sleeps. */
+function drawEars(s: IslandState, c: Ctx, P: Pose, col: MascotColor): void {
+  const R = P.R,
+    b = P.b,
+    wide = clamp(s.sp.wide.x, 0, 1),
+    grump = clamp(s.sp.grump.x, 0, 1),
+    sleepy = 1 - clamp(s.sp.lid.x, 0, 1),
+    fold = Math.max(grump, sleepy * 0.8),
+    // a small twitch every few seconds: alive, not a sticker
+    tw = Math.max(0, Math.sin(s.t * 2.3) - 0.97) * 6;
+  const ear = (side: number): void => {
+    c.save();
+    c.translate(side * R * 0.5, -b * 0.72);
+    c.rotate(side * (0.32 + 0.45 * fold - 0.12 * wide + 0.08 * tw));
+    const h = R * (0.62 + 0.08 * wide - 0.18 * fold),
+      w = R * 0.42;
+    c.beginPath();
+    c.moveTo(-w, h * 0.25);
+    c.lineTo(-w * 0.18, -h * 0.92);
+    c.quadraticCurveTo(0, -h * 1.08, w * 0.18, -h * 0.92);
+    c.lineTo(w, h * 0.25);
+    c.closePath();
+    c.fillStyle = col.body;
+    c.fill();
+    // the inner ear: the body's own shade, so every module colour gets matching ears
+    c.beginPath();
+    c.moveTo(-w * 0.5, h * 0.05);
+    c.lineTo(-w * 0.1, -h * 0.66);
+    c.quadraticCurveTo(0, -h * 0.76, w * 0.1, -h * 0.66);
+    c.lineTo(w * 0.5, h * 0.05);
+    c.closePath();
+    c.fillStyle = hexA(col.shade, 0.55);
+    c.fill();
+    c.restore();
+  };
+  ear(-1);
+  ear(1);
 }
 
 /** proto: drawMascot */
