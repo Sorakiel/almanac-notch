@@ -4,20 +4,18 @@ import { EN, type Lang } from '@almanac-notch/island';
 
 export const SETTINGS_EN: Readonly<Record<string, string>> = {
   // page headers and examples (stage 9f)
-  'Как остров открывается и когда уходит.': 'How the island opens and when it goes.',
-  'Тихие отклики маскота и острова. Во время звонка - тишина.':
-    'Quiet answers from the mascot and the island. Silence during a call.',
-  'Ответить Claude Code, не трогая мышь, - из любого приложения.':
-    'Answer Claude Code without the mouse - from any app.',
-  'Язык, запуск, обновления и удаление.': 'Language, launch, updates and removal.',
-  'Шаги агента, разрешения и вопросы - в острове.': "The agent's steps, permissions and questions - on the island.",
-  'Ближайшая встреча и кнопка «Подключиться».': 'The next meeting and a "Join" button.',
+  'Как остров открывается и уходит.': 'How the island opens and goes.',
+  'Тихие отклики; на звонке - тишина.': 'Quiet cues; silence on a call.',
+  'Ответить агенту, не трогая мышь.': 'Answer the agent without the mouse.',
+  'Язык, запуск, обновления.': 'Language, launch, updates.',
+  'Шаги агента, разрешения, вопросы.': 'Agent steps, permissions, questions.',
+  'Встреча и кнопка «Подключиться».': 'A meeting and a "Join" button.',
   'То, что играет, - в острове.': "What's playing - on the island.",
   'Проверки, PR на ревью и коммиты.': 'Checks, PRs to review and commits.',
   'Деплои: статус, сайт, повтор.': 'Deploys: status, site, redeploy.',
-  'Недавние страницы и чужие правки.': "Recent pages and other people's edits.",
+  'Недавние страницы и чужие правки.': 'Recent pages and edits by others.',
   'Горящие правила и одна панель.': 'Firing rules and one panel.',
-  'Привычки на сегодня, отмечаются из острова.': "Today's habits, ticked from the island.",
+  'Привычки на сегодня - из острова.': "Today's habits, from the island.",
   'Курсор у выреза - остров открывается': 'The pointer at the notch - the island opens',
   'Курсор у выреза - остров только выглядывает': 'The pointer at the notch - the island only peeks',
   'Курсор ушёл - остров закрывается почти сразу': 'The pointer left - the island closes almost at once',
@@ -195,6 +193,7 @@ export const SETTINGS_EN: Readonly<Record<string, string>> = {
     'On a Mac the island reads the system Calendar: it already has your Google, iCloud and Exchange accounts (System Settings → Internet Accounts).',
   'Доступ к календарю…': 'Calendar access…',
   'Что читается и куда уходит': 'What is read and where it goes',
+  'Откуда события': 'Where events come from',
   'Только название и время встреч на 48 часов вперёд. Outlook читается на этом компьютере, без сети. Ссылка iCal открывается раз в 5 минут, других запросов нет; сама ссылка - секрет: она хранится только на этом компьютере, и прочитать её может только ваша учётная запись.':
     'Only the title and time of meetings for the next 48 hours. Outlook is read on this computer, without the network. The iCal link is opened every 5 minutes, nothing else is requested; the link itself is a secret: it stays on this computer and only your user account can read it.',
   'Что играет в системе: название, исполнитель, альбом, обложка, позиция, и громкость. Обложку отдаёт сам плеер, сети нет. Кнопки острова управляют тем плеером, который сейчас играет.':

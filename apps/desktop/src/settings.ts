@@ -433,18 +433,18 @@ const PAGE_MOD: Record<string, ModuleId> = {
 };
 /** what each page is for, one line under its title */
 const SUBS: Record<string, string> = {
-  general: 'Как остров открывается и когда уходит.',
-  sound: 'Тихие отклики маскота и острова. Во время звонка - тишина.',
-  keys: 'Ответить Claude Code, не трогая мышь, - из любого приложения.',
-  app: 'Язык, запуск, обновления и удаление.',
-  claude: 'Шаги агента, разрешения и вопросы - в острове.',
-  calendar: 'Ближайшая встреча и кнопка «Подключиться».',
+  general: 'Как остров открывается и уходит.',
+  sound: 'Тихие отклики; на звонке - тишина.',
+  keys: 'Ответить агенту, не трогая мышь.',
+  app: 'Язык, запуск, обновления.',
+  claude: 'Шаги агента, разрешения, вопросы.',
+  calendar: 'Встреча и кнопка «Подключиться».',
   music: 'То, что играет, - в острове.',
   github: 'Проверки, PR на ревью и коммиты.',
   vercel: 'Деплои: статус, сайт, повтор.',
   notion: 'Недавние страницы и чужие правки.',
   grafana: 'Горящие правила и одна панель.',
-  almanac: 'Привычки на сегодня, отмечаются из острова.',
+  almanac: 'Привычки на сегодня - из острова.',
 };
 const heroes = new Map<string, Hero>();
 /** the island's own pages take the island's own lights: the greeting's blue (cards.ts drawLaunch,
