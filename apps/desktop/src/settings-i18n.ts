@@ -3,6 +3,29 @@
 import { EN, type Lang } from '@almanac-notch/island';
 
 export const SETTINGS_EN: Readonly<Record<string, string>> = {
+  // page headers and examples (stage 9f)
+  'Как остров открывается и когда уходит.': 'How the island opens and when it goes.',
+  'Тихие отклики маскота и острова. Во время звонка - тишина.':
+    'Quiet answers from the mascot and the island. Silence during a call.',
+  'Ответить Claude Code, не трогая мышь, - из любого приложения.':
+    'Answer Claude Code without the mouse - from any app.',
+  'Язык, запуск, обновления и удаление.': 'Language, launch, updates and removal.',
+  'Шаги агента, разрешения и вопросы - в острове.': "The agent's steps, permissions and questions - on the island.",
+  'Ближайшая встреча и кнопка «Подключиться».': 'The next meeting and a "Join" button.',
+  'То, что играет, - в острове.': "What's playing - on the island.",
+  'Проверки, PR на ревью и коммиты.': 'Checks, PRs to review and commits.',
+  'Деплои: статус, сайт, повтор.': 'Deploys: status, site, redeploy.',
+  'Недавние страницы и чужие правки.': "Recent pages and other people's edits.",
+  'Горящие правила и одна панель.': 'Firing rules and one panel.',
+  'Привычки на сегодня, отмечаются из острова.': "Today's habits, ticked from the island.",
+  'Курсор у выреза - остров открывается': 'The pointer at the notch - the island opens',
+  'Курсор у выреза - остров только выглядывает': 'The pointer at the notch - the island only peeks',
+  'Курсор ушёл - остров закрывается почти сразу': 'The pointer left - the island closes almost at once',
+  'Клик - остров открыт и ждёт {0} с после ухода курсора':
+    'A click - the island stays open {0} s after the pointer leaves',
+  'Так кнопки выглядят в острове - с вашими клавишами': 'This is how the buttons look on the island - with your keys',
+  'Работают, пока в острове открыт вопрос или разрешение. Нажмите на сочетание, затем новые клавиши: Esc отменяет.':
+    'They work while a question or a permission is open on the island. Click a combination, then press the new keys: Esc cancels.',
   // the island, sound, keys and app pages (stage 9f)
   Клавиши: 'Keys',
   'Открытие и закрытие': 'Opening and closing',

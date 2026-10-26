@@ -19,7 +19,7 @@ describe('settings window in English', () => {
     expect(texts.filter((x) => !(x in SETTINGS_EN) && !(x in EN))).toEqual([]);
   });
 
-  it.each(['settings.ts', 'settings-prefs.ts', 'bye.ts', 'setup.ts'])(
+  it.each(['settings.ts', 'settings-prefs.ts', 'settings-examples.ts', 'bye.ts', 'setup.ts'])(
     'every t() text of %s has an English line',
     (file) => {
       const code = readFileSync(join(__dirname, file), 'utf8');

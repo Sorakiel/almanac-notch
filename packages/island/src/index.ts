@@ -29,7 +29,12 @@ export {
   type MascotEvent,
   type ShelfItem,
   type ShelfKind,
+  type StageLook,
 } from './sim/state';
+export { MODULE_COL } from './island/focus';
+export { cardTint } from './island/card';
+export { STARS } from './island/cards';
+export { MODULE_PROPS, type PropKind } from './mascot/props';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { tr, plural, EN, type Lang } from './i18n';
 export { update } from './sim/behavior';

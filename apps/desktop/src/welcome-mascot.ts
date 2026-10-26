@@ -8,6 +8,7 @@ import {
   stagePointerMove,
   stageRelease,
   type EventType,
+  type StageLook,
 } from '@almanac-notch/island';
 
 export interface WelcomeMascot {
@@ -16,12 +17,21 @@ export interface WelcomeMascot {
   poke: () => void;
   /** run or pause the frame loop (the guide is hidden behind settings) */
   setRunning: (on: boolean) => void;
+  /** dressed as a module with a lasting mood (stage 9f: settings headers and the sidebar) */
+  dress: (look: StageLook | null) => void;
+  /** asleep until woken; awake: back to its own life */
+  setAsleep: (on: boolean) => void;
+  /** -1..1 in step with its breathing (pose.ts: 3.6 s awake, 5.2 s asleep) */
+  breath: () => number;
 }
 
 /** `k` < 1: a small canvas (stage 9f) - the stage is drawn at 1/k of the canvas and scaled down */
 export function welcomeMascot(canvas: HTMLCanvasElement, k = 1): WelcomeMascot {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const m = createMascot({ settings: defaultSettings(reduced), now: performance.now(), greetAfter: null });
+  const settings = defaultSettings(reduced);
+  // a small one (settings faces and headers) sleeps only when told: asleep there means "off"
+  if (k < 1) settings.sleepAfter = 1e9;
+  const m = createMascot({ settings, now: performance.now(), greetAfter: null });
   const s = m.state;
   // dark window: no backdrop or ground line, a stronger contact shadow
   s.theme = {
@@ -75,6 +85,15 @@ export function welcomeMascot(canvas: HTMLCanvasElement, k = 1): WelcomeMascot {
   return {
     react: (type) => m.trigger(type),
     poke: () => m.poke(1, (Math.random() - 0.5) * 0.6, -0.3),
+    breath: () => Math.sin((s.t * 2 * Math.PI) / (s.sleeping ? 5.2 : 3.6)),
+    dress: (look) => {
+      s.stageLook = look;
+    },
+    setAsleep: (on) => {
+      if (on === s.sleeping) return;
+      if (on) m.trigger('sleep');
+      else m.poke(0.4, 0, -0.2);
+    },
     setRunning: (on) => {
       if (on === running) return;
       running = on;

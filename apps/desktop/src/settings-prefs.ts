@@ -53,6 +53,8 @@ function writeCard(patch: Partial<Card>): void {
   } catch {
     // not saved: the island keeps its choice
   }
+  // "storage" reaches only the other windows: this one's example hears it here
+  document.dispatchEvent(new CustomEvent('settings:card'));
 }
 
 const hover = $<HTMLInputElement>('open-hover'),
@@ -75,6 +77,8 @@ function renderCard(): void {
   // the volume and the tiers mean nothing while sound is off: shown, but quiet
   $('sound').classList.toggle('muted', !c.sound);
   $('li-sound').textContent = c.sound ? t('Включён · {0} %', Math.round(c.volume * 100)) : t('Выключен');
+  // the Sound page's mascot dozes off while sound is off (settings.ts)
+  document.dispatchEvent(new CustomEvent('settings:sound', { detail: c.sound }));
 }
 
 hover.addEventListener('change', () => {
@@ -121,6 +125,8 @@ function say(text: string, err = false): void {
 }
 
 function renderKeys(): void {
+  // the Keys page's mascot watches the keyboard while a combination is being recorded
+  document.dispatchEvent(new CustomEvent('settings:rec', { detail: recording !== null }));
   const k = readKeys(),
     clash = clashes(k);
   rows.replaceChildren(

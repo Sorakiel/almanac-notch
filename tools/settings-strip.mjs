@@ -27,35 +27,41 @@ await p.clock.runFor(2500);
 // let animations from loading finish before the click
 await p.evaluate(() => document.getAnimations().forEach((a) => a.finish?.()));
 
-const target = p.getByText(row).filter({ visible: true }).first();
-await target.click();
-// the animations the click started, at their own start
-await p.evaluate(() => {
-  window.__stripAnims = document.getAnimations();
-  for (const a of window.__stripAnims) a.pause();
-});
-for (let i = 0; i < N; i++) {
-  const ms = (i * 1000) / 60;
-  await p.evaluate(async (ms) => {
-    for (const a of document.getAnimations()) {
-      if (!window.__stripAnims.includes(a)) {
-        a.pause();
-        window.__stripAnims.push(a);
-        a.__born = window.__stripMs ?? 0;
-      }
-      const t = ms - (a.__born ?? 0);
-      // past its end an animation is finished for real, so code waiting on it runs
-      if (t >= a.effect.getComputedTiming().endTime) a.finish();
-      else a.currentTime = t;
+// several rows in one walk: "Звук|Клавиши|GitHub" - each clicked in turn, N frames after each
+let i = 0;
+for (const name of row.split('|')) {
+  await p.getByText(name).filter({ visible: true }).first().click();
+  // the animations the click started, at their own start
+  await p.evaluate(() => {
+    window.__stripAnims = document.getAnimations();
+    for (const a of window.__stripAnims) {
+      a.pause();
+      a.__born = window.__stripMs ?? 0;
     }
-    window.__stripMs = ms;
-    for (let i = 0; i < 4; i++) await Promise.resolve();
-  }, ms);
-  await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png` });
-  await p.clock.runFor(1000 / 60);
+  });
+  for (let f = 0; f < N; f++, i++) {
+    const ms = (i * 1000) / 60;
+    await p.evaluate(async (ms) => {
+      for (const a of document.getAnimations()) {
+        if (!window.__stripAnims.includes(a)) {
+          a.pause();
+          window.__stripAnims.push(a);
+          a.__born = window.__stripMs ?? 0;
+        }
+        const t = ms - (a.__born ?? 0);
+        // past its end an animation is finished for real, so code waiting on it runs
+        if (t >= a.effect.getComputedTiming().endTime) a.finish();
+        else a.currentTime = t;
+      }
+      window.__stripMs = ms;
+      for (let k = 0; k < 4; k++) await Promise.resolve();
+    }, ms);
+    await p.screenshot({ path: `${dir}/${String(i).padStart(3, '0')}.png` });
+    await p.clock.runFor(1000 / 60);
+  }
 }
 await b.close();
 // a contact sheet, six frames a row, and a 60 fps clip
-if (N <= 60) execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', `${dir}/%03d.png`, '-vf', 'scale=410:-2,tile=6x' + Math.ceil(N / 6), '-frames:v', '1', `${dir}.png`]);
+if (i <= 60) execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', `${dir}/%03d.png`, '-vf', 'scale=410:-2,tile=6x' + Math.ceil(i / 6), '-frames:v', '1', `${dir}.png`]);
 execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', `${dir}/%03d.png`, '-pix_fmt', 'yuv420p', `${dir}.mp4`]);
-console.log(`${N} frames → ${dir}/, ${dir}.png, ${dir}.mp4`);
+console.log(`${i} frames → ${dir}/, ${dir}.png, ${dir}.mp4`);

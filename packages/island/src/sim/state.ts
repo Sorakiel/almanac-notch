@@ -1,6 +1,7 @@
 import type { Rng } from './rng';
 import { createSprings, type Springs } from './springs';
-import type { Settings } from './settings';
+import type { MascotColor, Settings } from './settings';
+import type { PropKind } from '../mascot/props';
 import { initialHabits, initialPrefs, type Step } from '../stub';
 import type { Lang } from '../i18n';
 
@@ -347,6 +348,19 @@ export interface Grab {
 }
 
 /** proto: T - targets rebuilt every frame, layer by layer */
+/**
+ * Not in the prototype (stage 9f): the stage mascot dressed as a module - its colour and prop - and
+ * a lasting mood, for the settings window's page headers. null = the prototype's stage.
+ */
+export interface StageLook {
+  col: MascotColor | null;
+  prop: PropKind | null;
+  /** calm: its own life; worried: a quiet frown (an error waits); happy: pleased; watch: eyes on `at` */
+  mood: 'calm' | 'worried' | 'happy' | 'watch';
+  /** where 'watch' looks, -1..1 like lookX / lookY */
+  at?: { x: number; y: number };
+}
+
 export interface Targets {
   lookX: number;
   lookY: number;
@@ -453,6 +467,7 @@ export interface IslandState {
   requests: string[];
   /** the host app has a settings window: the settings tab gets a row that opens it */
   settingsLink: boolean;
+  stageLook: StageLook | null;
   /** the shortcut shown on the permission card's buttons; the app sets its own answer keys
    *  (stage 9f), '' = that key is switched off */
   keyHints: { approve: string; deny: string };
@@ -629,6 +644,7 @@ export function createState(S: Settings, rng: Rng, now: number): IslandState {
     },
     requests: [],
     settingsLink: false,
+    stageLook: null,
     keyHints: { approve: 'Y', deny: 'N' },
     host: null,
     clickOpen: false,
