@@ -1276,8 +1276,7 @@ body:not(.dev) .dev-only {
 #tab-modules .example .screen {
   position: relative;
   overflow: hidden;
-  /* the island's window cropped just under the open island (about 175 pt of 230): no empty desk below it */
-  height: 140px;
+  height: 168px;
   border-radius: 14px;
   background: var(--i-card);
 }
