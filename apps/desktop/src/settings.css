@@ -36,6 +36,36 @@ body {
   cursor: default;
   user-select: none;
   -webkit-user-select: none;
+  /* the window has a fixed size: only the sidebar and the page scroll, never the window itself
+     (a 2 px overhang of the island example gave Windows a scrollbar along the whole bottom) */
+  overflow: hidden;
+}
+aside.list,
+main {
+  overflow-x: hidden;
+}
+/* Windows draws classic grey scrollbars with arrows (owner, 2026-10-26: "these scrolls are hell");
+   the Mac's are overlay ones and stay the system's. Thin, dark, no arrows, only a thumb that
+   brightens under the cursor - as in the island's lists. */
+html.win ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+html.win ::-webkit-scrollbar-button {
+  display: none;
+}
+html.win ::-webkit-scrollbar-track,
+html.win ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+html.win ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.14) padding-box;
+}
+html.win ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28) padding-box;
 }
 ::selection {
   background: color-mix(in srgb, var(--accent) 45%, transparent);
