@@ -1,12 +1,13 @@
 // The settings window comes out of the island and pulls away from it like oil (owner, 2026-10-26):
 // the island pushes out a body, the body pulls down to where the window will be, and between them
-// threads stretch - thinner as they lengthen, each pinching at its own place until it snaps, the
-// halves drawing back into the island and into the window, a bead falling from each snap.
+// a web of threads stretches - leaning both ways, forked, bridged - and lets go one thread at a
+// time, the web rearranging after every snap. Keyframed and solved, not simulated: the same t
+// always gives the same frame, and every shape is a number in a table.
 //
 // Everything is one signed-distance field: the island (with its concave shoulders at the top
-// edge), the body, the threads and the beads are joined with a smooth minimum, so the fillets
-// where a thread holds on are the field itself and every edge stays sharp at any size. The
-// material is the island's: matte black with a hairline of light - no gloss (owner).
+// edge), the body and the web are joined with a smooth minimum, so the fillets where a thread
+// holds on are the field itself. The material is the island's: matte black with a hairline of
+// light - no gloss (owner).
 import { springK } from '@almanac-notch/island';
 
 const W = 1710,
@@ -25,21 +26,22 @@ const easeIn = (k: number): number => k * k * k;
 const easeInOut = (k: number): number => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 const mix = (a: number, b: number, k: number): number => a + (b - a) * k;
 
-interface Strand {
-  a: [number, number]; // on the island
-  b: [number, number]; // on the window
-  c: [number, number]; // the curve's control point: oil sags and sways, it is never a rod
-  r: number; // radius at rest
-  pinch: number; // where along it the thread pinches, 0..1
+interface Edge {
+  a: [number, number];
+  b: [number, number];
+  c: [number, number]; // the curve's control point: the middle lags behind its ends
+  r: number; // radius now
+  pinch: number; // where along it it pinches, 0..1
   depth: number; // how pinched, 0..1
-  gap: number; // after the snap: how far both halves have drawn back, 0..1
+  gap: number; // after the snap: how far the halves have drawn back, 0..1 (the further one)
+  gaps: [number, number]; // the half at a, the half at b
 }
 
 interface Frame {
   island: [number, number]; // w, h
   body: [number, number, number, number]; // cy, half w, half h, corner
-  strands: Strand[];
-  beads: [number, number, number][]; // x, y, r
+  edges: Edge[];
+  nodes: [number, number, number][]; // the junctions as blobs: x, y, r
   eyes: [number, number, number, number, number, number]; // x, y, half spacing, alpha, half w, half h
   open: number; // 0 a blob of the island → 1 the window (softens the joins)
   web: number; // how much the threads still melt into one sheet: 1 at first, 0 once stretched
@@ -50,25 +52,86 @@ interface Frame {
  *  canvas at 518, 44; R = 46 * 0.58; eyes just above the body's middle) */
 const EYE_HOME = { x: CX - WIN.w / 2 + 593, y: WIN.top + 104, half: 8, w: 2.6, h: 5.2 };
 
-/** the threads, left to right: where they hold on the island and on the window (fractions of the
- *  half widths), how thick, where they pinch, when they snap - the thick middle one holds longest */
-const THREADS = [
-  { ia: -0.4, wb: -0.78, r: 5, pinch: 0.62, snap: 0.42, bow: -0.16 },
-  { ia: -0.19, wb: -0.36, r: 8, pinch: 0.4, snap: 0.55, bow: -0.08 },
-  { ia: 0.02, wb: 0.06, r: 12, pinch: 0.5, snap: 0.7, bow: 0.03 },
-  { ia: 0.21, wb: 0.42, r: 7.5, pinch: 0.58, snap: 0.5, bow: 0.1 },
-  { ia: 0.38, wb: 0.8, r: 4.5, pinch: 0.36, snap: 0.38, bow: 0.18 },
+// The threads are a web, not a row of rods (owner's sketch, 2026-10-26): they hold on at different
+// places above and below, so they lean both ways; some fork into two feet, some are bridged to a
+// neighbour, one stands on a small triangle. The web is a graph: anchors on the island and on the
+// window, junctions in the air, edges between them. A junction sits where the pulls of its threads
+// balance (each thread pulls with its own strength) and follows that place on a spring, so when a
+// thread snaps the web rearranges - forks close, bridged threads straighten, a junction left with
+// one thread is drawn into the surface it hangs from. That is where the sideways motion comes from.
+
+/** anchors: px from the middle, measured at the gathered island (half width 170) and the full
+ *  window (half width 360); they ride the surfaces as those widen */
+const ISL = { I0: -160, I1: -128, I2: -104, I3: -78, I4: -40, I7: 52, I8: 84, I9: 118, I10: 146, I11: 164 };
+const BOT = {
+  B0: -330, B1: -262, B2: -205, B3: -150, B4: -110, B5: -84, B6: -28,
+  B7: 40, B8: 98, B10: 222, B11: 282, B12: 330,
+};
+type Anchor = keyof typeof ISL | keyof typeof BOT;
+const JUNCTIONS = ['Ja', 'Jb', 'Jc', 'Jd', 'Je', 'Jf'] as const;
+type Junction = (typeof JUNCTIONS)[number];
+type NodeId = Anchor | Junction;
+
+/** r: radius at rest; pull: how hard it pulls its junctions; snap: when it lets go, s; pinch: where;
+ *  bow: a little curl of its own, so no two are alike. A junction left with one thread lets that go
+ *  right after, all of it drawn back into its anchor (pinch at the junction's end): a stub never
+ *  hangs under a surface and no drop is left in the air. It goes at least 0.08 s after the others
+ *  at its junction: their halves have drawn back into the junction by then (see halfGap).
+ *
+ *  Stretched slime between two plates is a few thick threads among many thin ones, and the thin
+ *  ones go first - so three thick (r 7-8) carry the shape, medium ones (4-5) fork and bridge, and
+ *  hairlines (2) fill the gaps and snap in the first tenth of a second. Thick threads lean left,
+ *  the right side leans right: the web opens like a fan from the narrow island to the wide window.
+ *  No two threads cross - liquid that touches merges, so a crossing is drawn as a knot (Jf). */
+const EDGES: { a: NodeId; b: NodeId; r: number; pull: number; snap: number; pinch: number; bow: number }[] = [
+  // far left: a hairline and a medium thread forking into two feet by the window
+  { a: 'I0', b: 'B0', r: 2, pull: 1, snap: 0.39, pinch: 0.6, bow: -0.07 },
+  { a: 'I1', b: 'Ja', r: 4.5, pull: 1, snap: 0.62, pinch: 0.45, bow: -0.04 },
+  { a: 'Ja', b: 'B1', r: 3, pull: 2.5, snap: 0.46, pinch: 0.5, bow: 0 },
+  { a: 'Ja', b: 'B2', r: 3.5, pull: 2.5, snap: 0.72, pinch: 0, bow: 0 },
+  { a: 'I2', b: 'B3', r: 1.8, pull: 1, snap: 0.37, pinch: 0.4, bow: 0.05 },
+  // thick, forked at the island, leaning left
+  { a: 'I3', b: 'Jb', r: 4, pull: 3, snap: 0.58, pinch: 0.5, bow: 0 },
+  { a: 'I4', b: 'Jb', r: 4.5, pull: 3, snap: 0.76, pinch: 1, bow: 0 },
+  { a: 'Jb', b: 'B4', r: 7, pull: 1, snap: 0.66, pinch: 0.42, bow: 0.04 },
+  // the long one, standing on a triangle by the window, bridged to the right: it holds longest
+  { a: 'I7', b: 'Jc', r: 8, pull: 1, snap: 0.86, pinch: 1, bow: 0.03 },
+  { a: 'Jc', b: 'Jd', r: 7.5, pull: 1, snap: 0.74, pinch: 0.55, bow: -0.04 },
+  { a: 'Jd', b: 'B5', r: 3.5, pull: 2.5, snap: 0.52, pinch: 0.45, bow: 0 },
+  { a: 'Jd', b: 'B6', r: 5, pull: 2.5, snap: 0.86, pinch: 0, bow: 0 },
+  // the bridge, and a thin thread that ran into it and became a knot
+  { a: 'Jc', b: 'Jf', r: 3, pull: 0.8, snap: 0.55, pinch: 0.5, bow: 0.06 },
+  { a: 'Jf', b: 'Je', r: 3, pull: 0.8, snap: 0.65, pinch: 0, bow: 0.04 },
+  { a: 'I8', b: 'Jf', r: 2.2, pull: 1, snap: 0.48, pinch: 0.5, bow: 0 },
+  { a: 'Jf', b: 'B7', r: 2.4, pull: 1, snap: 0.44, pinch: 0.55, bow: -0.05 },
+  // thick on the right, leaning right, on two feet
+  { a: 'I9', b: 'Je', r: 6.5, pull: 1, snap: 0.8, pinch: 1, bow: 0.03 },
+  { a: 'Je', b: 'B10', r: 6.5, pull: 1, snap: 0.7, pinch: 0.4, bow: 0.05 },
+  { a: 'Je', b: 'B8', r: 3, pull: 1.5, snap: 0.6, pinch: 0.5, bow: -0.04 },
+  // far right: a hairline and a medium thread curling out to the window's corner
+  { a: 'I10', b: 'B11', r: 2, pull: 1, snap: 0.41, pinch: 0.55, bow: 0.08 },
+  { a: 'I11', b: 'B12', r: 3.2, pull: 1, snap: 0.5, pinch: 0.6, bow: 0.1 },
 ];
 
-/** the timeline, s - the keyframes the strip is judged against */
-export function frameAt(t: number): Frame {
+/** when a junction lets go of its last thread: a half drawing back into a junction has to be home
+ *  by then, or it is left as a drop in the air */
+const deathOf = (j: NodeId): number =>
+  Math.max(...EDGES.filter((e) => e.a === j || e.b === j).map((e) => e.snap));
+/** how far the half of a snapped edge at its end `end` has drawn back: 0.2 s into a surface,
+ *  quicker into a junction that is about to go */
+function halfGap(e: (typeof EDGES)[number], end: NodeId, t: number): number {
+  const dur = (JUNCTIONS as readonly string[]).includes(end) ? clamp(deathOf(end) - e.snap, 0.06, 0.2) : 0.2;
+  return t < e.snap ? 0 : easeOut(k01(t, e.snap, e.snap + dur));
+}
+
+/** the bodies' shapes over time - pure functions of t, the web is solved on top of them */
+function bodiesAt(t: number) {
   // 1. the island gathers itself (0 - 0.2) and, once the last thread lets go, settles on a spring
   const swell = easeOut(k01(t, 0, 0.2));
-  const settle = springK(Math.max(0, t - 0.7), 0.4, 0.42);
+  const settle = springK(Math.max(0, t - 0.86), 0.4, 0.42);
   const gather = Math.max(-0.15, swell * (1 - settle));
   const iw = mix(I0.w, I0.w + 90, gather),
     ih = mix(I0.h, I0.h + 26, gather);
-
   // 2. the window's body: pushed out of the island (0.04 - 0.22), then it pulls away, slowly and
   // heavily, as something viscous does, and grows into the window on the island's spring
   const out = easeOut(k01(t, 0.04, 0.24));
@@ -77,55 +140,160 @@ export function frameAt(t: number): Frame {
   const hw = mix(mix(iw * 0.36, 150, out), WIN.w / 2, grow),
     hh = mix(mix(8, 40, out), WIN.h / 2, grow);
   const cy = mix(mix(ih * 0.4, ih + 44, out), WCY, away);
-  const open = easeInOut(k01(t, 0.55, 1.0));
-  const corner = mix(Math.min(hw, hh), WIN.r, easeInOut(k01(t, 0.3, 0.9)));
+  return { t, iw, ih, hw, hh, cy };
+}
+const cornerAt = (b: ReturnType<typeof bodiesAt>): number => mix(Math.min(b.hw, b.hh), WIN.r, easeInOut(k01(b.t, 0.3, 0.9)));
 
-  // 3. the threads: from the island's lower edge to the window's upper edge; the longer they get
-  // the thinner, each pinching at its own place until it snaps; then the halves draw back into the
-  // island and into the window, and the pinch becomes a bead that falls into the window
-  // a sheet first, threads later: the threads start swollen enough to melt into one film, and as
-  // it stretches they thin into strands - holes open between them as a real film tears
+type P = [number, number];
+/** how far the rounded edge of a box curls away from its flat side at dx from the middle: an
+ *  anchor sits on the surface, not in the air beside a round shoulder */
+function curl(dx: number, half: number, rc: number): number {
+  const out = Math.abs(dx) - (half - rc);
+  return out <= 0 ? 0 : rc - Math.sqrt(Math.max(0, rc * rc - out * out));
+}
+function anchorAt(id: Anchor, b: ReturnType<typeof bodiesAt>): P {
+  if (id in ISL) {
+    const dx = clamp(ISL[id as keyof typeof ISL] * (b.iw / 340), -b.iw / 2 + 3, b.iw / 2 - 3);
+    return [CX + dx, b.ih - 3 - curl(dx, b.iw / 2, 13)];
+  }
+  const rc = cornerAt(b);
+  const dx = clamp(BOT[id as keyof typeof BOT] * (b.hw / 360), -b.hw + 3, b.hw - 3);
+  return [CX + dx, b.cy - b.hh + 3 + curl(dx, b.hw, rc)];
+}
+
+/** how hard an edge pulls at t: a pinching thread pulls less, a snapped one not at all */
+const pullAt = (e: (typeof EDGES)[number], t: number): number =>
+  t >= e.snap ? 0 : e.pull * (1 - 0.6 * k01(t, e.snap - 0.15, e.snap));
+
+/** where the junctions balance: each at the pull-weighted middle of its neighbours */
+function balance(t: number, b: ReturnType<typeof bodiesAt>, start: Map<Junction, P>): Map<Junction, P> {
+  const pos = new Map<NodeId, P>(start);
+  for (const id of [...Object.keys(ISL), ...Object.keys(BOT)] as Anchor[]) pos.set(id, anchorAt(id, b));
+  for (let it = 0; it < 30; it++)
+    for (const j of JUNCTIONS) {
+      let sx = 0,
+        sy = 0,
+        sw = 0;
+      for (const e of EDGES) {
+        const other = e.a === j ? e.b : e.b === j ? e.a : null;
+        if (!other) continue;
+        const w = pullAt(e, t);
+        const p = pos.get(other) as P;
+        sx += w * p[0];
+        sy += w * p[1];
+        sw += w;
+      }
+      if (sw > 1e-6) pos.set(j, [sx / sw, sy / sw]);
+    }
+  return new Map(JUNCTIONS.map((j) => [j, pos.get(j) as P]));
+}
+
+// The junctions and the middles of the threads follow their places on springs, integrated from 0
+// in fixed steps - the same t always gives the same frame. Middles are looser: they swing.
+const DT = 1 / 480;
+const J_SPRING = { w: 2 * Math.PI * 3.6, z: 0.5 },
+  M_SPRING = { w: 2 * Math.PI * 4.5, z: 0.32 };
+interface WebState {
+  t: number;
+  jp: Map<Junction, P>;
+  jv: Map<Junction, P>;
+  mp: P[];
+  mv: P[];
+}
+let cache: WebState | null = null;
+
+function edgeEnds(e: (typeof EDGES)[number], b: ReturnType<typeof bodiesAt>, jp: Map<Junction, P>): [P, P] {
+  const at = (id: NodeId): P => (JUNCTIONS.includes(id as Junction) ? (jp.get(id as Junction) as P) : anchorAt(id as Anchor, b));
+  return [at(e.a), at(e.b)];
+}
+function midTarget(e: (typeof EDGES)[number], a: P, c: P): P {
+  const dx = c[0] - a[0],
+    dy = c[1] - a[1];
+  return [(a[0] + c[0]) / 2 - dy * e.bow, (a[1] + c[1]) / 2 + dx * e.bow];
+}
+const springStep = (x: P, v: P, to: P, s: { w: number; z: number }): void => {
+  for (const k of [0, 1]) {
+    v[k] += (s.w * s.w * (to[k] - x[k]) - 2 * s.z * s.w * v[k]) * DT;
+    x[k] += v[k] * DT;
+  }
+};
+
+function webAt(t: number): WebState {
+  if (!cache || cache.t > t) {
+    const b = bodiesAt(0);
+    const jp = balance(0, b, new Map(JUNCTIONS.map((j) => [j, [CX, b.ih] as P])));
+    const mp = EDGES.map((e) => {
+      const [a, c] = edgeEnds(e, b, jp);
+      return midTarget(e, a, c);
+    });
+    cache = { t: 0, jp, jv: new Map(JUNCTIONS.map((j) => [j, [0, 0] as P])), mp, mv: EDGES.map(() => [0, 0] as P) };
+  }
+  const st = cache;
+  while (st.t + DT <= t + 1e-9) {
+    st.t += DT;
+    const b = bodiesAt(st.t);
+    const eq = balance(st.t, b, st.jp);
+    for (const j of JUNCTIONS) springStep(st.jp.get(j) as P, st.jv.get(j) as P, eq.get(j) as P, J_SPRING);
+    EDGES.forEach((e, i) => {
+      const [a, c] = edgeEnds(e, b, st.jp);
+      springStep(st.mp[i], st.mv[i], midTarget(e, a, c), M_SPRING);
+    });
+  }
+  return st;
+}
+
+/** the timeline, s - the keyframes the strip is judged against */
+export function frameAt(t: number): Frame {
+  const bd = bodiesAt(t);
+  const { iw, ih, hw, hh, cy } = bd;
+  const open = easeInOut(k01(t, 0.55, 1.0));
+  const corner = cornerAt(bd);
+
+  // 3. the web: a sheet while the gap is short (the threads swollen enough to melt into one film),
+  // threads as it stretches; each thread thinner the longer it is (its volume shared out), pinching
+  // before it snaps, its halves drawing back into what they hang from
   const gapY = cy - hh - ih;
   const wk = clamp((gapY - 30) / 190);
   const web = 1 - wk * wk * (3 - 2 * wk);
-  const strands: Strand[] = [];
-  const beads: [number, number, number][] = [];
-  const bodyTop = cy - hh;
-  for (const th of THREADS) {
-    const a: [number, number] = [CX + th.ia * iw, ih - 3];
-    const b: [number, number] = [CX + th.wb * hw, bodyTop + 3];
+  const ws = webAt(t);
+  const edges: Edge[] = [];
+  const nodeR = new Map<Junction, number>();
+  // a knot only where three or more threads still meet: two make a bend, one a stub going home
+  const holding = new Map<Junction, number>();
+  EDGES.forEach((e, i) => {
+    const [a, b] = edgeEnds(e, bd, ws.jp);
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const born = clamp((len - 4) / 30);
-    // thinner as it stretches: the volume is shared out over the length
-    const r = (th.r * Math.sqrt(clamp(90 / (len + 1), 0.12, 1)) + web * 30) * born;
-    const depth = 0.92 * easeIn(k01(t, th.snap - 0.2, th.snap));
-    const gap = easeOut(k01(t, th.snap, th.snap + 0.24));
-    // the bow: outward and a little down, swaying slowly as it stretches
-    const i = THREADS.indexOf(th);
-    const sway = Math.sin(t * 7 + i * 1.7) * 0.05;
-    const c: [number, number] = [
-      (a[0] + b[0]) / 2 + (th.bow + sway) * len,
-      (a[1] + b[1]) / 2 + Math.abs(th.bow) * len * 0.25,
-    ];
-    if (t < th.snap + 0.24) strands.push({ a, b, c, r, pinch: th.pinch, depth, gap: t < th.snap ? 0 : gap });
-    if (t >= th.snap) {
-      // the bead the pinch leaves: it falls after the window and melts into it
-      const k = easeIn(k01(t, th.snap, th.snap + 0.3));
-      const y0 = mix(a[1], b[1], th.pinch);
-      const x = mix(mix(a[0], b[0], th.pinch) + th.bow * len * 0.5, b[0], k);
-      const y = mix(y0, b[1] + 6, k);
-      const br = th.r * 0.7 * (1 - k01(t, th.snap + 0.22, th.snap + 0.32));
-      if (br > 0.3) beads.push([x, y, br]);
-    }
-  }
+    const born = clamp((gapY - 2) / 24);
+    // short stubs melt into the surface instead of standing on it as bumps
+    const fade = easeInOut(clamp((len - 10) / 30));
+    // never under 1.1 px: a hairline thinner than a pixel flickers instead of thinning
+    const r = (Math.max(1.1, e.r * clamp(Math.sqrt(110 / (len + 1)), 0.5, 1.5)) + web * 22) * born * fade;
+    const gaps: [number, number] = [halfGap(e, e.a, t), halfGap(e, e.b, t)];
+    const gap = Math.max(...gaps);
+    if (Math.min(...gaps) >= 1 || r < 0.3) return;
+    const m = ws.mp[i];
+    // the curve passes through the lagging middle
+    const c: P = [2 * m[0] - (a[0] + b[0]) / 2, 2 * m[1] - (a[1] + b[1]) / 2];
+    edges.push({ a, b, c, r, pinch: e.pinch, depth: 0.9 * easeIn(k01(t, e.snap - 0.2, e.snap)), gap, gaps });
+    if (t < e.snap)
+      for (const id of [e.a, e.b])
+        if (JUNCTIONS.includes(id as Junction)) {
+          nodeR.set(id as Junction, Math.max(nodeR.get(id as Junction) ?? 0, r));
+          holding.set(id as Junction, (holding.get(id as Junction) ?? 0) + 1);
+        }
+  });
+  const nodes: [number, number, number][] = JUNCTIONS.filter((j) => (holding.get(j) ?? 0) >= 3).map((j) => {
+    const p = ws.jp.get(j) as P;
+    return [p[0], p[1], (nodeR.get(j) as number) * 1.15];
+  });
 
   // 4. the mascot rides the body: it peeks out as the body leaves the island, looks back up at
   // the threads, squints as the last one snaps, then goes to its place in the header
   const rr = Math.min(hw, hh);
   const peek = easeOut(k01(t, 0.14, 0.3));
-  const go = easeInOut(k01(t, 0.72, 1.02));
+  const go = easeInOut(k01(t, 0.6, 0.86));
   const blink = Math.abs(t - 0.5) < 0.035 ? 0.15 : 1;
-  const squint = 1 - 0.55 * Math.exp(-(((t - 0.74) / 0.06) ** 2));
+  const squint = 1 - 0.55 * Math.exp(-(((t - 0.86) / 0.06) ** 2));
   const ex = mix(CX, EYE_HOME.x, go),
     ey = mix(cy - Math.min(rr, 60) * 0.25, EYE_HOME.y, go);
   const eyeR = Math.min(rr, 46);
@@ -133,7 +301,7 @@ export function frameAt(t: number): Frame {
     ex,
     ey,
     mix(eyeR * 0.27, EYE_HOME.half, go),
-    peek * (1 - easeOut(k01(t, 1.04, 1.2))),
+    peek * (1 - easeOut(k01(t, 0.86, 1.0))),
     mix(eyeR * 0.085, EYE_HOME.w, go),
     mix(eyeR * 0.17, EYE_HOME.h, go) * blink * squint,
   ];
@@ -141,11 +309,11 @@ export function frameAt(t: number): Frame {
     web,
     island: [iw, ih],
     body: [cy, Math.max(hw, 1), Math.max(hh, 1), corner],
-    strands,
-    beads,
+    edges,
+    nodes,
     eyes,
     open,
-    content: easeOut(k01(t, 0.95, 1.25)),
+    content: easeOut(k01(t, 0.68, 0.94)),
   };
 }
 
@@ -157,10 +325,11 @@ precision highp float;
 uniform vec2 uRes;
 uniform vec2 uIsland;      // w, h
 uniform vec4 uBody;        // cy, half w, half h, corner
-uniform vec4 uSA[5];       // thread: island end, window end
-uniform vec4 uSB[5];       // thread: radius, pinch, depth, gap
-uniform vec2 uSC[5];       // thread: the curve's control point
-uniform vec3 uBead[5];
+uniform vec4 uSA[24];      // edge: one end, the other
+uniform vec4 uSB[24];      // edge: radius, pinch, depth, gap
+uniform vec2 uSC[24];      // edge: the curve's control point
+uniform vec3 uNode[8];     // junctions: x, y, r
+uniform vec2 uSG[24];      // edge: how far each half has drawn back
 uniform float uOpen, uContent, uCX, uWeb;
 uniform vec4 uWin;         // x, y, w, h
 uniform vec4 uEye;         // x, y, half spacing, alpha
@@ -174,6 +343,8 @@ float box(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q
 // the thread's radius at h: pinched near its pinch, narrowing to a point at a cut end
 float rad(float h, vec4 sb, float h0, float h1, float cutLo, float cutHi){
   float r = sb.x * (1. - sb.z * exp(-pow((h - sb.y) / .13, 2.)));
+  // the feet: a thread flares where it holds on, a cone into the surface or the knot
+  r *= 1. + .9 * (exp(-h / .1) + exp(-(1. - h) / .1));
   if (cutHi > 0.) r *= mix(.3, 1., smoothstep(0., .14, h1 - h));
   if (cutLo > 0.) r *= mix(.3, 1., smoothstep(0., .14, h - h0));
   return r;
@@ -196,34 +367,42 @@ float part(vec2 p, vec2 a, vec2 c, vec2 b, float h0, float h1, vec4 sb, float cu
 
 float threads(vec2 p){
   float d = 1e5;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 24; i++) {
     vec4 sb = uSB[i];
     if (sb.x < .3) continue;
     vec2 a = uSA[i].xy, b = uSA[i].zw, c = uSC[i];
+    // far from this edge's hull: its rough distance is enough
+    vec2 lo = min(min(a, b), c) - sb.x - 40., hi = max(max(a, b), c) + sb.x + 40.;
+    if (any(lessThan(p, lo)) || any(greaterThan(p, hi))) { d = min(d, 40.); continue; }
     // while it is a sheet, neighbouring threads melt into each other
     float kw = 2. + 30. * uWeb;
     if (sb.w <= 0.) d = smin(d, part(p, a, c, b, 0., 1., sb, 0., 0.), kw);
     else {
-      // snapped: the upper half draws back into the island, the lower one into the window
-      float top = sb.y * (1. - sb.w), bot = sb.y + (1. - sb.y) * sb.w;
+      // snapped: each half draws back into what it hangs from
+      float top = sb.y * (1. - uSG[i].x), bot = sb.y + (1. - sb.y) * uSG[i].y;
       if (top > .01) d = smin(d, part(p, a, c, b, 0., top, sb, 0., 1.), kw);
       if (bot < .99) d = smin(d, part(p, a, c, b, bot, 1., sb, 1., 0.), kw);
     }
   }
+  // the junctions: a knot of liquid where threads meet
+  for (int i = 0; i < 8; i++) if (uNode[i].z > .3) d = smin(d, length(p - uNode[i].xy) - uNode[i].z, 6.);
   return d;
 }
 
-float field(vec2 p){
-  // the island hangs from the top edge; the band above the screen gives it concave shoulders
+// the island hangs from the top edge; the band above the screen gives it concave shoulders
+float islandF(vec2 p){
   float isl = box(p - vec2(uCX, (uIsland.y - 60.) * .5), vec2(uIsland.x * .5, (uIsland.y + 60.) * .5), 13.);
-  float d = smin(isl, p.y, 9.);
-  float body = box(p - vec2(uCX, uBody.x), uBody.yz, uBody.w);
-  float beads = 1e5;
-  for (int i = 0; i < 5; i++) if (uBead[i].z > .3) beads = min(beads, length(p - uBead[i].xy) - uBead[i].z);
+  return smin(isl, p.y, 9.);
+}
+float bodyF(vec2 p){ return box(p - vec2(uCX, uBody.x), uBody.yz, uBody.w); }
+
+float field(vec2 p){
+  float d = islandF(p);
+  float body = bodyF(p);
   // the joins: thick fillets where threads hold on, like oil, softer once it is a window
   float k = 16. * (1. - uOpen * .7);
   float th = threads(p);
-  return min(smin(smin(d, th, k), smin(body, beads, 10.), k), smin(body, th, k));
+  return min(smin(d, th, k), smin(body, th, k));
 }
 
 // the screen behind: a dark wallpaper with a soft violet wave, like the owner's
@@ -241,7 +420,9 @@ void main(){
   vec3 col = wall(uv);
   float d = field(p);
   // a soft shadow on the screen under it, deeper as it becomes a window
-  float ds = field(p - vec2(0., 14.));
+  // only the island and the window cast it: a thread is too thin to shade a lit desk, and its
+  // shadow read as a second, blurred thread beside it
+  float ds = min(islandF(p - vec2(0., 14.)), bodyF(p - vec2(0., 14.)));
   col *= 1. - .5 * exp(-max(ds, 0.) / (18. + 30. * uOpen)) * smoothstep(-1., 24., d);
   // the island's own material: matte black with a hairline of light along its edge
   float a = smoothstep(.8, -.8, d);
@@ -310,15 +491,16 @@ function draw(t: number): void {
   gl.uniform4f(U('uBody'), ...f.body);
   const sa: number[] = [],
     sb: number[] = [];
-  for (let i = 0; i < 5; i++) {
-    const st = f.strands[i];
+  for (let i = 0; i < 24; i++) {
+    const st = f.edges[i];
     sa.push(...(st ? [...st.a, ...st.b] : [0, 0, 0, 0]));
     sb.push(...(st ? [st.r, st.pinch, st.depth, st.gap] : [0, 0, 0, 0]));
   }
   gl.uniform4fv(U('uSA'), sa);
-  gl.uniform2fv(U('uSC'), Array.from({ length: 5 }, (_, i) => f.strands[i]?.c ?? [0, 0]).flat());
+  gl.uniform2fv(U('uSC'), Array.from({ length: 24 }, (_, i) => f.edges[i]?.c ?? [0, 0]).flat());
   gl.uniform4fv(U('uSB'), sb);
-  gl.uniform3fv(U('uBead'), [...f.beads, [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]].slice(0, 5).flat());
+  gl.uniform2fv(U('uSG'), Array.from({ length: 24 }, (_, i) => f.edges[i]?.gaps ?? [0, 0]).flat());
+  gl.uniform3fv(U('uNode'), Array.from({ length: 8 }, (_, i) => f.nodes[i] ?? [0, 0, 0]).flat());
   gl.uniform1f(U('uOpen'), f.open);
   gl.uniform1f(U('uWeb'), f.web);
   gl.uniform1f(U('uContent'), texReady ? f.content : 0);
