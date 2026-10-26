@@ -5,9 +5,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{Manager, WebviewWindow};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
+use windows::Win32::Graphics::Dwm::{
+    DwmEnableBlurBehindWindow, DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND,
+};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL,
-    MONITOR_DEFAULTTOPRIMARY,
+    CreateRectRgn, DeleteObject, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO,
+    MONITOR_DEFAULTTONULL, MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::HiDpi::{
     GetDpiForWindow, GetSystemMetricsForDpi, SetProcessDpiAwarenessContext,
@@ -67,15 +70,31 @@ pub fn ready(window: &WebviewWindow) {
 /// Click-through as last asked; re-applied whenever the styles are rebuilt.
 static IGNORE: AtomicBool = AtomicBool::new(true);
 
-/// Not in Alt-Tab or the taskbar, never activated, topmost - and layered for good. Turning
-/// WS_EX_LAYERED off and on (what tao's `set_ignore_cursor_events` does, and what this file did
-/// until 0.2.3) switches DWM between two ways of drawing the window, and the non-layered one lost
-/// the transparency: the whole 680x230 window turned white behind the island whenever it opened
-/// (owner's screenshots 2026-10-24 and 2026-10-26). The clear look is the layered one - it stays.
-const KEEP: isize =
-    (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0 | WS_EX_LAYERED.0) as isize;
-/// Click-through: on a layered window WS_EX_TRANSPARENT alone lets clicks fall to what is below.
-const PASS: isize = WS_EX_TRANSPARENT.0 as isize;
+/// Not in Alt-Tab or the taskbar, never activated, topmost.
+const KEEP: isize = (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0) as isize;
+/// Click-through, the same bits tao sets for `set_ignore_cursor_events`. The island has to drop
+/// WS_EX_LAYERED when it takes clicks: a layered window is hit-tested by its drawn pixels, and 0.2.4,
+/// which kept it layered, lost the clicks on the island's right side (settings, sound, the stack).
+const PASS: isize = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0) as isize;
+
+/// tao makes a transparent window clear with an empty DWM blur-behind region, once, at creation.
+/// Switching WS_EX_LAYERED off and on makes DWM draw the window anew and that is lost: the whole
+/// 680x230 window turned white behind the open island (owner's screenshots 2026-10-24 and
+/// 2026-10-26). So it is set again after every switch.
+fn keep_clear(h: HWND) {
+    // SAFETY: plain Win32 calls on a live window owned by Tauri; the region is ours to free.
+    unsafe {
+        let region = CreateRectRgn(0, 0, -1, -1);
+        let bb = DWM_BLURBEHIND {
+            dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
+            fEnable: true.into(),
+            hRgnBlur: region,
+            fTransitionOnMaximized: false.into(),
+        };
+        let _ = DwmEnableBlurBehindWindow(h, &bb);
+        let _ = DeleteObject(region.into());
+    }
+}
 
 fn wanted_ex(ex: isize) -> isize {
     let ex = (ex | KEEP) & !(WS_EX_APPWINDOW.0 as isize);
@@ -102,6 +121,7 @@ pub fn setup_window(window: &WebviewWindow) {
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
         );
     }
+    keep_clear(h);
 }
 
 fn desired(h: HWND) -> (RECT, Geometry, f64) {
@@ -227,6 +247,7 @@ pub fn set_ignore(window: &WebviewWindow, ignore: bool) {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
             );
+            keep_clear(h);
         }
     }
 }

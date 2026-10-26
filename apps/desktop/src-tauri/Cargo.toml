@@ -1,6 +1,6 @@
 [package]
 name = "almanac-notch"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 rust-version = "1.90"
 publish = false
@@ -46,6 +46,7 @@ windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Variant",
