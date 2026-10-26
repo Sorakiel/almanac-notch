@@ -1,12 +1,12 @@
-// The settings window comes out of the island like a drop out of a lava lamp (owner, 2026-10-26):
-// the island swells, a bulge is squeezed out of it, the drop falls to where the window will be,
-// the neck stretches, thins and breaks into beads - the top one is drawn back into the island,
-// the rest fall and merge into the drop - and the drop opens into the window.
+// The settings window comes out of the island and pulls away from it like oil (owner, 2026-10-26):
+// the island pushes out a body, the body pulls down to where the window will be, and between them
+// threads stretch - thinner as they lengthen, each pinching at its own place until it snaps, the
+// halves drawing back into the island and into the window, a bead falling from each snap.
 //
 // Everything is one signed-distance field: the island (with its concave shoulders at the top
-// edge), the drop, the beads and the window are joined with a smooth minimum, so the neck is the
-// field itself, not a drawn shape, and every edge stays sharp at any size. The black is glossy
-// (a height field from the distance, one light from above): liquid, not a flat fill.
+// edge), the body, the threads and the beads are joined with a smooth minimum, so the fillets
+// where a thread holds on are the field itself and every edge stays sharp at any size. The
+// material is the island's: matte black with a hairline of light - no gloss (owner).
 import { springK } from '@almanac-notch/island';
 
 const W = 1710,
@@ -25,107 +25,127 @@ const easeIn = (k: number): number => k * k * k;
 const easeInOut = (k: number): number => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 const mix = (a: number, b: number, k: number): number => a + (b - a) * k;
 
+interface Strand {
+  a: [number, number]; // on the island
+  b: [number, number]; // on the window
+  c: [number, number]; // the curve's control point: oil sags and sways, it is never a rod
+  r: number; // radius at rest
+  pinch: number; // where along it the thread pinches, 0..1
+  depth: number; // how pinched, 0..1
+  gap: number; // after the snap: how far both halves have drawn back, 0..1
+}
+
 interface Frame {
-  island: [number, number, number]; // w, h, corner
-  drop: [number, number, number, number, number]; // cy, half w, half h, corner, m (0 drop → 1 window)
-  neck: [number, number, number]; // y top, y bottom, radius (0 = broken)
+  island: [number, number]; // w, h
+  body: [number, number, number, number]; // cy, half w, half h, corner
+  strands: Strand[];
   beads: [number, number, number][]; // x, y, r
-  /** the mascot's eyes riding the drop: centre x, y, half spacing, alpha, eye half w, half h */
-  eyes: [number, number, number, number, number, number];
-  k: number;
+  eyes: [number, number, number, number, number, number]; // x, y, half spacing, alpha, half w, half h
+  open: number; // 0 a blob of the island → 1 the window (softens the joins)
+  web: number; // how much the threads still melt into one sheet: 1 at first, 0 once stretched
   content: number;
-  gloss: number;
 }
 
 /** where the header's mascot of the Island page has its eyes in the window (measured: its 150 x 120
  *  canvas at 518, 44; R = 46 * 0.58; eyes just above the body's middle) */
 const EYE_HOME = { x: CX - WIN.w / 2 + 593, y: WIN.top + 104, half: 8, w: 2.6, h: 5.2 };
 
+/** the threads, left to right: where they hold on the island and on the window (fractions of the
+ *  half widths), how thick, where they pinch, when they snap - the thick middle one holds longest */
+const THREADS = [
+  { ia: -0.4, wb: -0.78, r: 5, pinch: 0.62, snap: 0.42, bow: -0.16 },
+  { ia: -0.19, wb: -0.36, r: 8, pinch: 0.4, snap: 0.55, bow: -0.08 },
+  { ia: 0.02, wb: 0.06, r: 12, pinch: 0.5, snap: 0.7, bow: 0.03 },
+  { ia: 0.21, wb: 0.42, r: 7.5, pinch: 0.58, snap: 0.5, bow: 0.1 },
+  { ia: 0.38, wb: 0.8, r: 4.5, pinch: 0.36, snap: 0.38, bow: 0.18 },
+];
+
 /** the timeline, s - the keyframes the strip is judged against */
 export function frameAt(t: number): Frame {
-  // 1. the island swells as it gathers the drop (0 - 0.26), then settles on a wobbly spring
-  const swell = easeOut(k01(t, 0, 0.26));
-  const release = springK(Math.max(0, t - 0.52), 0.4, 0.4);
-  // the wobble may dip a little under rest, never collapse the island into a thread
-  const gather = Math.max(-0.18, swell * (1 - release));
-  const iw = mix(I0.w, I0.w + 80, gather),
-    ih = mix(I0.h, I0.h + 24, gather);
+  // 1. the island gathers itself (0 - 0.2) and, once the last thread lets go, settles on a spring
+  const swell = easeOut(k01(t, 0, 0.2));
+  const settle = springK(Math.max(0, t - 0.7), 0.4, 0.42);
+  const gather = Math.max(-0.15, swell * (1 - settle));
+  const iw = mix(I0.w, I0.w + 90, gather),
+    ih = mix(I0.h, I0.h + 26, gather);
 
-  // 2. the bulge is squeezed out (0.04 - 0.3) and falls (0.28 - 0.62): it gathers speed and
-  // stretches like a falling drop, then lands with a squash on the window's centre
-  const grow = easeOut(k01(t, 0.04, 0.3));
-  const fall = k01(t, 0.26, 0.62);
-  // gravity: the drop gathers speed (quadratic), the last stretch eased into the landing
-  const fallY = fall * fall * 0.8 + easeInOut(fall) * 0.2;
-  const r = mix(0, 46, grow) + mix(0, 30, easeOut(fall));
-  const speed = fall > 0 && fall < 1 ? Math.sin(fall * Math.PI) : 0;
-  const landT = Math.max(0, t - 0.62);
-  // the landing: a squash that springs back (wide and low, then round)
-  const squash = t > 0.62 ? (1 - springK(landT, 0.3, 0.42)) * 0.32 : 0;
-  const cy0 = ih + r * 0.9;
-  const cy = mix(cy0, WCY, fall >= 1 ? 1 : fallY) + squash * r * 0.5;
-  let hw = r * (1 - speed * 0.12 + squash),
-    hh = r * (1 + speed * 0.3 - squash);
+  // 2. the window's body: pushed out of the island (0.04 - 0.22), then it pulls away, slowly and
+  // heavily, as something viscous does, and grows into the window on the island's spring
+  const out = easeOut(k01(t, 0.04, 0.24));
+  const away = springK(Math.max(0, t - 0.2), 0.62, 0.78);
+  const grow = springK(Math.max(0, t - 0.26), 0.58, 0.66);
+  const hw = mix(mix(iw * 0.36, 150, out), WIN.w / 2, grow),
+    hh = mix(mix(8, 40, out), WIN.h / 2, grow);
+  const cy = mix(mix(ih * 0.4, ih + 44, out), WCY, away);
+  const open = easeInOut(k01(t, 0.55, 1.0));
+  const corner = mix(Math.min(hw, hh), WIN.r, easeInOut(k01(t, 0.3, 0.9)));
 
-  // 3. the neck: one stretched thread that thins as the drop falls and snaps at 0.5
-  // it holds until the drop is ~190 pt away, then snaps
-  const snap = 0.47;
-  const neckR = t < snap ? mix(34, 11, clamp((cy - cy0) / 200)) * clamp(grow * 1.6) : 0;
+  // 3. the threads: from the island's lower edge to the window's upper edge; the longer they get
+  // the thinner, each pinching at its own place until it snaps; then the halves draw back into the
+  // island and into the window, and the pinch becomes a bead that falls into the window
+  // a sheet first, threads later: the threads start swollen enough to melt into one film, and as
+  // it stretches they thin into strands - holes open between them as a real film tears
+  const gapY = cy - hh - ih;
+  const wk = clamp((gapY - 30) / 190);
+  const web = 1 - wk * wk * (3 - 2 * wk);
+  const strands: Strand[] = [];
   const beads: [number, number, number][] = [];
-  if (t >= snap) {
-    // where it snapped, the thread pulls into beads: the top one goes back to the island, the
-    // others fall after the drop, swaying like wax in a lava lamp, and merge into it
-    const yTop = ih + 4;
-    const fs = k01(snap, 0.26, 0.62),
-      ySnap = mix(cy0, WCY, fs * fs * 0.8 + easeInOut(fs) * 0.2);
-    const back = easeOut(k01(t, snap, snap + 0.22));
-    beads.push([CX, mix(mix(yTop, ySnap, 0.22), yTop - 6, back), 17 * (1 - back)]);
-    for (let i = 1; i < 4; i++) {
-      const f = 0.3 + i * 0.18;
-      // they catch the drop as it lands: the merge is the landing's ripple
-      const k = easeIn(k01(t, snap + i * 0.02, 0.64 + i * 0.035));
-      const y = mix(mix(yTop, ySnap, f), cy - hh * 0.5, k);
-      const x = CX + Math.sin(t * 8 + i * 1.9) * 7 * (1 - k);
-      beads.push([x, y, (19 - i * 3) * (1 - k01(t, 0.6 + i * 0.035, 0.72 + i * 0.035))]);
+  const bodyTop = cy - hh;
+  for (const th of THREADS) {
+    const a: [number, number] = [CX + th.ia * iw, ih - 3];
+    const b: [number, number] = [CX + th.wb * hw, bodyTop + 3];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const born = clamp((len - 4) / 30);
+    // thinner as it stretches: the volume is shared out over the length
+    const r = (th.r * Math.sqrt(clamp(90 / (len + 1), 0.12, 1)) + web * 30) * born;
+    const depth = 0.92 * easeIn(k01(t, th.snap - 0.2, th.snap));
+    const gap = easeOut(k01(t, th.snap, th.snap + 0.24));
+    // the bow: outward and a little down, swaying slowly as it stretches
+    const i = THREADS.indexOf(th);
+    const sway = Math.sin(t * 7 + i * 1.7) * 0.05;
+    const c: [number, number] = [
+      (a[0] + b[0]) / 2 + (th.bow + sway) * len,
+      (a[1] + b[1]) / 2 + Math.abs(th.bow) * len * 0.25,
+    ];
+    if (t < th.snap + 0.24) strands.push({ a, b, c, r, pinch: th.pinch, depth, gap: t < th.snap ? 0 : gap });
+    if (t >= th.snap) {
+      // the bead the pinch leaves: it falls after the window and melts into it
+      const k = easeIn(k01(t, th.snap, th.snap + 0.3));
+      const y0 = mix(a[1], b[1], th.pinch);
+      const x = mix(mix(a[0], b[0], th.pinch) + th.bow * len * 0.5, b[0], k);
+      const y = mix(y0, b[1] + 6, k);
+      const br = th.r * 0.7 * (1 - k01(t, th.snap + 0.22, th.snap + 0.32));
+      if (br > 0.3) beads.push([x, y, br]);
     }
   }
 
-  // 4. the drop opens into the window: the same rounded box grows on the island's spring, its
-  // corners going from fully round to the window's 22
-  const open = k01(t, 0.7, 1.08);
-  const m = easeInOut(open);
-  const sz = springK(Math.max(0, t - 0.7), 0.46, 0.6);
-  hw = mix(hw, WIN.w / 2, sz);
-  hh = mix(hh, WIN.h / 2, sz);
-  const corner = mix(Math.min(hw, hh), WIN.r, m);
-  // 5. the mascot rides the drop down: it peeks out of the bulge, watches the fall, squints on
-  // the landing, then goes to its place in the window's header and hands over to the one there
+  // 4. the mascot rides the body: it peeks out as the body leaves the island, looks back up at
+  // the threads, squints as the last one snaps, then goes to its place in the header
   const rr = Math.min(hw, hh);
-  const peek = easeOut(k01(t, 0.16, 0.3));
-  const look = fall > 0 && fall < 1 ? 0.28 : 0;
-  const blink = Math.abs(t - 0.4) < 0.035 ? 0.15 : 1;
-  const happy = t > 0.62 ? 1 - 0.6 * (1 - springK(landT, 0.3, 0.5)) : 1;
-  const go = easeInOut(k01(t, 0.74, 1.04));
+  const peek = easeOut(k01(t, 0.14, 0.3));
+  const go = easeInOut(k01(t, 0.72, 1.02));
+  const blink = Math.abs(t - 0.5) < 0.035 ? 0.15 : 1;
+  const squint = 1 - 0.55 * Math.exp(-(((t - 0.74) / 0.06) ** 2));
   const ex = mix(CX, EYE_HOME.x, go),
-    ey = mix(cy - rr * 0.08 + look * rr, EYE_HOME.y, go);
+    ey = mix(cy - Math.min(rr, 60) * 0.25, EYE_HOME.y, go);
+  const eyeR = Math.min(rr, 46);
   const eyes: Frame['eyes'] = [
     ex,
     ey,
-    mix(Math.max(rr, 1) * 0.27, EYE_HOME.half, go),
-    peek * (1 - easeOut(k01(t, 1.06, 1.22))),
-    mix(rr * 0.085, EYE_HOME.w, go),
-    mix(rr * 0.17, EYE_HOME.h, go) * blink * happy,
+    mix(eyeR * 0.27, EYE_HOME.half, go),
+    peek * (1 - easeOut(k01(t, 1.04, 1.2))),
+    mix(eyeR * 0.085, EYE_HOME.w, go),
+    mix(eyeR * 0.17, EYE_HOME.h, go) * blink * squint,
   ];
   return {
-    eyes,
-    island: [iw, ih, 13],
-    drop: [cy, Math.max(hw, 1), Math.max(hh, 1), corner, m],
-    neck: [ih - 4, cy - hh * 0.4, neckR],
+    web,
+    island: [iw, ih],
+    body: [cy, Math.max(hw, 1), Math.max(hh, 1), corner],
+    strands,
     beads,
-    k: 26,
-    // 5. the window's own content comes in once the shape has settled
-    content: easeOut(k01(t, 0.98, 1.3)),
-    gloss: 1 - easeInOut(k01(t, 0.86, 1.25)) * 0.9,
+    eyes,
+    open,
+    content: easeOut(k01(t, 0.95, 1.25)),
   };
 }
 
@@ -135,12 +155,13 @@ in vec2 a; void main(){ gl_Position = vec4(a,0.,1.); }`;
 const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
-uniform vec3 uIsland;      // w, h, corner
-uniform vec4 uDrop;        // cy, half w, half h, corner
-uniform float uM;          // 0 drop -> 1 window
-uniform vec3 uNeck;        // y top, y bottom, radius
-uniform vec3 uBeads[4];
-uniform float uK, uContent, uGloss, uCX;
+uniform vec2 uIsland;      // w, h
+uniform vec4 uBody;        // cy, half w, half h, corner
+uniform vec4 uSA[5];       // thread: island end, window end
+uniform vec4 uSB[5];       // thread: radius, pinch, depth, gap
+uniform vec2 uSC[5];       // thread: the curve's control point
+uniform vec3 uBead[5];
+uniform float uOpen, uContent, uCX, uWeb;
 uniform vec4 uWin;         // x, y, w, h
 uniform vec4 uEye;         // x, y, half spacing, alpha
 uniform vec2 uEyeSize;     // half w, half h
@@ -150,28 +171,59 @@ out vec4 o;
 float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b-a)/k, 0., 1.); return mix(b, a, h) - k*h*(1.-h); }
 float box(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q,0.)) + min(max(q.x,q.y),0.) - r; }
 
+// the thread's radius at h: pinched near its pinch, narrowing to a point at a cut end
+float rad(float h, vec4 sb, float h0, float h1, float cutLo, float cutHi){
+  float r = sb.x * (1. - sb.z * exp(-pow((h - sb.y) / .13, 2.)));
+  if (cutHi > 0.) r *= mix(.3, 1., smoothstep(0., .14, h1 - h));
+  if (cutLo > 0.) r *= mix(.3, 1., smoothstep(0., .14, h - h0));
+  return r;
+}
+vec2 bez(vec2 a, vec2 c, vec2 b, float t){ return mix(mix(a, c, t), mix(c, b, t), t); }
+
+// one part of a curved thread, between h0 and h1: the curve as 8 short capsules
+float part(vec2 p, vec2 a, vec2 c, vec2 b, float h0, float h1, vec4 sb, float cutLo, float cutHi){
+  float d = 1e5;
+  for (int j = 0; j < 8; j++) {
+    float u0 = mix(h0, h1, float(j) / 8.), u1 = mix(h0, h1, float(j + 1) / 8.);
+    vec2 p0 = bez(a, c, b, u0), p1 = bez(a, c, b, u1);
+    vec2 pa = p - p0, ba = p1 - p0;
+    float k = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-4), 0., 1.);
+    float u = mix(u0, u1, k);
+    d = min(d, length(pa - ba * k) - rad(u, sb, h0, h1, cutLo, cutHi));
+  }
+  return d;
+}
+
+float threads(vec2 p){
+  float d = 1e5;
+  for (int i = 0; i < 5; i++) {
+    vec4 sb = uSB[i];
+    if (sb.x < .3) continue;
+    vec2 a = uSA[i].xy, b = uSA[i].zw, c = uSC[i];
+    // while it is a sheet, neighbouring threads melt into each other
+    float kw = 2. + 30. * uWeb;
+    if (sb.w <= 0.) d = smin(d, part(p, a, c, b, 0., 1., sb, 0., 0.), kw);
+    else {
+      // snapped: the upper half draws back into the island, the lower one into the window
+      float top = sb.y * (1. - sb.w), bot = sb.y + (1. - sb.y) * sb.w;
+      if (top > .01) d = smin(d, part(p, a, c, b, 0., top, sb, 0., 1.), kw);
+      if (bot < .99) d = smin(d, part(p, a, c, b, bot, 1., sb, 1., 0.), kw);
+    }
+  }
+  return d;
+}
+
 float field(vec2 p){
   // the island hangs from the top edge; the band above the screen gives it concave shoulders
-  float top = 60.;
-  float isl = box(p - vec2(uCX, (uIsland.y - top) * .5), vec2(uIsland.x * .5, (uIsland.y + top) * .5), uIsland.z);
+  float isl = box(p - vec2(uCX, (uIsland.y - 60.) * .5), vec2(uIsland.x * .5, (uIsland.y + 60.) * .5), 13.);
   float d = smin(isl, p.y, 9.);
-  vec2 c = vec2(uCX, uDrop.x);
-  float drop = box(p - c, uDrop.yz, uDrop.w);
-  // the thread: a capsule from the island to the drop, thinning as it stretches
-  float neck = 1e5;
-  if (uNeck.z > .3) {
-    vec2 a = vec2(uCX, uNeck.x), bb = vec2(uCX, uNeck.y);
-    vec2 pa = p - a, ba = bb - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.);
-    // thinner in the middle, as a stretched thread pinches before it snaps
-    float rr = uNeck.z * (1. - .55 * sin(h * 3.14159));
-    neck = length(pa - ba * h) - rr;
-  }
-  float b = 1e5;
-  for (int i = 0; i < 4; i++) if (uBeads[i].z > .3) b = smin(b, length(p - uBeads[i].xy) - uBeads[i].z, 14.);
-  // the island, the thread, the beads and the drop melt into each other
-  float k = uK * (1. - uM * .9);
-  return smin(smin(smin(d, neck, k), b, k), drop, k);
+  float body = box(p - vec2(uCX, uBody.x), uBody.yz, uBody.w);
+  float beads = 1e5;
+  for (int i = 0; i < 5; i++) if (uBead[i].z > .3) beads = min(beads, length(p - uBead[i].xy) - uBead[i].z);
+  // the joins: thick fillets where threads hold on, like oil, softer once it is a window
+  float k = 16. * (1. - uOpen * .7);
+  float th = threads(p);
+  return min(smin(smin(d, th, k), smin(body, beads, 10.), k), smin(body, th, k));
 }
 
 // the screen behind: a dark wallpaper with a soft violet wave, like the owner's
@@ -188,39 +240,18 @@ void main(){
   vec2 uv = p / uRes;
   vec3 col = wall(uv);
   float d = field(p);
-  // a soft shadow under the liquid, deeper as it becomes a window
-  float ds = field(p - vec2(0., 16.));
-  col *= 1. - .55 * exp(-max(ds, 0.) / (24. + 30. * uM)) * smoothstep(-1., 30., d);
-
+  // a soft shadow on the screen under it, deeper as it becomes a window
+  float ds = field(p - vec2(0., 14.));
+  col *= 1. - .5 * exp(-max(ds, 0.) / (18. + 30. * uOpen)) * smoothstep(-1., 24., d);
+  // the island's own material: matte black with a hairline of light along its edge
   float a = smoothstep(.8, -.8, d);
-  // glossy black: a dome that rises from the edge, lit from the upper left. The normal is taken
-  // over 5 px so the field's ridges (the middle of the thread, of a bead) stay smooth, not lines
-  // the island itself stays the real island's black: the hand-over to it must not show
-  float body = smoothstep(uIsland.y + 4., uIsland.y + 50., p.y);
-  float e = 5.;
-  float W = 22.;
-  float hc = 1. - exp(min(d, 0.) / W);
-  float hx = (1. - exp(min(field(p + vec2(e,0.)), 0.) / W)) - (1. - exp(min(field(p - vec2(e,0.)), 0.) / W));
-  float hy = (1. - exp(min(field(p + vec2(0.,e)), 0.) / W)) - (1. - exp(min(field(p - vec2(0.,e)), 0.) / W));
-  vec3 n = normalize(vec3(-hx * 4., hy * 4., 1.));
-  vec3 L = normalize(vec3(-.55, .7, .45));
-  vec3 Hh = normalize(L + vec3(0.,0.,1.));
-  float spec = pow(max(dot(n, Hh), 0.), 36.) * .55 * smoothstep(.0, .25, 1. - n.z) * body;
-  float fres = pow(1. - n.z, 2.5) * .45 * body;
-  // a little of the wallpaper's violet in the body, deeper where it is thick: wax, not a hole
-  vec3 liquid = vec3(.012) * body + vec3(.05,.045,.09) * hc * uGloss * body + vec3(1.) * spec * uGloss + vec3(.42,.46,.78) * fres * uGloss;
-  // the island's rim: a hairline of light along the edge
-  liquid += vec3(1.) * smoothstep(1.6, 0., abs(d + .9)) * (.07 + .08 * uGloss);
-
-  // the window's own content, inside its box
+  vec3 body = vec3(0.) + vec3(1.) * smoothstep(1.4, 0., abs(d + .8)) * .09;
   vec2 wuv = (p - uWin.xy) / uWin.zw;
   if (uContent > 0. && wuv.x > 0. && wuv.x < 1. && wuv.y > 0. && wuv.y < 1.) {
-    vec4 tex = texture(uTex, wuv);
     float inside = smoothstep(.8, -.8, box(p - (uWin.xy + uWin.zw * .5), uWin.zw * .5, 22.));
-    liquid = mix(liquid, tex.rgb, uContent * inside);
+    body = mix(body, texture(uTex, wuv).rgb, uContent * inside);
   }
-  col = mix(col, liquid, a);
-  // the mascot's eyes, the island's chalk white
+  col = mix(col, body, a);
   if (uEye.w > 0.) {
     float r = min(uEyeSize.x, uEyeSize.y);
     float eye = min(box(p - uEye.xy - vec2(uEye.z, 0.), uEyeSize, r), box(p - uEye.xy + vec2(uEye.z, 0.), uEyeSize, r));
@@ -275,15 +306,22 @@ function draw(t: number): void {
   gl.viewport(0, 0, W, H);
   gl.uniform2f(U('uRes'), W, H);
   gl.uniform1f(U('uCX'), CX);
-  gl.uniform3f(U('uIsland'), ...f.island);
-  gl.uniform4f(U('uDrop'), f.drop[0], f.drop[1], f.drop[2], f.drop[3]);
-  gl.uniform1f(U('uM'), f.drop[4]);
-  gl.uniform3f(U('uNeck'), ...f.neck);
-  const beads = [...f.beads, [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]].slice(0, 4);
-  gl.uniform3fv(U('uBeads'), beads.flat());
-  gl.uniform1f(U('uK'), f.k);
+  gl.uniform2f(U('uIsland'), ...f.island);
+  gl.uniform4f(U('uBody'), ...f.body);
+  const sa: number[] = [],
+    sb: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    const st = f.strands[i];
+    sa.push(...(st ? [...st.a, ...st.b] : [0, 0, 0, 0]));
+    sb.push(...(st ? [st.r, st.pinch, st.depth, st.gap] : [0, 0, 0, 0]));
+  }
+  gl.uniform4fv(U('uSA'), sa);
+  gl.uniform2fv(U('uSC'), Array.from({ length: 5 }, (_, i) => f.strands[i]?.c ?? [0, 0]).flat());
+  gl.uniform4fv(U('uSB'), sb);
+  gl.uniform3fv(U('uBead'), [...f.beads, [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]].slice(0, 5).flat());
+  gl.uniform1f(U('uOpen'), f.open);
+  gl.uniform1f(U('uWeb'), f.web);
   gl.uniform1f(U('uContent'), texReady ? f.content : 0);
-  gl.uniform1f(U('uGloss'), f.gloss);
   gl.uniform4f(U('uEye'), f.eyes[0], f.eyes[1], f.eyes[2], f.eyes[3]);
   gl.uniform2f(U('uEyeSize'), f.eyes[4], f.eyes[5]);
   gl.uniform4f(U('uWin'), CX - WIN.w / 2, WIN.top, WIN.w, WIN.h);
