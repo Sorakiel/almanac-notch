@@ -482,7 +482,11 @@ float threads(vec2 p){
 // the island hangs from the top edge; the band above the screen gives it concave shoulders
 float islandF(vec2 p){
   float isl = box(p - vec2(uCX, (uIsland.y - 60.) * .5), vec2(uIsland.x * .5, (uIsland.y + 60.) * .5), uIslandR);
-  return smin(isl, p.y, 9.);
+  // the band above the screen that gives it concave shoulders - only where the island meets the
+  // edge: across the whole width it drew a hairline and cast a shadow along the top of the screen
+  // (owner's screenshot of 0.2.3 on Windows)
+  float band = max(p.y, abs(p.x - uCX) - uIsland.x * .5 - 24.);
+  return smin(isl, band, 9.);
 }
 float bodyF(vec2 p){ return box(p - vec2(uBX, uBody.x), uBody.yz, uBody.w); }
 
@@ -508,11 +512,13 @@ void main(){
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uDpr;
   vec2 uv = p / (uRes / uDpr);
   float d = field(p);
-  // a soft shadow on the screen under it, deeper as it becomes a window; only the island and the
-  // window cast it - a thread is too thin to shade a lit desk, and its shadow read as a second,
-  // blurred thread beside it. Once the real window is there, its own shadow takes over.
-  float dsI = islandF(p - vec2(0., 14.)), dsB = bodyF(p - vec2(0., 14.)) + 1e4 * uLive;
-  float sh = .5 * exp(-max(min(dsI, dsB), 0.) / (18. + 30. * uOpen)) * smoothstep(-1., 24., d);
+  // a soft shadow on the screen under it, deeper as it becomes a window; only the window's body
+  // casts it - a thread is too thin to shade a lit desk (its shadow read as a second, blurred
+  // thread), and the real island casts none, so the scene's island must not either: around it the
+  // shadow showed as a dark band at the top of the screen. Once the real window is there, its own
+  // shadow takes over.
+  float dsB = bodyF(p - vec2(0., 14.)) + 1e4 * uLive;
+  float sh = .5 * exp(-max(dsB, 0.) / (18. + 30. * uOpen)) * smoothstep(-1., 24., d);
   // the island's own material: matte black with a hairline of light along its edge; the body turns
   // into the window's colour as it becomes one
   float a = smoothstep(.8, -.8, d);
