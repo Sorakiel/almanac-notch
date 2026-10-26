@@ -1177,12 +1177,12 @@ body:not(.dev) .dev-only {
   position: absolute;
   right: 18px;
   bottom: 0;
-  width: 150px;
-  height: 120px;
+  width: 130px;
+  height: 104px;
 }
 #tab-modules .hero .head-text {
   position: relative;
-  max-width: calc(100% - 170px);
+  max-width: calc(100% - 140px);
   pointer-events: none;
 }
 #tab-modules .hero h2 {
@@ -1195,7 +1195,10 @@ body:not(.dev) .dev-only {
 #tab-modules .head-sub {
   margin: 6px 0 0;
   color: var(--i-body);
-  font-size: 14px;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 #tab-modules .hero .status {
   position: relative;
@@ -1273,7 +1276,8 @@ body:not(.dev) .dev-only {
 #tab-modules .example .screen {
   position: relative;
   overflow: hidden;
-  height: 168px;
+  /* the island's window cropped just under the open island (about 175 pt of 230): no empty desk below it */
+  height: 140px;
   border-radius: 14px;
   background: var(--i-card);
 }
@@ -1378,4 +1382,9 @@ body:not(.dev) .dev-only {
     transform: scale(1.3);
     opacity: 1;
   }
+}
+
+/* a card's own heading sits tight over its controls (the Calendar source cards) */
+#tab-modules main > section:not(.help) > h3:first-child {
+  margin: 0 0 10px;
 }

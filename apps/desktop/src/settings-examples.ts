@@ -43,8 +43,9 @@ export function islandExample(host: HTMLElement): IslandExample {
     cap = host.querySelector('.cap') as HTMLElement;
   const m = createMascot({ settings: defaultSettings(false), now: performance.now(), greetAfter: null });
   const s = m.state;
-  // the prototype's sample day and its desk: a lived-in island at the top of a small screen
-  s.bare = false;
+  // the prototype's sample day and its desk: a lived-in island at the top of a small screen (the desk itself is the card)
+  // no painted desk: the card is the screen, so nothing grey is left below the island
+  s.bare = true;
   const prefs = { openOnHover: true, autoClose: 5, status: [], version: '', volume: 0.6 };
   s.host = prefs;
   s.notchW = 185;
@@ -89,14 +90,14 @@ export function islandExample(host: HTMLElement): IslandExample {
     s.clickOpen = false;
     clicked = false;
     t0 = performance.now();
-    glide(560, 200, 340, 14, 900, 300);
+    glide(560, 178, 340, 14, 900, 300);
     glide(340, 14, 380, 60, 400, 1300);
     if (choice.hover) {
       notes.push(
         [0, t('Курсор у выреза - остров открывается')],
         [3000, t('Курсор ушёл - остров закрывается почти сразу')],
       );
-      glide(380, 60, 120, 215, 700, 3000);
+      glide(380, 60, 120, 178, 700, 3000);
       clickAt = -1;
       loopMs = 5200;
     } else {
@@ -105,7 +106,7 @@ export function islandExample(host: HTMLElement): IslandExample {
         [2300, t('Клик - остров открыт и ждёт {0} с после ухода курсора', choice.close)],
       );
       clickAt = 2300;
-      glide(380, 60, 120, 215, 700, 3200);
+      glide(380, 60, 120, 178, 700, 3200);
       loopMs = 4200 + choice.close * 1000 + 800;
     }
   }
