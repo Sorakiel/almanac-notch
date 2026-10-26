@@ -65,10 +65,15 @@ pub fn ready(window: &WebviewWindow) {
 /// Click-through as last asked; re-applied whenever the styles are rebuilt.
 static IGNORE: AtomicBool = AtomicBool::new(true);
 
-/// Not in Alt-Tab or the taskbar, never activated, topmost.
-const KEEP: isize = (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0) as isize;
-/// Click-through, the same bits tao sets for `set_ignore_cursor_events`.
-const PASS: isize = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0) as isize;
+/// Not in Alt-Tab or the taskbar, never activated, topmost - and layered for good. Turning
+/// WS_EX_LAYERED off and on (what tao's `set_ignore_cursor_events` does, and what this file did
+/// until 0.2.3) switches DWM between two ways of drawing the window, and the non-layered one lost
+/// the transparency: the whole 680x230 window turned white behind the island whenever it opened
+/// (owner's screenshots 2026-10-24 and 2026-10-26). The clear look is the layered one - it stays.
+const KEEP: isize =
+    (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0 | WS_EX_LAYERED.0) as isize;
+/// Click-through: on a layered window WS_EX_TRANSPARENT alone lets clicks fall to what is below.
+const PASS: isize = WS_EX_TRANSPARENT.0 as isize;
 
 fn wanted_ex(ex: isize) -> isize {
     let ex = (ex | KEEP) & !(WS_EX_APPWINDOW.0 as isize);
