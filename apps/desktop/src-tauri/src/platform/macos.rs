@@ -117,6 +117,11 @@ pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
     None
 }
 
+/// A titled window's frame is what one sees on the Mac (opening.rs).
+pub fn frame_inset(_window: &WebviewWindow) -> f64 {
+    0.0
+}
+
 /// The settings window's opening overlay (opening.rs): over the menu bar like the island - the
 /// island's own shape grows there - but just under the island's panel, and never in the way of a
 /// click. Any thread.

@@ -30,6 +30,8 @@ const input = $<HTMLInputElement>('token'),
 
 const inTauri = '__TAURI_INTERNALS__' in window;
 const isWin = navigator.userAgent.includes('Windows');
+// scrollbars and other Windows-only looks (settings.css html.win)
+if (isWin) document.documentElement.classList.add('win');
 if (import.meta.env.DEV) document.body.classList.add('dev');
 /** the first-run guide's live mascot, made when the guide first opens */
 let mascot: WelcomeMascot | null = null;

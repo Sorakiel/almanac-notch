@@ -34,14 +34,14 @@ dependencies = [
 
 [[package]]
 name = "almanac-hook"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "almanac-notch"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "almanac-hook",
  "base64 0.22.1",

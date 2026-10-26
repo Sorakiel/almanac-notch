@@ -5,7 +5,8 @@
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// `section`: "github", "calendar", ... - the page shown first; None keeps the current one.
-pub fn open(app: &AppHandle, section: Option<&str>) {
+/// `from_island`: asked for from the open island - the window grows out of it (opening.rs).
+pub fn open(app: &AppHandle, section: Option<&str>, from_island: bool) {
     let app2 = app.clone();
     // only known section names reach the URL and the event
     let section = section
@@ -51,7 +52,7 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
         match builder.build() {
             Ok(w) => {
                 let played = crate::island_placement(&app2)
-                    .is_some_and(|p| crate::opening::play(&app2, &w, p));
+                    .is_some_and(|p| crate::opening::play(&app2, &w, p, from_island));
                 if !played {
                     let _ = w.show();
                     let _ = w.set_focus();

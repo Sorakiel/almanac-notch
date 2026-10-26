@@ -20,7 +20,10 @@ export interface OpeningGeo {
   h: number;
   /** the island's middle and its closed size (the strip under the notch) */
   cx: number;
-  island: { w: number; h: number };
+  /** open: the settings were asked for from the open island - the body comes out of its lower
+   *  edge and the island keeps its shape (it is drawn over the scene); closed: from the tray - the
+   *  closed strip gathers itself first. r: its lower corners */
+  island: { w: number; h: number; r: number; open: boolean };
   /** the settings window: left, top, size, corner radius */
   win: { x: number; y: number; w: number; h: number; r: number };
 }
@@ -32,7 +35,7 @@ export const END = 1.2;
 let W = 1710,
   H = 1107,
   CX = W / 2,
-  I0 = { w: 250, h: 33.5 },
+  I0 = { w: 250, h: 33.5, r: 13, open: false },
   WIN = { x: CX - 360, y: (H - 520) / 2, w: 720, h: 520, r: 22 },
   WCY = WIN.y + WIN.h / 2,
   WCX = WIN.x + WIN.w / 2;
@@ -179,7 +182,8 @@ function bodiesAt(t: number) {
   // 1. the island gathers itself (0 - 0.2) and, once the last thread lets go, settles on a spring
   const swell = easeOut(k01(t, 0, 0.2));
   const settle = springK(Math.max(0, t - 0.86), 0.4, 0.42);
-  const gather = Math.max(-0.15, swell * (1 - settle));
+  // the open island is drawn by its own window over the scene: it must not grow out from under it
+  const gather = I0.open ? 0 : Math.max(-0.15, swell * (1 - settle));
   const iw = mix(I0.w, I0.w + 90, gather),
     ih = mix(I0.h, I0.h + 26, gather);
   // 2. the window's body: pushed out of the island (0.04 - 0.22), then it pulls away, slowly and
@@ -207,7 +211,7 @@ function curl(dx: number, half: number, rc: number): number {
 function anchorAt(id: Anchor, b: ReturnType<typeof bodiesAt>): P {
   if (id in ISL) {
     const dx = clamp(ISL[id as keyof typeof ISL] * (b.iw / 340), -b.iw / 2 + 3, b.iw / 2 - 3);
-    return [CX + dx, b.ih - 3 - curl(dx, b.iw / 2, 13)];
+    return [CX + dx, b.ih - 3 - curl(dx, b.iw / 2, I0.r)];
   }
   const rc = cornerAt(b);
   const dx = clamp(BOT[id as keyof typeof BOT] * (b.hw / 360), -b.hw + 3, b.hw - 3);
@@ -307,7 +311,10 @@ export function frameAt(t: number): Frame {
   // threads as it stretches; each thread thinner the longer it is (its volume shared out), pinching
   // before it snaps, its halves drawing back into what they hang from
   const gapY = cy - hh - ih;
-  const wk = clamp((gapY - 30) / 190);
+  // measured against the gap it will reach: from the open island the window is only ~110 px away,
+  // and a film that waited for 220 px never became threads
+  const G = Math.max(60, WIN.y - I0.h);
+  const wk = clamp((gapY - 0.12 * G) / (0.72 * G));
   const web = 1 - wk * wk * (3 - 2 * wk);
   const ws = webAt(t);
   const edges: Edge[] = [];
@@ -393,6 +400,7 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
 uniform vec2 uIsland;      // w, h
+uniform float uIslandR;    // its lower corners
 uniform vec4 uBody;        // cy, half w, half h, corner
 uniform vec4 uSA[24];      // edge: one end, the other
 uniform vec4 uSB[24];      // edge: radius, pinch, depth, gap
@@ -473,7 +481,7 @@ float threads(vec2 p){
 
 // the island hangs from the top edge; the band above the screen gives it concave shoulders
 float islandF(vec2 p){
-  float isl = box(p - vec2(uCX, (uIsland.y - 60.) * .5), vec2(uIsland.x * .5, (uIsland.y + 60.) * .5), 13.);
+  float isl = box(p - vec2(uCX, (uIsland.y - 60.) * .5), vec2(uIsland.x * .5, (uIsland.y + 60.) * .5), uIslandR);
   return smin(isl, p.y, 9.);
 }
 float bodyF(vec2 p){ return box(p - vec2(uBX, uBody.x), uBody.yz, uBody.w); }
@@ -600,6 +608,7 @@ export function createOpening(
     gl.uniform1f(U('uCX'), CX);
     gl.uniform1f(U('uBX'), f.bx);
     gl.uniform2f(U('uIsland'), ...f.island);
+    gl.uniform1f(U('uIslandR'), I0.r);
     gl.uniform4f(U('uBody'), ...f.body);
     const sa: number[] = [],
       sb: number[] = [];

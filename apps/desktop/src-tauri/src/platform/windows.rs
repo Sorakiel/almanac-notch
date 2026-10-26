@@ -3,14 +3,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::WebviewWindow;
+use tauri::{Manager, WebviewWindow};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL,
     MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::HiDpi::{
-    GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    GetDpiForWindow, GetSystemMetricsForDpi, SetProcessDpiAwarenessContext,
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
@@ -18,9 +19,10 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
     IsWindowVisible, IsZoomed, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync, GWL_EXSTYLE,
-    GWL_STYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION, WS_EX_APPWINDOW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    GWL_STYLE, HWND_TOPMOST, SM_CXPADDEDBORDER, SM_CXSIZEFRAME, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION,
+    WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT,
 };
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -65,10 +67,15 @@ pub fn ready(window: &WebviewWindow) {
 /// Click-through as last asked; re-applied whenever the styles are rebuilt.
 static IGNORE: AtomicBool = AtomicBool::new(true);
 
-/// Not in Alt-Tab or the taskbar, never activated, topmost.
-const KEEP: isize = (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0) as isize;
-/// Click-through, the same bits tao sets for `set_ignore_cursor_events`.
-const PASS: isize = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0) as isize;
+/// Not in Alt-Tab or the taskbar, never activated, topmost - and layered for good. Turning
+/// WS_EX_LAYERED off and on (what tao's `set_ignore_cursor_events` does, and what this file did
+/// until 0.2.3) switches DWM between two ways of drawing the window, and the non-layered one lost
+/// the transparency: the whole 680x230 window turned white behind the island whenever it opened
+/// (owner's screenshots 2026-10-24 and 2026-10-26). The clear look is the layered one - it stays.
+const KEEP: isize =
+    (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0 | WS_EX_LAYERED.0) as isize;
+/// Click-through: on a layered window WS_EX_TRANSPARENT alone lets clicks fall to what is below.
+const PASS: isize = WS_EX_TRANSPARENT.0 as isize;
 
 fn wanted_ex(ex: isize) -> isize {
     let ex = (ex | KEEP) & !(WS_EX_APPWINDOW.0 as isize);
@@ -288,5 +295,36 @@ pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
     Some(want)
 }
 
-/// The opening overlay is a plain always-on-top window here (opening.rs).
-pub fn raise_overlay(_window: &WebviewWindow) {}
+/// The invisible resize border of a titled window, physical px: its outer frame is this much wider
+/// than what one sees, left, right and below (opening.rs).
+pub fn frame_inset(window: &WebviewWindow) -> f64 {
+    let Ok(h) = window.hwnd() else {
+        return 0.0;
+    };
+    // SAFETY: plain metric queries for a live window owned by Tauri.
+    unsafe {
+        let dpi = GetDpiForWindow(HWND(h.0 as _));
+        (GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi)
+            + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi)) as f64
+    }
+}
+
+/// The opening overlay (opening.rs) is topmost like the island and came later, so it would cover
+/// it: the island goes back on top - the scene grows out from under it.
+pub fn raise_overlay(window: &WebviewWindow) {
+    let Some(island) = window.app_handle().get_webview_window("island") else {
+        return;
+    };
+    // SAFETY: `hwnd(island)` is a live window owned by Tauri.
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd(&island),
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+    }
+}
