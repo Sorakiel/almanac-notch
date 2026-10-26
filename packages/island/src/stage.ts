@@ -6,6 +6,7 @@ import { geo, hitBody } from './sim/pose';
 import { hop, poke, wake } from './sim/actions';
 import { burst } from './sim/particles';
 import { drawMascot } from './mascot/body';
+import { drawProp } from './mascot/props';
 import { drawOverhead } from './mascot/marks';
 import { drawParticles } from './mascot/particles';
 
@@ -21,7 +22,10 @@ export function renderStage(s: IslandState, sc: Ctx, dpr: number): void {
   sc.fillRect(0, 0, W, H);
   sc.fillStyle = theme.ground;
   sc.fillRect(0, G.gy, W, 1);
-  const P = drawMascot(s, sc, G.cx, G.gy, G.R, false, theme.top);
+  const look = s.stageLook;
+  const P = drawMascot(s, sc, G.cx, G.gy, G.R, false, theme.top, look?.col ?? null);
+  // dressed as a module (settings headers, stage 9f): its prop, as on the island's card
+  if (look?.prop && !s.sleeping) drawProp(s, sc, look.prop, P, look.col);
   drawOverhead(s, sc, P);
   drawParticles(s, sc, G.cx, G.gy, G.R);
   if (s.S.debug) {

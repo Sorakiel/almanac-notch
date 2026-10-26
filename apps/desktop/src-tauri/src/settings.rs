@@ -40,6 +40,8 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
         .resizable(false)
         .maximizable(false)
         .center()
+        // hidden until the opening has grown it out of the island (opening.rs)
+        .visible(false)
         .background_color(tauri::window::Color(17, 17, 19, 255));
         // macOS: the traffic lights sit over the sidebar, no title bar strip (like System Settings)
         #[cfg(target_os = "macos")]
@@ -48,7 +50,12 @@ pub fn open(app: &AppHandle, section: Option<&str>) {
             .hidden_title(true);
         match builder.build() {
             Ok(w) => {
-                let _ = w.set_focus();
+                let played = crate::island_placement(&app2)
+                    .is_some_and(|p| crate::opening::play(&app2, &w, p));
+                if !played {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
             }
             Err(e) => eprintln!("[settings] window not created: {e}"),
         }

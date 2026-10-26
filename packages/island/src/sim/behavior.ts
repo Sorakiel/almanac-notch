@@ -125,6 +125,24 @@ export function update(s: IslandState, dt: number, now: number): void {
   // 2. module mood
   const mood = moduleMood(s, T);
   if (mood) L.bg = mood;
+  // the settings window's header mascot (StageLook): a mood that lasts while its page is open
+  const look = s.stageLook;
+  if (look && !s.sleeping && look.lean) T.lean = look.lean;
+  if (look && !s.sleeping) {
+    if (look.mood === 'worried') {
+      T.grump = 0.4;
+      T.lid = 0.3;
+      T.happy = 0;
+      L.bg = 'тревожится';
+    } else if (look.mood === 'happy') {
+      T.happy = 1;
+      L.bg = 'доволен';
+    } else if (look.mood === 'watch' && look.at) {
+      T.lookX = look.at.x;
+      T.lookY = look.at.y;
+      L.bg = 'смотрит';
+    }
+  }
 
   // 3. interaction
   if (dragging) {

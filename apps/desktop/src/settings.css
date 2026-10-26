@@ -95,9 +95,39 @@ body {
 .mod:hover {
   background: rgba(255, 255, 255, 0.05);
 }
-.mod.on {
-  background: rgba(255, 255, 255, 0.1);
+.list {
+  position: relative;
 }
+/* the selection is one object that travels between rows on the island's tab spring
+   (settings-motion.ts selectRow), not a background that blinks from row to row */
+.side-sel {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
+  z-index: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+  opacity: 0;
+  pointer-events: none;
+}
+.side-sel.on {
+  opacity: 1;
+}
+.mod {
+  position: relative;
+  z-index: 1;
+}
+.mod.on:hover {
+  background: transparent;
+}
+#mod-count {
+  margin-left: 4px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .mod:active {
   transform: none;
 }
@@ -153,13 +183,15 @@ main {
   flex: 1;
   padding: 0 32px 28px;
   overflow: auto;
-  animation: page-in 0.22s var(--ease) both;
 }
-@keyframes page-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
+/* the page being left lies over the new one while it fades (settings-motion.ts) */
+.detail {
+  position: relative;
+}
+main.leaving {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .page-head {
   position: sticky;
@@ -882,4 +914,438 @@ body:not(.dev) .dev-only {
 }
 .w-cal-slot .help {
   display: none;
+}
+
+/* ---------- sound (stage 9f) ---------- */
+.vol {
+  --v: 0.6;
+  flex: none;
+  width: 200px;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.vol::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--text) calc(var(--v) * 100%), rgba(255, 255, 255, 0.14) 0);
+}
+.vol::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  -webkit-appearance: none;
+  transition: transform 0.15s var(--ease);
+}
+.vol:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+/* sound off: the level and the tiers stay visible, but quiet - they wait for the switch */
+#sound.muted .vol,
+#sound.muted #snd-tiers {
+  opacity: 0.4;
+  transition: opacity 0.2s var(--ease);
+}
+
+/* ---------- answer keys (stage 9f) ---------- */
+.key-row > span {
+  flex: 1;
+}
+.key-row.off > span {
+  color: var(--faint);
+}
+.key-chip {
+  min-width: 64px;
+  height: 26px;
+  margin-right: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  color: var(--text);
+  font:
+    500 12px 'JetBrains Mono',
+    ui-monospace,
+    monospace;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.key-chip:hover:not(:disabled) {
+  background: var(--card-hover);
+}
+.key-chip:disabled {
+  color: var(--faint);
+}
+.key-chip.rec {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-family: 'Onest', system-ui, sans-serif;
+}
+.key-chip.clash {
+  box-shadow: inset 0 0 0 1px var(--bad);
+}
+#key-note {
+  color: var(--muted);
+}
+#key-note.err {
+  color: var(--bad);
+}
+
+/* ---------- stage 9f: the window in the island's own material ----------
+   The window is the screen around the notch (a near-black grey); the pages hang from its top
+   edge as one black panel with the island's concave shoulders and rim; cards, text tones and
+   the hairline are the island's (island/card.ts, open.ts). Only the settings pane: the
+   first-run guide keeps its look. */
+#tab-modules {
+  --win: #141416;
+  --panel: #000;
+  --i-card: rgba(255, 255, 255, 0.075);
+  --i-rim: rgba(255, 255, 255, 0.07);
+  --i-text: #f5f6f8;
+  --i-body: #c5c8cd;
+  --i-dim: #8e939c;
+  --mod: #f5f6f8;
+  background: var(--win);
+}
+#tab-modules .list {
+  width: 224px;
+  padding: 0 10px 12px;
+  background: transparent;
+  border-right: 0;
+}
+#tab-modules .brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px 10px;
+  color: var(--i-text);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+#tab-modules .brand canvas {
+  width: 26px;
+  height: 26px;
+}
+#tab-modules .side-label {
+  margin: 16px 10px 5px;
+  color: var(--i-dim);
+  font-size: 12px;
+  font-weight: 500;
+}
+#tab-modules .mod {
+  gap: 11px;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  color: var(--i-body);
+}
+#tab-modules .mod.on {
+  color: var(--i-text);
+}
+#tab-modules .mod.on .name {
+  font-weight: 600;
+}
+#tab-modules .name {
+  font-size: 13.5px;
+}
+#tab-modules .name small {
+  color: var(--i-dim);
+  font-size: 11.5px;
+}
+/* the island's own pages: one family of line icons, no coloured tiles */
+#tab-modules .ico.line {
+  width: 22px;
+  height: 22px;
+  background: none;
+  box-shadow: none;
+}
+#tab-modules .ico.line svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+/* a module is its mascot's face, as in the island's stack */
+#tab-modules .face {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0 -1px;
+}
+/* the face says the state: the dot only for a screen reader's sake of the text, hidden */
+#tab-modules .mod .dot {
+  display: none;
+}
+#tab-modules .mod.off .face {
+  opacity: 0.45;
+}
+#tab-modules .side-sel {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 0.5px var(--i-rim);
+}
+
+/* the panel: hangs from the top edge like the island, with its concave shoulders */
+#tab-modules .detail {
+  position: relative;
+  margin: 0 12px 12px 14px;
+  border-radius: 0 0 24px 24px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 -1px 0 var(--i-rim),
+    inset 1px 0 0 var(--i-rim),
+    inset -1px 0 0 var(--i-rim);
+}
+#tab-modules .detail::before,
+#tab-modules .detail::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+#tab-modules .detail::before {
+  left: -14px;
+  background: radial-gradient(circle at 0 100%, transparent 13.5px, var(--panel) 14px);
+}
+#tab-modules .detail::after {
+  right: -14px;
+  background: radial-gradient(circle at 100% 100%, transparent 13.5px, var(--panel) 14px);
+}
+#tab-modules main {
+  padding: 14px 22px 26px;
+}
+
+/* the header: stars out of the top edge, the page's light, its mascot */
+#tab-modules .page-head.hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  height: 150px;
+  margin: 0 0 18px;
+  padding: 0 24px 22px;
+  border-radius: 18px;
+  background: #050506;
+  box-shadow: inset 0 0 0 1px var(--i-rim);
+}
+#tab-modules .hero-sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#tab-modules .hero-mascot {
+  position: absolute;
+  right: 18px;
+  bottom: 0;
+  width: 150px;
+  height: 120px;
+}
+#tab-modules .hero .head-text {
+  position: relative;
+  max-width: calc(100% - 170px);
+  pointer-events: none;
+}
+#tab-modules .hero h2 {
+  color: var(--i-text);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+#tab-modules .head-sub {
+  margin: 6px 0 0;
+  color: var(--i-body);
+  font-size: 14px;
+}
+#tab-modules .hero .status {
+  position: relative;
+}
+
+/* the island's cards */
+#tab-modules h3 {
+  margin: 22px 4px 8px;
+  color: var(--i-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+#tab-modules .group {
+  border: 0;
+  border-radius: 14px;
+  background: var(--i-card);
+}
+#tab-modules .g-row {
+  min-height: 52px;
+  padding: 9px 16px;
+  color: var(--i-text);
+  font-size: 14px;
+}
+#tab-modules .g-row + .g-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+#tab-modules .g-row small,
+#tab-modules .plain {
+  color: var(--i-dim);
+  font-size: 12.5px;
+}
+/* switches take the page's colour: the module being set up, at a glance; the island's own
+   pages keep the island's white */
+#tab-modules .toggle {
+  width: 36px;
+  height: 21px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.14);
+}
+#tab-modules .toggle::after {
+  width: 17px;
+  height: 17px;
+  transition: transform 0.28s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+#tab-modules .toggle:checked {
+  background: var(--mod);
+}
+#tab-modules .toggle:checked::after {
+  transform: translateX(15px);
+  background: #16171a;
+  box-shadow: none;
+}
+#tab-modules .seg {
+  background: rgba(255, 255, 255, 0.06);
+}
+#tab-modules .vol::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, var(--mod) calc(var(--v) * 100%), rgba(255, 255, 255, 0.14) 0);
+}
+/* the module's own switch: the header's top-right corner, clear of the title and the mascot */
+#tab-modules .hero > .toggle {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+}
+#tab-modules .hero .status {
+  margin-top: 8px;
+  color: var(--i-dim);
+  font-size: 12.5px;
+}
+
+/* ---------- examples (settings-examples.ts) ---------- */
+#tab-modules .example {
+  margin: 0 0 6px;
+}
+#tab-modules .example .screen {
+  position: relative;
+  overflow: hidden;
+  height: 168px;
+  border-radius: 14px;
+  background: var(--i-card);
+}
+#tab-modules .example .live {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 500px;
+  height: 169px;
+  transform: translateX(-50%);
+}
+#tab-modules .example .cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 15px;
+  height: 15px;
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 0.8;
+  pointer-events: none;
+}
+#tab-modules .example .cap {
+  min-height: 18px;
+  margin: 8px 0 0;
+  color: var(--i-dim);
+  font-size: 12.5px;
+  text-align: center;
+}
+#tab-modules .perm {
+  width: 340px;
+  margin: 0 auto;
+  padding: 13px 14px 12px;
+  border-radius: 18px;
+  background: #000;
+  box-shadow:
+    0 0 0 1px rgba(245, 165, 36, 0.28),
+    0 10px 30px rgba(245, 165, 36, 0.08);
+}
+#tab-modules .perm-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+#tab-modules .perm-top i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5a524;
+}
+#tab-modules .perm-top span {
+  color: var(--i-dim);
+  font-weight: 400;
+}
+#tab-modules .perm code {
+  display: block;
+  margin: 9px 0 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  font:
+    12.5px 'JetBrains Mono',
+    monospace;
+}
+#tab-modules .perm-btns {
+  display: flex;
+  gap: 8px;
+}
+#tab-modules .pb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12.5px;
+}
+#tab-modules .pb b {
+  font-weight: 500;
+}
+#tab-modules .pb.pri {
+  background: #fff;
+  color: #000;
+}
+#tab-modules .pb kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px currentColor;
+  font:
+    10.5px 'JetBrains Mono',
+    monospace;
+  opacity: 0.6;
+}
+#tab-modules .pb kbd.pop {
+  animation: kbd-pop 0.45s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes kbd-pop {
+  40% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
 }

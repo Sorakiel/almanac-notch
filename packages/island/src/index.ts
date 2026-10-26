@@ -4,7 +4,7 @@ import { after, createState, type EventType, type IslandState, type ModuleId, ty
 import type { Settings } from './sim/settings';
 import { update } from './sim/behavior';
 import { answer, trigger, type Answer } from './sim/events';
-import { poke } from './sim/actions';
+import { hop, poke } from './sim/actions';
 import { renderStage, stageCursor } from './stage';
 import { renderIsland } from './island/render';
 
@@ -29,7 +29,12 @@ export {
   type MascotEvent,
   type ShelfItem,
   type ShelfKind,
+  type StageLook,
 } from './sim/state';
+export { MODULE_COL } from './island/focus';
+export { cardTint } from './island/card';
+export { STARS } from './island/cards';
+export { MODULE_PROPS, type PropKind } from './mascot/props';
 export { EVENTS, EVENT_TYPES, statusOf } from './sim/events';
 export { tr, plural, EN, type Lang } from './i18n';
 export { update } from './sim/behavior';
@@ -92,6 +97,8 @@ export function createMascot(opts: MascotOptions) {
     poke: (n: number, lx = 0.2, ly = -0.3) => {
       for (let i = 0; i < n; i++) poke(s, lx, ly);
     },
+    /** a hop of the given power (the settings headers' steps, stage 9f) */
+    hop: (power: number) => hop(s, power),
     answer: (a: Answer) => answer(s, a),
     setFocus: (id: ModuleId | null) => {
       s.focusId = id;
@@ -102,3 +109,5 @@ export function createMascot(opts: MascotOptions) {
   };
 }
 export type Mascot = ReturnType<typeof createMascot>;
+// the island's motion, shared with the settings window (stage 9f): one language of movement
+export { LAYER_IN, LAYER_STEP, RISE, TAB_OUT, springK } from './island/reveal';

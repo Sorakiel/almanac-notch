@@ -1979,8 +1979,8 @@ export function drawAsk(
       textAt(c, tr(s, '✓ Разрешено'), tx + 95, by + 12.5, { size: 12, align: 'center', color: '#04210E' });
       c.restore();
     } else {
-      kbdButton(s, c, tx, by, 102, 24, tr(s, 'Отклонить'), 'N', 'deny', false);
-      kbdButton(s, c, tx + 110, by, 104, 24, tr(s, 'Разрешить'), 'Y', 'approve', true);
+      kbdButton(s, c, tx, by, 102, 24, tr(s, 'Отклонить'), s.keyHints.deny, 'deny', false);
+      kbdButton(s, c, tx + 110, by, 104, 24, tr(s, 'Разрешить'), s.keyHints.approve, 'approve', true);
     }
   } else {
     const Q = (s.agent && s.agent.question) || QUESTION;

@@ -13,7 +13,7 @@ export const LAYER_IN = 0.24;
 /** delay between layers: enough to read as an order, short enough to stay one gesture */
 export const LAYER_STEP = 0.04;
 /** layers rise this far while they fade in */
-const RISE = 6;
+export const RISE = 6;
 
 const easeOut = (k: number) => 1 - (1 - k) ** 3;
 

@@ -141,15 +141,27 @@
         <div class="side-drag" data-tauri-drag-region></div>
         <button class="mod" data-module="general">
           <span class="ico" style="--c: #636366"
-            ><svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"
-              /></svg
+            ><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="8" rx="4" /></svg
           ></span>
-          <span class="name">Общие</span>
+          <span class="name">Остров</span>
         </button>
-        <p class="side-label">Модули</p>
+        <button class="mod" data-module="sound">
+          <span class="ico" style="--c: #636366"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 10v4h4l5 4V6L8 10z" />
+              <path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11" /></svg
+          ></span>
+          <span class="name">Звук<small id="li-sound">…</small></span>
+        </button>
+        <button class="mod" data-module="keys">
+          <span class="ico" style="--c: #636366"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="6" width="18" height="12" rx="2.5" />
+              <path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" /></svg
+          ></span>
+          <span class="name">Клавиши</span>
+        </button>
+        <p class="side-label">Модули <span id="mod-count"></span></p>
         <button class="mod" data-module="claude">
           <span class="ico" style="--c: #d97757"
             ><svg viewBox="0 0 24 24" aria-hidden="true">
@@ -216,15 +228,46 @@
           <span class="name">Almanac<small id="li-almanac">…</small></span>
           <span class="dot" id="li-almanac-dot"></span>
         </button>
-        <p class="list-note">В острове помещается 5 модулей</p>
+        <p class="side-label">&nbsp;</p>
+        <button class="mod" data-module="app">
+          <span class="ico" style="--c: #636366"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"
+              /></svg
+          ></span>
+          <span class="name">Приложение<small id="li-app"></small></span>
+        </button>
+        <span class="side-sel" aria-hidden="true"></span>
       </aside>
       <div class="detail">
         <main id="general" hidden>
           <header class="page-head">
-            <div class="head-text"><h2>Общие</h2></div>
+            <div class="head-text"><h2>Остров</h2></div>
           </header>
-          <h3>Остров</h3>
+          <div id="ex-island"></div>
+          <h3>Открытие и закрытие</h3>
           <div class="group">
+            <label class="g-row"
+              ><span
+                >Открывать при наведении<small id="hover-note"
+                  >Остров открывается, когда курсор подходит к вырезу.</small
+                ></span
+              ><input type="checkbox" class="toggle" id="open-hover"
+            /></label>
+            <div class="g-row">
+              <span
+                >Закрывать после ухода курсора<small
+                  >Если остров открыли кликом. Открытый наведением закрывается почти сразу.</small
+                ></span
+              >
+              <div class="seg" role="radiogroup" aria-label="Закрывать после ухода курсора">
+                <label><input type="radio" name="autoclose" value="3" />3 с</label>
+                <label><input type="radio" name="autoclose" value="5" />5 с</label>
+                <label><input type="radio" name="autoclose" value="10" />10 с</label>
+              </div>
+            </div>
             <div class="g-row">
               <span>Состояние</span>
               <div class="seg" role="radiogroup" aria-label="Состояние острова">
@@ -234,18 +277,32 @@
                 <label><input type="radio" name="nstate" value="open" />Открыто</label>
               </div>
             </div>
+          </div>
+          <h3>Где остров</h3>
+          <div class="group">
+            <label class="g-row"
+              ><span
+                >Прятать поверх полноэкранных приложений<small
+                  >Игра, видео или презентация во весь экран. Остров вернётся, когда вы из них выйдете.</small
+                ></span
+              ><input type="checkbox" class="toggle" id="fullscreen"
+            /></label>
             <label class="g-row"><span>Чат в острове</span><input type="checkbox" class="toggle" id="chat-on" /></label>
+          </div>
+        </main>
+        <main id="sound" hidden>
+          <header class="page-head">
+            <div class="head-text"><h2>Звук</h2></div>
+          </header>
+          <div class="group">
+            <label class="g-row"><span>Звук</span><input type="checkbox" class="toggle" id="snd-on" /></label>
             <div class="g-row">
-              <span>Язык</span>
-              <div class="seg" role="radiogroup" aria-label="Язык интерфейса">
-                <label><input type="radio" name="lang" value="auto" />Как в системе</label>
-                <label><input type="radio" name="lang" value="ru" />Русский</label>
-                <label><input type="radio" name="lang" value="en" />English</label>
-              </div>
+              <span>Громкость</span>
+              <input type="range" class="vol" id="snd-vol" min="0" max="1" step="0.01" aria-label="Громкость" />
             </div>
           </div>
-          <h3>Звук</h3>
-          <div class="group">
+          <h3>Что звучит</h3>
+          <div class="group" id="snd-tiers">
             <label class="g-row"
               ><span>События<small>Разрешения, вопросы, готово, ошибки, начало работы агента</small></span
               ><input type="checkbox" class="toggle" data-tier="events"
@@ -260,21 +317,42 @@
             /></label>
           </div>
           <p class="plain foot">
-            Громкость и общий выключатель - в карточке настроек острова. Во время звонка звуки молчат, под музыку кнопки
-            молчат, а остальное тише; ночью (с 22 до 8) всё на треть тише.
+            Во время звонка звуки молчат, под музыку кнопки молчат, а остальное тише; ночью (с 22 до 8) всё на треть
+            тише.
           </p>
-          <h3>Приложение</h3>
+        </main>
+        <main id="keys" hidden>
+          <header class="page-head">
+            <div class="head-text"><h2>Клавиши</h2></div>
+          </header>
+          <div id="ex-keys"></div>
+          <p class="plain">
+            Работают, пока в острове открыт вопрос или разрешение. Нажмите на сочетание, затем новые клавиши: Esc
+            отменяет.
+          </p>
+          <div class="group" id="key-rows"></div>
+          <p class="note" id="key-note"></p>
+          <div class="page-foot"><button class="pill ghost" id="key-reset">Вернуть как было</button></div>
+        </main>
+        <main id="app" hidden>
+          <header class="page-head">
+            <div class="head-text"><h2>Приложение</h2></div>
+          </header>
           <div class="group">
+            <div class="g-row">
+              <span>Язык</span>
+              <div class="seg" role="radiogroup" aria-label="Язык интерфейса">
+                <label><input type="radio" name="lang" value="auto" />Как в системе</label>
+                <label><input type="radio" name="lang" value="ru" />Русский</label>
+                <label><input type="radio" name="lang" value="en" />English</label>
+              </div>
+            </div>
             <label class="g-row"
               ><span>Запускать вместе с системой</span><input type="checkbox" class="toggle" id="autostart"
             /></label>
-            <label class="g-row"
-              ><span
-                >Прятать поверх полноэкранных приложений<small
-                  >Игра, видео или презентация во весь экран. Остров вернётся, когда вы из них выйдете.</small
-                ></span
-              ><input type="checkbox" class="toggle" id="fullscreen"
-            /></label>
+          </div>
+          <h3>Обновления</h3>
+          <div class="group">
             <label class="g-row"
               ><span
                 >Проверять обновления<small
@@ -286,6 +364,9 @@
               <span><span id="app-version"></span><small id="upd-status"></small></span>
               <button class="pill ghost" id="upd-go">Проверить сейчас</button>
             </div>
+          </div>
+          <p class="note" id="upd-error"></p>
+          <div class="group">
             <div class="g-row">
               <span
                 >Удалить Almanac Notch<small
@@ -295,7 +376,6 @@
               <button class="pill ghost" id="uninstall">Удалить…</button>
             </div>
           </div>
-          <p class="note" id="upd-error"></p>
           <h3 class="dev-only">Проверить события</h3>
           <div class="events dev-only">
             <button data-ev="attention">Внимание</button>

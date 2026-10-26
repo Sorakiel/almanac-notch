@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Окно выходит из острова - последовательность</title>
+    <!-- Stage 9f, CLAUDE.md rule 3: the settings window's opening as a sequence before the port.
+         ?t=0.6 holds one moment; window.__goo.setT(t) drives frames for tools/goo-strip.mjs. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        color: #c5c8cd;
+        font:
+          13px system-ui,
+          sans-serif;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: calc(100vw * 1107 / 1710);
+        max-height: 100vh;
+        max-width: calc(100vh * 1710 / 1107);
+        margin: 0 auto;
+      }
+      .bar {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .bar input {
+        width: 360px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c" width="1710" height="1107"></canvas>
+    <div class="bar">
+      <button id="play">▶</button><input id="t" type="range" min="0" max="1.2" step="0.001" value="0" /><span
+        id="tv"
+      ></span>
+      <label><input type="checkbox" id="slow" /> ×4 медленнее</label>
+    </div>
+    <script type="module" src="./goo.ts"></script>
+  </body>
+</html>

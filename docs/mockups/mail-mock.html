@@ -1,0 +1,487 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+<title>Почта в острове</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: the island at 1.5x on a wallpaper strip, state switcher above it, settings page of the module below. The island itself is always black, as in the app. */
+:root{
+  --bg:#EEF0F2; --surface:#FFFFFF; --sunken:#E3E6EA; --line:#D3D8DE; --fg:#16181C; --muted:#5D6470; --accent:#3B7DD8;
+  --f-body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#101215;--surface:#181B1F;--sunken:#0B0C0E;--line:#2A2E34;--fg:#E9EBEE;--muted:#9AA1AB;--accent:#8CC0FF;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101215;--surface:#181B1F;--sunken:#0B0C0E;--line:#2A2E34;--fg:#E9EBEE;--muted:#9AA1AB;--accent:#8CC0FF;color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px;display:grid;gap:22px}
+h1{font-size:clamp(24px,3vw,32px);font-weight:600;letter-spacing:-0.015em;line-height:1.1;margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:600;margin:0}
+.lede{color:var(--muted);margin:6px 0 0;max-width:70ch}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--sunken);border-radius:10px}
+.seg button{font:inherit;font-size:13.5px;font-weight:500;border:0;background:transparent;color:var(--muted);padding:5px 11px;border-radius:7px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.btn{font:inherit;font-size:13.5px;font-weight:500;padding:6px 12px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.stage{border-radius:18px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(135deg,#2E3442,#5A6276)}
+#island{display:block;width:100%;max-width:100%;aspect-ratio:640/250;touch-action:none}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.hint kbd{font-family:var(--f-mono);font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+.notes{display:grid;gap:10px;font-size:14px}
+.notes p{margin:0;max-width:62ch}
+.notes b{font-weight:600}
+/* settings window: dark like the app's settings */
+.settings{--s-bg:#16171A;--s-card:#1F2125;--s-line:#2C2F35;--s-fg:#F5F6F8;--s-mid:#C5C8CD;--s-dim:#8E939C;--s-mail:#9CC8F5;
+  background:var(--s-bg);color:var(--s-fg);border-radius:16px;padding:18px;display:grid;gap:14px;border:1px solid #000;min-width:0}
+.s-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.s-title{display:flex;align-items:center;gap:9px;font-weight:600;font-size:16px}
+.s-title i{width:9px;height:9px;border-radius:50%;background:var(--s-mail)}
+.switch{width:36px;height:20px;border-radius:10px;background:#34C759;position:relative;border:0;cursor:pointer;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:18px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .18s}
+.switch[aria-checked="false"]{background:#3A3D44}.switch[aria-checked="false"]::after{left:2px}
+.s-card{background:var(--s-card);border-radius:12px;padding:12px 14px;display:grid;gap:10px}
+.s-lbl{font-size:12px;color:var(--s-dim)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font:inherit;font-size:13px;border:1px solid var(--s-line);background:transparent;color:var(--s-mid);padding:4px 11px;border-radius:999px;cursor:pointer}
+.chips button[aria-pressed="true"]{background:rgba(156,200,245,.16);border-color:rgba(156,200,245,.5);color:var(--s-fg)}
+.field{display:grid;gap:4px}
+.field input{font:inherit;font-size:14px;background:#121316;border:1px solid var(--s-line);color:var(--s-fg);border-radius:8px;padding:7px 10px;width:100%}
+.mono{font-family:var(--f-mono);font-size:12px;color:var(--s-dim)}
+.steps{margin:0;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--s-mid)}
+.steps b{color:var(--s-fg);font-weight:500}
+.status{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.status i{width:8px;height:8px;border-radius:50%;background:#34C759;flex:none}
+.status.bad i{background:#FF5F57}
+.row2{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;color:var(--s-mid)}
+.privacy{font-size:13px;color:var(--s-mid);display:grid;gap:4px}
+.privacy p{margin:0}
+.s-actions{display:flex;gap:8px;flex-wrap:wrap}
+.s-actions button{font:inherit;font-size:13.5px;font-weight:500;border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--s-line);background:transparent;color:var(--s-fg)}
+.s-actions button.primary{background:var(--s-fg);color:#000;border-color:var(--s-fg)}
+@media (prefers-reduced-motion: reduce){.switch::after{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Почта в острове</h1>
+    <p class="lede">Макет модуля «Почта» в системе карточек 0.2: сводка списком, письмо внутри карточки, короткий ответ, событие на важное письмо и ошибки. Внизу - страница модуля в настройках. Данные выдуманные.</p>
+  </header>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="Состояние">
+      <button id="st-list" data-st="list" aria-pressed="true">Сводка</button>
+      <button id="st-letter" data-st="letter" aria-pressed="false">Письмо</button>
+      <button id="st-reply" data-st="reply" aria-pressed="false">Ответ</button>
+      <button id="st-half" data-st="half" aria-pressed="false">Важное письмо</button>
+      <button id="st-off" data-st="off" aria-pressed="false">Не подключена</button>
+      <button id="st-bad" data-st="bad" aria-pressed="false">Неверный пароль</button>
+    </div>
+    <button class="btn" id="newMail">Прислать новое письмо</button>
+  </div>
+
+  <div class="stage"><canvas id="island" aria-label="Открытый остров с карточкой почты"></canvas></div>
+  <p class="hint">Колесо или тачпад над списком - прокрутка, клик по письму - открыть, <kbd>Esc</kbd> или стрелка - назад. В ответе печатай с клавиатуры, <kbd>Enter</kbd> - отправить.</p>
+
+  <section class="cols">
+    <div class="notes">
+      <h2>Как устроено</h2>
+      <p><b>Сводка - это сразу список.</b> Как у Almanac: три письма в поле зрения, до 12 прокруткой с упором на краях. Непрочитанные - жирные, с точкой цвета модуля. В заголовке пилюля «3 новых».</p>
+      <p><b>Письмо открывается в карточке.</b> Отправитель и возраст в шапке, тема, три строки текста без картинок. Действия словами, как в 0.2: «Ответить» цветом модуля, «Прочитано», «В почте ↗».</p>
+      <p><b>Ответ коротким текстом.</b> Поле прямо в карточке и две быстрые фразы. Длинный ответ - «В почте ↗». После отправки маскот радуется, в письме появляется строка «Вы ответили».</p>
+      <p><b>Событие только на важное.</b> Gmail - метка «Важное», другие ящики - список отправителей. Остров на 4 секунды показывает «Анна Петрова · Счёт за октябрь», остальные письма меняют только счётчик.</p>
+      <p><b>Маскот почты</b> голубой, держит конверт и смотрит на письмо под курсором. Цвет и предмет можно поменять, это предложение.</p>
+    </div>
+
+    <div class="settings" aria-label="Настройки модуля Почта">
+      <div class="s-head">
+        <div class="s-title"><i></i>Почта</div>
+        <button class="switch" id="mailOn" role="switch" aria-checked="true" aria-label="Модуль включён"></button>
+      </div>
+      <div class="s-card">
+        <div class="s-lbl">Ящик</div>
+        <div class="chips" id="prov">
+          <button id="p-gmail" data-p="gmail" aria-pressed="true">Gmail</button>
+          <button id="p-icloud" data-p="icloud" aria-pressed="false">iCloud</button>
+          <button id="p-yandex" data-p="yandex" aria-pressed="false">Яндекс</button>
+          <button id="p-mailru" data-p="mailru" aria-pressed="false">Mail.ru</button>
+          <button id="p-other" data-p="other" aria-pressed="false">Другой</button>
+        </div>
+        <div class="field"><label class="s-lbl" for="addr">Почта</label><input id="addr" value="nikita@gmail.com" autocomplete="off"></div>
+        <div class="field"><label class="s-lbl" for="pass">Пароль приложения</label><input id="pass" type="password" value="abcd efgh ijkl mnop" autocomplete="off"></div>
+        <div class="mono" id="servers">imap.gmail.com:993 · smtp.gmail.com:465 · TLS</div>
+        <div class="status" id="status"><i></i><span>Подключено · во входящих 12 писем, 3 новых</span></div>
+      </div>
+      <div class="s-card">
+        <div class="s-lbl">Как создать пароль приложения</div>
+        <ol class="steps" id="howto"></ol>
+        <div class="s-lbl">Это не пароль от почты: им нельзя войти в ящик, и его можно отозвать в любой момент.</div>
+      </div>
+      <div class="s-card">
+        <div class="row2"><span>Событие на важное письмо</span><button class="switch" id="evOn" role="switch" aria-checked="true" aria-label="Событие на важное письмо"></button></div>
+        <div class="row2"><span>Что считать важным</span><span id="impWhat" style="color:var(--s-fg)">метка «Важное» в Gmail</span></div>
+      </div>
+      <div class="s-card privacy">
+        <div class="s-lbl">Что читается и куда уходит</div>
+        <p>Читаем заголовки и начало входящих писем. Письмо целиком - только когда вы его открыли.</p>
+        <p>Соединение только с <span class="mono" id="hosts">imap.gmail.com и smtp.gmail.com</span>. Пароль хранится в связке ключей вместе с другими ключами приложения.</p>
+        <p>Картинки и ссылки из писем не загружаются.</p>
+      </div>
+      <div class="s-actions"><button class="primary" id="check">Проверить</button><button id="unlink">Отключить ящик</button></div>
+    </div>
+  </section>
+</div>
+
+<input id="typer" aria-label="Текст ответа" style="position:fixed;left:-9999px;top:0;width:240px;height:24px;opacity:0" autocomplete="off">
+
+<script>
+(() => {
+'use strict';
+const cv = document.getElementById('island'), c = cv.getContext('2d'), typer = document.getElementById('typer');
+const VW = 640, VH = 250, IX = 20, IW = 600, IH = 180; // island 600x180 inside a 640x250 view
+let dpr = 1, t = 0, last = performance.now();
+function fit() { dpr = Math.min(3, (window.devicePixelRatio || 1)) * (cv.clientWidth / VW); cv.width = Math.round(VW * dpr); cv.height = Math.round(VH * dpr); }
+new ResizeObserver(fit).observe(cv); fit();
+
+const T1 = '#F5F6F8', T2 = '#C5C8CD', T3 = '#8E939C', T4 = '#6B7079';
+const MAIL = { body: '#9CC8F5', shade: '#5E95CC' };
+const MODS = [['Claude Code', '#F0B08A', '#C27A52'], ['GitHub', '#B8C2FF', '#7D88D6'], ['Календарь', '#FFD27A', '#D6A23E'], ['Almanac', '#F4A9C6', '#C9708F']];
+const MAILS = [
+  { from: 'Анна Петрова', subj: 'Счёт за октябрь', age: '10 мин', unread: true, imp: true, body: 'Никита, привет! Прикрепила счёт за октябрь, там две позиции: поддержка сайта и правки по лендингу. Если всё ок - оплати, пожалуйста, до пятницы. Если есть вопросы по сумме, давай созвонимся завтра.' },
+  { from: 'GitHub', subj: 'Sorakiel/almanac-notch: PR #41 одобрен', age: '32 мин', unread: true, body: 'Ваш пул-реквест «Shelf: drop from the browser» одобрен. Его можно влить в master.' },
+  { from: 'Деканат', subj: 'Расписание сессии', age: '1 ч', unread: true, body: 'Опубликовано расписание зимней сессии. Проверьте даты экзаменов в личном кабинете до 1 ноября.' },
+  { from: 'Vercel', subj: 'Деплой portfolio прошёл', age: '3 ч', unread: false, body: 'Деплой portfolio в production завершён за 41 с.' },
+  { from: 'Мама', subj: 'Ты приедешь в субботу?', age: '5 ч', unread: false, body: 'Напиши, во сколько тебя ждать.' },
+  { from: 'Яндекс Практикум', subj: 'Новое задание в спринте', age: 'вчера', unread: false, body: 'Открыт доступ к заданию спринта 7.' },
+  { from: 'Notion', subj: 'Илья изменил «План релиза 1.0»', age: 'вчера', unread: false, body: 'Изменения в разделе «Сроки».' },
+  { from: 'hh.ru', subj: 'Вас пригласили на собеседование', age: '2 дн', unread: false, body: 'Компания приглашает на собеседование на позицию фронтенд-разработчика.' },
+  { from: 'Telegram', subj: 'Код входа', age: '2 дн', unread: false, body: 'Код входа: никому его не сообщайте.' },
+  { from: 'Google', subj: 'Создан пароль приложения', age: '3 дн', unread: false, body: 'Для аккаунта создан пароль приложения «Almanac Notch».' },
+  { from: 'Spotify', subj: 'Твой плейлист недели', age: '4 дн', unread: false, body: 'Новые треки уже ждут.' },
+  { from: 'Сбер', subj: 'Выписка за сентябрь', age: '5 дн', unread: false, body: 'Выписка по счёту готова.' }
+];
+const QUICK = ['Спасибо, получил', 'Посмотрю вечером'];
+
+// state
+let st = 'list', prevSt = 'list', stAt = 0, sel = 0, reply = '', sent = false, sentAt = -10, eventAt = -10, ptr = null, hits = [];
+const scroll = { y: 0, v: 0, target: 0 };
+let blinkAt = 2, happyUntil = 0, hopAt = -10;
+function setState(s) {
+  if (s === st) return;
+  prevSt = st; st = s; stAt = t;
+  if (s === 'reply') { setTimeout(() => document.getElementById('typer').focus(), 0); }
+  if (s === 'half') eventAt = t;
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.st === s ? 'true' : 'false'));
+}
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { if (b.dataset.st === 'reply') { sent = false; reply = ''; document.getElementById('typer').value = ''; } setState(b.dataset.st); }));
+document.getElementById('newMail').addEventListener('click', () => { MAILS[0].unread = true; sel = 0; scroll.target = 0; setState('half'); });
+
+// helpers
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const ss = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+function hexA(h, a) { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function rr(x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function font(size, w, mono) { c.font = `${w || 500} ${size}px ${mono ? '"JetBrains Mono",monospace' : 'Onest,system-ui,sans-serif'}`; }
+function txt(s, x, y, o = {}) { font(o.size || 12, o.w, o.mono); c.fillStyle = o.color || T1; c.textAlign = o.align || 'left'; c.textBaseline = 'middle'; let str = s;
+  if (o.max) { if (c.measureText(str).width > o.max) { while (str.length > 1 && c.measureText(str + '…').width > o.max) str = str.slice(0, -1); str += '…'; } }
+  c.fillText(str, x, y); return c.measureText(str).width; }
+function wid(s, size, w) { font(size, w); return c.measureText(s).width; }
+function hov(x, y, w, h) { return ptr && ptr.x >= x && ptr.x <= x + w && ptr.y >= y && ptr.y <= y + h; }
+function hit(x, y, w, h, act, data) { hits.push({ x, y, w, h, act, data }); }
+
+// a small version of the mascot: egg body, pill eyes, the module colour and a held envelope
+const BODY = (() => { const p = []; for (let i = 0; i < 64; i++) { const a = i / 64 * Math.PI * 2, co = Math.cos(a), si = Math.sin(a);
+  const y = Math.sign(si) * Math.pow(Math.abs(si), 2 / 2.3); const wa = y > 0 ? 1 + 0.05 * y : 1 - 0.13 * y * y; p.push([Math.sign(co) * Math.pow(Math.abs(co), 2 / 2.3) * wa, y]); } return p; })();
+function body(R, b) { c.beginPath(); BODY.forEach(([x, y], i) => i ? c.lineTo(x * R, y * b) : c.moveTo(x * R, y * b)); c.closePath(); }
+function mascot(cx, cy, R, col, look, opt = {}) {
+  const b = R * 0.92, breath = 1 + 0.016 * Math.sin(t * 1.75), hop = opt.hop ? -Math.max(0, Math.sin(clamp((t - hopAt) / 0.45, 0, 1) * Math.PI)) * R * 0.35 : 0;
+  c.save(); c.translate(cx, cy + hop); c.scale(1 / Math.sqrt(breath), breath);
+  body(R, b); c.fillStyle = col.body; c.fill();
+  c.save(); body(R, b); c.clip(); const g = c.createLinearGradient(0, -b, 0, b); g.addColorStop(0, 'rgba(255,255,255,0.2)'); g.addColorStop(0.45, hexA(col.shade, 0)); g.addColorStop(1, hexA(col.shade, 0.75)); c.fillStyle = g; c.fillRect(-R * 1.3, -b * 1.3, R * 2.6, b * 2.6); c.restore();
+  const lx = clamp(look ? look[0] : 0, -1, 1), ly = clamp(look ? look[1] : 0, -1, 1);
+  const happy = t < happyUntil, blink = ((t - blinkAt) % 3.7) < 0.08;
+  const fx = Math.sin(lx * 0.95) * R * 0.19, fy = Math.sin(ly * 0.95) * b * 0.26, ew = R * 0.24, eh = R * 0.5 * (1 - 0.2 * Math.abs(ly));
+  c.fillStyle = '#16171A'; c.strokeStyle = '#16171A'; c.lineCap = 'round';
+  for (const sd of [-1, 1]) {
+    const ex = fx + sd * R * 0.29 * (1 - 0.1 * Math.abs(lx)), ey = fy - b * 0.04 + eh * 0.1 * Math.max(0, ly);
+    if (happy) { c.lineWidth = ew * 0.6; c.beginPath(); c.moveTo(ex - ew * 0.9, ey + eh * 0.08); c.quadraticCurveTo(ex, ey - eh * 0.45, ex + ew * 0.9, ey + eh * 0.08); c.stroke(); }
+    else { const h = blink ? R * 0.06 : eh, w = ew * (1 - 0.24 * Math.max(0, sd * lx)); rr(ex - w / 2, ey - h / 2, w, h, Math.min(w, h) / 2); c.fill(); }
+  }
+  if (opt.envelope) { // held low on the right, flap towards the mascot
+    const x = R * 0.42, y = b * 0.28, w = R * 0.86, h = R * 0.6;
+    c.save(); c.translate(x, y); c.rotate(-0.12);
+    rr(0, 0, w, h, 3); c.fillStyle = '#F4F6FA'; c.fill();
+    c.strokeStyle = 'rgba(60,80,110,0.45)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(1.5, 2); c.lineTo(w / 2, h * 0.55); c.lineTo(w - 1.5, 2); c.stroke();
+    if (opt.unread) { c.fillStyle = '#FF6B61'; c.beginPath(); c.arc(w - 1, 1, 3.4, 0, Math.PI * 2); c.fill(); }
+    c.restore();
+    const hx = R * 0.42 + w * 0.06, hy = b * 0.72; const gg = c.createRadialGradient(hx - 2, hy - 2, 1, hx, hy, R * 0.16); gg.addColorStop(0, col.body); gg.addColorStop(1, col.shade);
+    c.fillStyle = gg; c.beginPath(); c.arc(hx, hy, R * 0.14, 0, Math.PI * 2); c.fill();
+  }
+  c.restore();
+}
+function icon(kind, x, y, on) {
+  c.save(); c.strokeStyle = c.fillStyle = on ? T1 : 'rgba(255,255,255,0.55)'; c.lineWidth = 1.5; c.lineCap = 'round'; c.lineJoin = 'round';
+  if (kind === 'home') { c.beginPath(); c.moveTo(x - 6, y); c.lineTo(x, y - 5.5); c.lineTo(x + 6, y); c.lineTo(x + 6, y + 5.5); c.lineTo(x - 6, y + 5.5); c.closePath(); c.fill(); }
+  else if (kind === 'chat') { rr(x - 6.5, y - 5.5, 13, 9.5, 3); c.fill(); c.beginPath(); c.moveTo(x - 3, y + 3.5); c.lineTo(x - 4.5, y + 6.5); c.lineTo(x + 1, y + 3.5); c.fill(); }
+  else if (kind === 'add') { c.beginPath(); c.arc(x, y, 6.5, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.moveTo(x - 3, y); c.lineTo(x + 3, y); c.moveTo(x, y - 3); c.lineTo(x, y + 3); c.stroke(); }
+  else if (kind === 'gear') { for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; c.beginPath(); c.moveTo(x + Math.cos(a) * 4.5, y + Math.sin(a) * 4.5); c.lineTo(x + Math.cos(a) * 6.8, y + Math.sin(a) * 6.8); c.stroke(); } c.beginPath(); c.arc(x, y, 4.6, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.arc(x, y, 1.7, 0, Math.PI * 2); c.stroke(); }
+  else if (kind === 'sound') { c.beginPath(); c.moveTo(x - 6, y - 2.2); c.lineTo(x - 3.5, y - 2.2); c.lineTo(x, y - 5.2); c.lineTo(x, y + 5.2); c.lineTo(x - 3.5, y + 2.2); c.lineTo(x - 6, y + 2.2); c.closePath(); c.fill(); c.beginPath(); c.arc(x + 1, y, 3.6, -0.9, 0.9); c.stroke(); c.beginPath(); c.arc(x + 1, y, 6.4, -0.9, 0.9); c.stroke(); }
+  c.restore();
+}
+function islandPath(x0, x1, h, r) { const f = 7; c.beginPath(); c.moveTo(x0 - f, 0); c.lineTo(x1 + f, 0); c.quadraticCurveTo(x1, 0, x1, f); c.lineTo(x1, h - r); c.arcTo(x1, h, x1 - r, h, r); c.lineTo(x0 + r, h); c.arcTo(x0, h, x0, h - r, r); c.lineTo(x0, f); c.quadraticCurveTo(x0, 0, x0 - f, 0); c.closePath(); }
+
+// ---------- card levels ----------
+const CX0 = IX + 10, CY0 = 34, CW = 300, CH = 136; // focus card
+const TX = CX0 + 92;  // text column
+function brandHead(y, alpha) {
+  c.save(); c.globalAlpha *= alpha;
+  c.fillStyle = MAIL.body; c.beginPath(); c.arc(TX + 4, y, 4, 0, Math.PI * 2); c.fill();
+  const w = txt('Почта', TX + 14, y + 0.5, { size: 14.5, w: 600 });
+  const n = MAILS.filter(m => m.unread).length;
+  if (n) { const lab = n + ' ' + (n === 1 ? 'новое' : n < 5 ? 'новых' : 'новых'); const pw = wid(lab, 12, 600) + 14; rr(TX + 22 + w, y - 9.5, pw, 19, 6); c.fillStyle = hexA(MAIL.body, 0.16); c.fill(); txt(lab, TX + 29 + w, y + 0.5, { size: 12, w: 600, color: MAIL.body }); }
+  c.restore();
+}
+function drawList(alpha, dx) {
+  c.save(); c.globalAlpha *= alpha; c.translate(dx, 0);
+  brandHead(CY0 + 22, 1);
+  const top = CY0 + 38, rowH = 24, vis = CH - 40;
+  c.save(); c.beginPath(); c.rect(CX0, top - 2, CW, vis); c.clip();
+  MAILS.forEach((m, i) => {
+    const y = top + i * rowH - scroll.y; if (y < top - rowH || y > top + vis) return;
+    const edge = Math.min(1, (y - (top - rowH)) / rowH, (top + vis - y) / rowH);
+    c.save(); c.globalAlpha *= clamp(edge, 0, 1);
+    const on = hov(TX - 6, y, CW - (TX - CX0) - 4, rowH - 2) && ptr.y > top - 2 && ptr.y < top + vis;
+    if (on) { rr(TX - 6, y, CW - (TX - CX0) - 2, rowH - 2, 6); c.fillStyle = 'rgba(255,255,255,0.07)'; c.fill(); }
+    const cy = y + rowH / 2 - 1;
+    if (m.unread) { c.fillStyle = MAIL.body; c.beginPath(); c.arc(TX + 4, cy, 3.6, 0, Math.PI * 2); c.fill(); }
+    else { c.strokeStyle = T4; c.lineWidth = 1.3; c.beginPath(); c.arc(TX + 4, cy, 3.4, 0, Math.PI * 2); c.stroke(); }
+    const avail = CW - (TX - CX0) - 26 - (on ? 12 : 0);
+    const fw = txt(m.from, TX + 14, cy + 0.5, { size: 12.5, w: m.unread ? 600 : 500, color: m.unread ? T1 : T2, max: avail * 0.52 });
+    const aw = wid(m.age, 11, 400);
+    txt(m.subj, TX + 20 + fw, cy + 0.5, { size: 11.5, w: 400, color: m.unread ? T2 : T3, max: avail - fw - aw - 14 });
+    txt(m.age, TX + avail + 10, cy + 0.5, { size: 11, w: 400, color: T3, align: 'right' });
+    if (on) { c.strokeStyle = T2; c.lineWidth = 1.5; c.lineCap = 'round'; const ax = CX0 + CW - 14; c.beginPath(); c.moveTo(ax - 3, cy - 4); c.lineTo(ax + 1, cy); c.lineTo(ax - 3, cy + 4); c.stroke(); }
+    if (y >= top - 2 && y + rowH <= top + vis + 4) hit(TX - 6, y, CW - (TX - CX0), rowH - 2, 'open', i);
+    c.restore();
+  });
+  c.restore();
+  c.restore();
+}
+function backHead(title, right, y, alpha, onBack) {
+  c.save(); c.globalAlpha *= alpha;
+  const on = hov(TX - 8, y - 11, 22, 22);
+  c.strokeStyle = on ? T1 : T2; c.lineWidth = 1.7; c.lineCap = 'round'; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(TX + 3, y - 5); c.lineTo(TX - 2, y); c.lineTo(TX + 3, y + 5); c.stroke();
+  hit(TX - 8, y - 11, 22, 22, 'back');
+  c.fillStyle = MAIL.body; c.beginPath(); c.arc(TX + 16, y, 4, 0, Math.PI * 2); c.fill();
+  const rw = right ? wid(right, 11.5, 500) : 0;
+  txt(title, TX + 26, y + 0.5, { size: 14, w: 600, max: CW - (TX - CX0) - 44 - rw });
+  if (right) txt(right, CX0 + CW - 12, y + 0.5, { size: 11.5, w: 500, color: T3, align: 'right' });
+  c.restore();
+}
+function wrapLines(s, x, y, maxW, lh, maxLines, o) {
+  font(o.size, o.w); const words = s.split(' '); let line = '', n = 0;
+  for (let i = 0; i < words.length; i++) {
+    const test = line ? line + ' ' + words[i] : words[i];
+    if (c.measureText(test).width > maxW && line) {
+      n++; if (n === maxLines) { txt(line, x, y, Object.assign({}, o, { max: maxW - 4 })); if (i < words.length) { font(o.size, o.w); const lw = c.measureText(line).width; txt('…', x + Math.min(lw, maxW - 10) + 1, y, o); } return n; }
+      txt(line, x, y, o); y += lh; line = words[i];
+    } else line = test;
+  }
+  if (line) { txt(line, x, y, o); n++; }
+  return n;
+}
+function action(label, x, y, color, act, arrow) {
+  const w = wid(label + (arrow ? ' ↗' : ''), 12.5, 600), on = hov(x - 4, y - 10, w + 8, 20);
+  if (on) { rr(x - 5, y - 10, w + 10, 20, 6); c.fillStyle = 'rgba(255,255,255,0.08)'; c.fill(); }
+  txt(label + (arrow ? ' ↗' : ''), x, y + 0.5, { size: 12.5, w: 600, color });
+  hit(x - 5, y - 10, w + 10, 20, act); return w;
+}
+function drawLetter(alpha, dx) {
+  const m = MAILS[sel];
+  c.save(); c.globalAlpha *= alpha; c.translate(dx, 0);
+  backHead(m.from, m.age, CY0 + 22, 1);
+  const x = TX, maxW = CW - (TX - CX0) - 14;
+  let y = CY0 + 46;
+  const sw = txt(m.subj, x, y, { size: 13, w: 600, max: maxW - (m.imp ? 64 : 0) });
+  if (m.imp) { const lw = wid('важное', 10.5, 600) + 12; rr(x + sw + 8, y - 8, lw, 16, 5); c.fillStyle = 'rgba(245,165,36,0.16)'; c.fill(); txt('важное', x + sw + 14, y + 0.5, { size: 10.5, w: 600, color: '#F5B94A' }); }
+  y += 19;
+  if (m.replied) { txt('Вы ответили: «' + m.replied + '»', x, y, { size: 11.5, w: 400, color: '#7FD39A', max: maxW }); y += 16; wrapLines(m.body, x, y, maxW, 15, 1, { size: 11.5, w: 400, color: T3 }); y += 15; }
+  else { wrapLines(m.body, x, y, maxW, 15, 3, { size: 11.5, w: 400, color: T3 }); y += 45; }
+  const ay = CY0 + CH - 18;
+  let ax = x;
+  ax += action('Ответить', ax, ay, MAIL.body, 'reply') + 16;
+  ax += action(m.unread ? 'Прочитано' : 'Непрочитано', ax, ay, T1, 'read') + 16;
+  action('В почте', ax, ay, T2, 'mailapp', true);
+  c.restore();
+}
+function drawReply(alpha, dx) {
+  const m = MAILS[sel];
+  c.save(); c.globalAlpha *= alpha; c.translate(dx, 0);
+  backHead('Ответ: ' + m.from.split(' ')[0], null, CY0 + 22, 1);
+  const x = TX - 4, w = CW - (TX - CX0) - 8;
+  if (sent) {
+    const k = ss((t - sentAt) / 0.3);
+    c.save(); c.globalAlpha *= k;
+    rr(x, CY0 + 42, w, 34, 9); c.fillStyle = 'rgba(52,199,89,0.14)'; c.fill();
+    txt('✓ Отправлено через smtp.gmail.com', x + 12, CY0 + 59.5, { size: 12, w: 600, color: '#7FD39A', max: w - 20 });
+    txt('Копия в «Отправленных»', x + 2, CY0 + 92, { size: 11.5, w: 400, color: T3 });
+    c.restore();
+  } else {
+    rr(x, CY0 + 38, w, 40, 9); c.fillStyle = '#121316'; c.fill(); c.strokeStyle = 'rgba(156,200,245,0.45)'; c.lineWidth = 1; c.stroke();
+    const shown = reply || '';
+    font(12.5, 400);
+    let s = shown; while (s && c.measureText(s).width > w - 22) s = s.slice(1);
+    if (shown) txt(s, x + 10, CY0 + 58.5, { size: 12.5, w: 400, color: T1 }); else txt('Короткий ответ…', x + 10, CY0 + 58.5, { size: 12.5, w: 400, color: T4 });
+    if (Math.floor(t * 2) % 2 === 0) { font(12.5, 400); const cw = shown ? c.measureText(s).width : 0; c.fillStyle = MAIL.body; c.fillRect(x + 11 + cw, CY0 + 51, 1.5, 15); }
+    hit(x, CY0 + 38, w, 40, 'focus');
+    let qx = x;
+    QUICK.forEach((q, i) => { const qw = wid(q, 11, 500) + 14; if (qx + qw > x + w) return; const on = hov(qx, CY0 + 84, qw, 22);
+      rr(qx, CY0 + 84, qw, 22, 11); c.fillStyle = on ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.07)'; c.fill();
+      txt(q, qx + 7, CY0 + 95.5, { size: 11, w: 500, color: T2 }); hit(qx, CY0 + 84, qw, 22, 'quick', q); qx += qw + 6; });
+    const ay = CY0 + CH - 18;
+    let ax = TX; ax += action('Отправить', ax, ay, reply ? MAIL.body : T4, 'send') + 6;
+    txt('⏎', ax + 2, ay + 0.5, { size: 11, w: 500, color: T4, mono: true });
+    action('Отмена', ax + 30, ay, T2, 'back');
+  }
+  c.restore();
+}
+function drawEmpty(title, sub, act) {
+  brandHead(CY0 + 22, 1);
+  txt(title, TX, CY0 + 50, { size: 13, w: 600, max: CW - (TX - CX0) - 14 });
+  txt(sub, TX, CY0 + 70, { size: 11.5, w: 400, color: T3, max: CW - (TX - CX0) - 14 });
+  if (act) action(act, TX, CY0 + CH - 18, MAIL.body, 'settings');
+}
+function pills() {
+  const gx0 = CX0 + CW + 10, gw = (IX + IW - 10 - gx0 - 8) / 2, gh = (CH - 8) / 2;
+  MODS.forEach(([name, b, s], i) => {
+    const x = gx0 + (i % 2) * (gw + 8), y = CY0 + Math.floor(i / 2) * (gh + 8) + (gh - 38) / 2, on = hov(x, y, gw, 38);
+    rr(x, y, gw, 38, 19); c.fillStyle = hexA(b, on ? 0.2 : 0.11); c.fill();
+    mascot(x + 21, y + 19, 10, { body: b, shade: s }, [0.5, 0]);
+    txt(name, x + 36, y + 19.5, { size: 12.5, w: 600, max: gw - 42 });
+  });
+}
+
+// ---------- frame ----------
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+  // scroll spring with resistance at the edges
+  const maxS = Math.max(0, MAILS.length * 24 - (CH - 44));
+  scroll.v += ((clamp(scroll.target, 0, maxS) - scroll.y) * 140 - scroll.v * 22) * dt;
+  scroll.y += scroll.v * dt;
+  if (st === 'half' && t - eventAt > 4.2) setState('list');
+
+  hits = [];
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, VW, VH);
+  c.fillStyle = 'rgba(255,255,255,0.08)'; c.fillRect(0, 0, VW, 32); // menu bar
+  c.fillStyle = 'rgba(255,255,255,0.32)'; [16, 52, 86].forEach(x => { rr(x, 13, 24, 6, 3); c.fill(); }); [VW - 40, VW - 66].forEach(x => { rr(x, 12, 14, 8, 3); c.fill(); });
+
+  if (st === 'half') { // the strip on an important letter: the mail mascot left, sender and subject right
+    const k = ss((t - eventAt) / 0.35), NW = 190, ear = 218; // both ears equal: the strip stays centred
+    const w = NW + 2 * ear * k, x0 = VW / 2 - w / 2, x1 = VW / 2 + w / 2;
+    islandPath(x0, x1, 32, 10); c.fillStyle = '#000'; c.fill();
+    const fl = Math.max(0, 1 - (t - eventAt) / 1.2); if (fl > 0) { c.save(); islandPath(x0, x1, 32, 10); c.shadowColor = hexA(MAIL.body, fl); c.shadowBlur = 10; c.strokeStyle = hexA(MAIL.body, fl); c.lineWidth = 1.5; c.stroke(); c.restore(); }
+    c.fillStyle = '#0B0C10'; c.beginPath(); c.arc(VW / 2, 14, 3.4, 0, Math.PI * 2); c.fill();
+    c.save(); islandPath(x0, x1, 32, 10); c.clip(); c.globalAlpha = k;
+    mascot(x0 + 22, 18, 11, MAIL, [0.6, 0.1], { hop: true });
+    c.fillStyle = MAIL.body; c.beginPath(); c.arc(VW / 2 + NW / 2 + 12, 16, 3.5, 0, Math.PI * 2); c.fill();
+    const fw = txt('Анна Петрова', VW / 2 + NW / 2 + 21, 16.5, { size: 12, w: 600 });
+    txt('· Счёт за октябрь', VW / 2 + NW / 2 + 26 + fw, 16.5, { size: 12, w: 400, color: T2, max: x1 - (VW / 2 + NW / 2 + 30 + fw) - 8 });
+    c.restore();
+    txt('Остров на 4 с показывает только важное письмо, потом сворачивается', VW / 2, 70, { size: 12, w: 500, color: 'rgba(255,255,255,0.7)', align: 'center' });
+    cv.style.cursor = 'default';
+    requestAnimationFrame(frame); return;
+  }
+
+  const x0 = IX, x1 = IX + IW;
+  islandPath(x0, x1, IH, 22); c.fillStyle = '#000'; c.fill();
+  c.fillStyle = '#0B0C10'; c.beginPath(); c.arc(VW / 2, 14, 3.4, 0, Math.PI * 2); c.fill();
+  // top bar
+  rr(IX + 14, 6, 30, 22, 11); c.fillStyle = 'rgba(255,255,255,0.14)'; c.fill();
+  icon('home', IX + 29, 17, true); icon('chat', IX + 64, 17); icon('add', IX + 98, 17); icon('gear', IX + IW - 52, 17); icon('sound', IX + IW - 22, 17);
+  // focus card
+  rr(CX0, CY0, CW, CH, 14); c.fillStyle = '#121214'; c.fill();
+  c.save(); rr(CX0, CY0, CW, CH, 14); c.clip();
+  const g = c.createRadialGradient(CX0 + 50, CY0 + CH * 0.6, 4, CX0 + 50, CY0 + CH * 0.6, 120); g.addColorStop(0, hexA(MAIL.body, st === 'bad' ? 0 : 0.14)); g.addColorStop(1, hexA(MAIL.body, 0)); c.fillStyle = g; c.fillRect(CX0, CY0, CW, CH);
+  if (st === 'bad') { const g2 = c.createRadialGradient(CX0 + 40, CY0 + CH, 4, CX0 + 40, CY0 + CH, 160); g2.addColorStop(0, 'rgba(255,69,58,0.32)'); g2.addColorStop(1, 'rgba(255,69,58,0)'); c.fillStyle = g2; c.fillRect(CX0, CY0, CW, CH); }
+  // where the mascot looks: at the row under the pointer, at the caret while typing
+  let look = [0.45, 0.25];
+  if (ptr && ptr.x > CX0 && ptr.x < CX0 + CW && ptr.y > CY0 && ptr.y < CY0 + CH) look = [clamp((ptr.x - (CX0 + 50)) / 90, -1, 1), clamp((ptr.y - (CY0 + 80)) / 50, -1, 1)];
+  if (st === 'reply' && !sent) look = [0.8, -0.3];
+  mascot(CX0 + 50, CY0 + CH / 2 + 6, 27, MAIL, look, { envelope: st !== 'off', unread: MAILS.some(m => m.unread) && st === 'list', hop: true });
+  // levels slide in from the right, the old one fades to 35 %
+  const k = ss((t - stAt) / 0.32), order = { list: 0, letter: 1, reply: 2, off: 0, bad: 0 };
+  const dir = (order[st] ?? 0) >= (order[prevSt] ?? 0) ? 1 : -1;
+  const drawOf = (s, a, dx) => { if (s === 'list') drawList(a, dx); else if (s === 'letter') drawLetter(a, dx); else if (s === 'reply') drawReply(a, dx); else if (s === 'off') drawEmpty('Почта не подключена', 'Настройки → Почта', 'Подключить'); else if (s === 'bad') drawEmpty('Неверный пароль приложения', 'Создайте новый в настройках ящика', 'Открыть настройки'); };
+  if (k < 1 && prevSt !== st && prevSt !== 'half') { const keep = hits.length; drawOf(prevSt, (1 - k) * 0.35, -dir * 14 * k); hits.length = keep; }
+  drawOf(st, k, dir * 14 * (1 - k));
+  c.restore();
+  pills();
+  cv.style.cursor = ptr && hits.some(h => ptr.x >= h.x && ptr.x <= h.x + h.w && ptr.y >= h.y && ptr.y <= h.y + h.h) ? 'pointer' : 'default';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+function pt(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * VW / r.width, y: (e.clientY - r.top) * VH / r.height }; }
+cv.addEventListener('pointermove', e => { ptr = pt(e); });
+cv.addEventListener('pointerleave', () => { ptr = null; });
+cv.addEventListener('wheel', e => { if (st !== 'list') return; e.preventDefault(); const maxS = Math.max(0, MAILS.length * 24 - (CH - 44));
+  let nt = scroll.target + e.deltaY * 0.5; if (nt < 0) nt = Math.max(-22, nt * 0.3); if (nt > maxS) nt = Math.min(maxS + 22, maxS + (nt - maxS) * 0.3); scroll.target = nt;
+  clearTimeout(cv._w); cv._w = setTimeout(() => { scroll.target = clamp(scroll.target, 0, maxS); }, 120); }, { passive: false });
+cv.addEventListener('pointerdown', e => {
+  const p = pt(e), h = [...hits].reverse().find(h => p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h);
+  if (!h) return;
+  if (h.act === 'open') { sel = h.data; setState('letter'); }
+  else if (h.act === 'back') { setState(st === 'reply' ? 'letter' : 'list'); }
+  else if (h.act === 'reply') { sent = false; reply = ''; typer.value = ''; setState('reply'); }
+  else if (h.act === 'read') { MAILS[sel].unread = !MAILS[sel].unread; }
+  else if (h.act === 'quick') { reply = h.data; typer.value = reply; typer.focus(); }
+  else if (h.act === 'focus') { document.getElementById('typer').focus(); }
+  else if (h.act === 'send') send();
+  else if (h.act === 'settings') document.querySelector('.settings').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (h.act === 'open') MAILS[sel].unread = MAILS[sel].unread; // opening does not mark read; «Прочитано» does
+});
+function send() {
+  if (!reply || sent) return;
+  sent = true; sentAt = t; happyUntil = t + 1.2; hopAt = t; MAILS[sel].replied = reply; MAILS[sel].unread = false;
+  setTimeout(() => { if (st === 'reply') setState('letter'); }, 1400);
+}
+typer.addEventListener('input', () => { if (st === 'reply' && !sent) reply = typer.value.slice(0, 160); });
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('.settings')) return;
+  if (e.key === 'Escape') { if (st === 'reply') setState('letter'); else if (st === 'letter') setState('list'); }
+  if (e.key === 'Enter' && st === 'reply') { e.preventDefault(); send(); }
+});
+
+// ---------- settings ----------
+const PROV = {
+  gmail: { srv: 'imap.gmail.com:993 · smtp.gmail.com:465 · TLS', hosts: 'imap.gmail.com и smtp.gmail.com', imp: 'метка «Важное» в Gmail',
+    steps: ['Откройте <b>myaccount.google.com</b> → Безопасность и включите <b>двухэтапную аутентификацию</b>.', 'Откройте <b>myaccount.google.com/apppasswords</b>.', 'Назовите пароль «Almanac Notch» и нажмите <b>Создать</b>.', 'Скопируйте 16 символов и вставьте в поле выше.'] },
+  icloud: { srv: 'imap.mail.me.com:993 · smtp.mail.me.com:587 · TLS', hosts: 'imap.mail.me.com и smtp.mail.me.com', imp: 'отправители из списка',
+    steps: ['Откройте <b>account.apple.com</b> и войдите.', 'Вход и безопасность → <b>Пароли для приложений</b>.', 'Создайте пароль с названием «Almanac Notch».', 'Вставьте его в поле выше.'] },
+  yandex: { srv: 'imap.yandex.ru:993 · smtp.yandex.ru:465 · TLS', hosts: 'imap.yandex.ru и smtp.yandex.ru', imp: 'отправители из списка',
+    steps: ['В Яндекс ID откройте <b>Безопасность → Пароли приложений</b>.', 'Выберите <b>Почта</b> и создайте пароль.', 'В настройках Почты разрешите доступ <b>почтовым программам по IMAP</b>.', 'Вставьте пароль в поле выше.'] },
+  mailru: { srv: 'imap.mail.ru:993 · smtp.mail.ru:465 · TLS', hosts: 'imap.mail.ru и smtp.mail.ru', imp: 'отправители из списка',
+    steps: ['Откройте настройки аккаунта Mail.ru → <b>Безопасность</b>.', 'Раздел <b>Пароли для внешних приложений</b> → Добавить.', 'Выберите доступ «IMAP, SMTP», назовите «Almanac Notch».', 'Вставьте пароль в поле выше.'] },
+  other: { srv: 'IMAP и SMTP вручную: сервер, порт, TLS', hosts: 'серверами, которые вы укажете', imp: 'отправители из списка',
+    steps: ['Найдите в справке вашей почты адреса серверов IMAP и SMTP.', 'Создайте пароль приложения, если почта это позволяет.', 'Укажите серверы и пароль и нажмите <b>Проверить</b>.'] }
+};
+function setProv(p) {
+  document.querySelectorAll('#prov button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === p ? 'true' : 'false'));
+  const P = PROV[p]; document.getElementById('servers').textContent = P.srv; document.getElementById('hosts').textContent = P.hosts; document.getElementById('impWhat').textContent = P.imp;
+  document.getElementById('howto').innerHTML = P.steps.map(s => '<li>' + s + '</li>').join('');
+}
+document.querySelectorAll('#prov button').forEach(b => b.addEventListener('click', () => setProv(b.dataset.p)));
+setProv('gmail');
+document.querySelectorAll('.switch').forEach(s => s.addEventListener('click', () => s.setAttribute('aria-checked', s.getAttribute('aria-checked') === 'true' ? 'false' : 'true')));
+const status = document.getElementById('status');
+document.getElementById('check').addEventListener('click', () => { status.className = 'status'; status.querySelector('span').textContent = 'Подключено · во входящих 12 писем, 3 новых'; setState('list'); });
+document.getElementById('unlink').addEventListener('click', () => { status.className = 'status bad'; status.querySelector('span').textContent = 'Ящик отключён · пароль удалён из связки ключей'; setState('off'); });
+})();
+</script>
+</body></html>

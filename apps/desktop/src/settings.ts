@@ -10,6 +10,12 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { AlState, Calendar, GfState, GhState, NoState, VcState } from './feeds';
 import { count, setLang, t, translatePage } from './settings-i18n';
+import { leavePage, revealPage, selectRow } from './settings-motion';
+import { redrawPrefs } from './settings-prefs';
+import { makeFaces, moodOf, setFace, type Mood } from './settings-faces';
+import { makeHero, type Hero } from './settings-hero';
+import { islandExample, keysExample } from './settings-examples';
+import { MODULE_COL, MODULE_PROPS, type ModuleId, type StageLook } from '@almanac-notch/island';
 import { welcomeMascot, type WelcomeMascot } from './welcome-mascot';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -410,34 +416,132 @@ function showTab(name: string): void {
     if (name === 'general' || !document.querySelector('.detail > main:not([hidden])')) showModule('general');
   }
 }
+// ---------- the sidebar's faces and the page headers (stage 9f) ----------
+makeFaces($('tab-modules').querySelector('.list') as HTMLElement);
+/** settings page -> the island's module: its colour, its prop */
+const PAGE_MOD: Record<string, ModuleId> = {
+  claude: 'claude',
+  calendar: 'cal',
+  music: 'music',
+  github: 'github',
+  vercel: 'vercel',
+  notion: 'notion',
+  grafana: 'grafana',
+  almanac: 'almanac',
+};
+/** what each page is for, one line under its title */
+const SUBS: Record<string, string> = {
+  general: 'Как остров открывается и когда уходит.',
+  sound: 'Тихие отклики маскота и острова. Во время звонка - тишина.',
+  keys: 'Ответить Claude Code, не трогая мышь, - из любого приложения.',
+  app: 'Язык, запуск, обновления и удаление.',
+  claude: 'Шаги агента, разрешения и вопросы - в острове.',
+  calendar: 'Ближайшая встреча и кнопка «Подключиться».',
+  music: 'То, что играет, - в острове.',
+  github: 'Проверки, PR на ревью и коммиты.',
+  vercel: 'Деплои: статус, сайт, повтор.',
+  notion: 'Недавние страницы и чужие правки.',
+  grafana: 'Горящие правила и одна панель.',
+  almanac: 'Привычки на сегодня, отмечаются из острова.',
+};
+const heroes = new Map<string, Hero>();
+/** the island's own pages take the island's own lights: the greeting's blue (cards.ts drawLaunch,
+ *  rgb 210 230 255, a step deeper to read as light), and for the answer keys the amber of the
+ *  permission they answer (the attention glow) */
+const GREET_LIGHT = '#7FA6E8';
+const ISLAND_LIGHT: Record<string, string> = { keys: '#F5A524' };
+function lookOf(page: string, mood: Mood | null): StageLook {
+  const id = PAGE_MOD[page];
+  return {
+    col: id ? MODULE_COL[id] : null,
+    prop: id ? MODULE_PROPS[id] : null,
+    mood: mood === 'bad' ? 'worried' : 'calm',
+  };
+}
+for (const main of document.querySelectorAll<HTMLElement>('.detail > main')) {
+  const head = main.querySelector<HTMLElement>('.page-head');
+  if (!head) continue;
+  const text = head.querySelector('.head-text');
+  if (text && SUBS[main.id]) {
+    const sub = document.createElement('p');
+    sub.className = 'head-sub';
+    sub.dataset.sub = main.id;
+    sub.textContent = t(SUBS[main.id] ?? '');
+    (text.querySelector('h2') ?? text).after(sub);
+  }
+  const id = PAGE_MOD[main.id];
+  // the light is the module's shade: its body colour is a pastel that reads grey as light
+  heroes.set(
+    main.id,
+    makeHero(
+      head,
+      id ? MODULE_COL[id].shade : (ISLAND_LIGHT[main.id] ?? GREET_LIGHT),
+      lookOf(main.id, id ? 'off' : null),
+    ),
+  );
+  // the page's colour runs its switches (settings.css): the module you are setting up, at a glance
+  if (id) main.style.setProperty('--mod', MODULE_COL[id].body);
+}
+/** a module's state: its face in the sidebar and its mascot in the header */
+function moduleMood(page: string, mood: Mood): void {
+  setFace(page, mood);
+  const h = heroes.get(page);
+  if (!h) return;
+  h.mascot.setAsleep(mood === 'off');
+  h.mascot.dress(lookOf(page, mood));
+}
+document.addEventListener('settings:sound', (e) =>
+  heroes.get('sound')?.mascot.setAsleep(!(e as CustomEvent<boolean>).detail),
+);
+document.addEventListener('settings:rec', (e) =>
+  heroes
+    .get('keys')
+    ?.mascot.dress(
+      (e as CustomEvent<boolean>).detail
+        ? { col: null, prop: null, mood: 'watch', at: { x: 0.2, y: 0.9 } }
+        : lookOf('keys', null),
+    ),
+);
+// the two examples (settings-examples.ts): the island itself, and the permission card's keys
+const exIsland = islandExample($('ex-island'));
+const exKeys = keysExample($('ex-keys'));
+exKeys();
+document.addEventListener('settings:rec', () => exKeys());
+window.addEventListener('storage', (e) => {
+  if (e.key === 'almanac-notch.keys') exKeys();
+});
+/** the page on screen in the modules pane */
+let current: HTMLElement | null = null;
 function showModule(name: string): void {
   $('tab-welcome').hidden = true;
   $('tab-modules').hidden = false;
   mascot?.setRunning(false);
-  for (const m of mods) m.classList.toggle('on', m.dataset.module === name);
-  for (const m of document.querySelectorAll<HTMLElement>('.detail > main')) {
-    const show = m.id === name;
-    if (show && m.hidden) {
-      // a short fade-in, like a native settings pane
-      m.style.animation = 'none';
-      void m.offsetWidth;
-      m.style.animation = '';
-    }
-    m.hidden = !show;
-  }
+  const row = mods.find((m) => m.dataset.module === name);
+  for (const m of mods) m.classList.toggle('on', m === row);
+  if (row) selectRow(row, !!current);
+  const next = document.querySelector<HTMLElement>(`.detail > main#${name}`);
+  if (!next || next === current) return;
+  const old = current;
+  current = next;
+  // the island's tab change: the old page leaves fast, the new one comes in by layers
+  if (old) leavePage(old, () => (old.hidden = old !== current));
+  next.hidden = false;
+  next.scrollTop = 0;
+  revealPage(next, !!old);
+  if (old) heroes.get(old.id)?.setRunning(false);
+  const h = heroes.get(next.id);
+  h?.shown();
+  h?.setRunning(true);
+  if (next.id === 'general') exIsland.play();
+  else exIsland.stop();
 }
 for (const m of mods) m.addEventListener('click', () => showModule(m.dataset.module ?? 'general'));
-// each module page's header shows the module's icon from the sidebar
-for (const main of document.querySelectorAll<HTMLElement>('.detail > main')) {
-  const ico = document.querySelector(`.mod[data-module="${main.id}"] .ico`);
-  const headEl = main.querySelector('.page-head');
-  if (ico && headEl) headEl.prepend(ico.cloneNode(true));
-}
 showModule('general');
 /** "island" and "general" open the general tab, module names open their page */
 function showSection(sec: string): void {
   if (sec === 'welcome') showWelcome();
   else if (mods.some((m) => m.dataset.module === sec)) showModule(sec);
+  // "island" (the island's card) and anything unknown open the island's page
   else showModule('general');
 }
 
@@ -456,6 +560,7 @@ for (const [k, [textId, dotId]] of Object.entries(STATUS)) {
   const copy = (): void => {
     $('li-' + k).textContent = $(textId).textContent;
     $('li-' + k + '-dot').className = $(dotId).className;
+    moduleMood(k, moodOf($(dotId).className));
   };
   const o = new MutationObserver(copy);
   o.observe($(textId), { childList: true, characterData: true, subtree: true });
@@ -832,6 +937,9 @@ function renderStep(back = false): void {
 function renderModCount(): void {
   const n = toggles.filter((x) => x.closest('.w-tiles') && x.checked).length;
   $('w-mods-count').textContent = t('Выбрано {0} из 4', n);
+  // the sidebar: how many of the island's 5 places are taken (modules.rs MAX_ON)
+  const on = Object.values(MOD_OF).filter((id) => !modCfg.off.includes(id)).length;
+  $('mod-count').textContent = t('{0} из 5', on);
 }
 function goStep(to: number): void {
   const back = to < step;
@@ -932,6 +1040,8 @@ function renderLang(c: LangCfg): void {
   setLang(c.lang === 'en' ? 'en' : 'ru');
   for (const r of langs) r.checked = r.value === c.pick;
   translatePage(document.body);
+  redrawPrefs();
+  renderModCount();
   $('music-src').textContent = t(
     navigator.userAgent.includes('Windows')
       ? 'Windows: системный медиа-сеанс - любой плеер, который показывает себя в регуляторе громкости (Spotify, браузеры, Я.Музыка).'

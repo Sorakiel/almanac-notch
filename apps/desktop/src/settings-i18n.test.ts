@@ -19,13 +19,16 @@ describe('settings window in English', () => {
     expect(texts.filter((x) => !(x in SETTINGS_EN) && !(x in EN))).toEqual([]);
   });
 
-  it.each(['settings.ts', 'bye.ts', 'setup.ts'])('every t() text of %s has an English line', (file) => {
-    const code = readFileSync(join(__dirname, file), 'utf8');
-    const missing = [...code.matchAll(/'([^'\n]*[А-Яа-яЁё][^'\n]*)'/g)]
-      .map((m) => m[1] as string)
-      .filter((x) => !(x in SETTINGS_EN) && !(x in EN) && !/^(репозитори|встреч)/.test(x));
-    expect(missing).toEqual([]);
-  });
+  it.each(['settings.ts', 'settings-prefs.ts', 'settings-examples.ts', 'bye.ts', 'setup.ts'])(
+    'every t() text of %s has an English line',
+    (file) => {
+      const code = readFileSync(join(__dirname, file), 'utf8');
+      const missing = [...code.matchAll(/'([^'\n]*[А-Яа-яЁё][^'\n]*)'/g)]
+        .map((m) => m[1] as string)
+        .filter((x) => !(x in SETTINGS_EN) && !(x in EN) && !/^(репозитори|встреч)/.test(x));
+      expect(missing).toEqual([]);
+    },
+  );
 
   it('switches and counts', () => {
     setLang('en');

@@ -37,6 +37,7 @@ import {
   type ModuleId,
 } from '@almanac-notch/island';
 import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
+import { KEY_DEFAULTS, KEYS_STORAGE, comboLabel, normCombo, readKeys, type KeyAction } from './keys';
 import { AgentDriver, type AgentMsg, type Usage } from './agent';
 import { ShelfDriver } from './shelf';
 import {
@@ -105,16 +106,22 @@ s.settingsLink = true;
 // choices are this window's own, kept in its storage
 const CARD_KEY = 'almanac-notch.card';
 s.host = { openOnHover: true, autoClose: AUTO_CLOSE_DEFAULT, status: [], version: '', volume: DEFAULT_VOLUME };
-try {
-  const saved = JSON.parse(localStorage.getItem(CARD_KEY) ?? '{}') as Partial<HostPrefs> & { sound?: boolean };
-  if (typeof saved.openOnHover === 'boolean') s.host.openOnHover = saved.openOnHover;
-  // 10/15/30 s until 2026-10-24: a saved 15 or 30 becomes 10
-  s.host.autoClose = autoCloseFrom(saved.autoClose);
-  if (typeof saved.volume === 'number' && saved.volume >= 0 && saved.volume <= 1) s.host.volume = saved.volume;
-  if (typeof saved.sound === 'boolean') s.muted = !saved.sound;
-} catch {
-  // unreadable storage: defaults
+/** the card's choices; the settings window writes the same entry (stage 9f) and this window
+ *  hears it through the "storage" event */
+function readCard(): void {
+  if (!s.host) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(CARD_KEY) ?? '{}') as Partial<HostPrefs> & { sound?: boolean };
+    if (typeof saved.openOnHover === 'boolean') s.host.openOnHover = saved.openOnHover;
+    // 10/15/30 s until 2026-10-24: a saved 15 or 30 becomes 10
+    s.host.autoClose = autoCloseFrom(saved.autoClose);
+    if (typeof saved.volume === 'number' && saved.volume >= 0 && saved.volume <= 1) s.host.volume = saved.volume;
+    if (typeof saved.sound === 'boolean') s.muted = !saved.sound;
+  } catch {
+    // unreadable storage: defaults
+  }
 }
+readCard();
 /** the CI card's "Перезапустить": the note under the lead line says how it went (island/ci.ts) */
 function rerunCi(repo: string): void {
   const run = s.github?.runs.find((r) => r.repo === repo);
@@ -222,6 +229,19 @@ readCi();
 window.addEventListener('storage', (e) => {
   if (e.key === TIERS_KEY) readTiers();
   if (e.key === CI_KEY) readCi();
+  if (e.key === CARD_KEY) {
+    const wasMuted = s.muted,
+      wasVol = s.host?.volume;
+    readCard();
+    if (wasMuted && !s.muted) player.preload();
+    // the settings window's slider or switch: hear what was chosen, as with the card's own
+    if (wasMuted !== s.muted || (!s.muted && wasVol !== s.host?.volume)) previewSound();
+  }
+  // new answer keys: the next sync registers them afresh, the buttons show them
+  if (e.key === KEYS_STORAGE) {
+    keysChanged = true;
+    showKeyHints();
+  }
 });
 
 // a call: asked from the app every few seconds, only while sound is on (src-tauri sound.rs)
@@ -416,22 +436,29 @@ document.addEventListener('keydown', (e) => {
 /** Which global answer keys are registered: none, the approval pair or the options. */
 let hotkeys: 'none' | 'attention' | 'question' = 'none';
 let hotkeysBusy = false;
+/** the settings window changed the keys (stage 9f): register again even for the same prompt */
+let keysChanged = false;
 async function syncHotkeys(): Promise<void> {
   const ev = s.event;
   const want = ev && !ev.answer && (ev.type === 'attention' || ev.type === 'question') ? ev.type : 'none';
-  if (want === hotkeys || hotkeysBusy) return;
+  if ((want === hotkeys && !keysChanged) || hotkeysBusy) return;
   hotkeysBusy = true;
+  keysChanged = false;
   try {
     await unregisterAll();
     hotkeys = 'none';
-    const keys = want === 'attention' ? ['Y', 'N'] : want === 'question' ? ['1', '2', '3'] : [];
-    if (keys.length)
-      await register(
-        keys.map((k) => 'Alt+' + k),
-        (e) => {
-          if (e.state === 'Pressed') answerKey(e.shortcut.slice(-1).toLowerCase());
-        },
-      );
+    const keys = readKeys();
+    const acts: KeyAction[] =
+      want === 'attention' ? ['approve', 'deny'] : want === 'question' ? ['opt1', 'opt2', 'opt3'] : [];
+    // the settings window refuses two actions on one combination; were it stored anyway, the first wins
+    const byCombo = new Map<string, KeyAction>();
+    for (const a of acts) if (keys[a].on && !byCombo.has(keys[a].combo)) byCombo.set(keys[a].combo, a);
+    if (byCombo.size)
+      await register([...byCombo.keys()], (e) => {
+        if (e.state !== 'Pressed') return;
+        const a = [...byCombo].find(([c]) => normCombo(c) === normCombo(e.shortcut))?.[1];
+        if (a) answerKey(ANSWER_OF[a]);
+      });
     hotkeys = want;
   } catch (err) {
     // another app holds the combination: clicks still work
@@ -441,6 +468,17 @@ async function syncHotkeys(): Promise<void> {
     hotkeysBusy = false;
   }
 }
+/** the permission card's buttons show the keys that answer: the prototype's letter while it is
+ *  the shipped ⌥Y / ⌥N, the whole combination once changed, nothing when switched off */
+function showKeyHints(): void {
+  const k = readKeys();
+  const hint = (a: 'approve' | 'deny'): string =>
+    !k[a].on ? '' : k[a].combo === KEY_DEFAULTS[a] ? KEY_DEFAULTS[a].slice(-1) : comboLabel(k[a].combo, isMac);
+  s.keyHints = { approve: hint('approve'), deny: hint('deny') };
+}
+if (inTauri) showKeyHints();
+/** the key the prompt understands for each action (answerKey) */
+const ANSWER_OF: Record<KeyAction, string> = { approve: 'y', deny: 'n', opt1: '1', opt2: '2', opt3: '3' };
 island.addEventListener('dblclick', (e) => {
   const p = domPoint(e);
   if (hitTest(s, p) === 'mascot') sounds.joy();

@@ -19,6 +19,7 @@ mod identity;
 mod lang;
 mod media;
 mod modules;
+mod opening;
 #[cfg(windows)]
 mod outlook;
 mod platform;
@@ -73,6 +74,12 @@ const NEAR_MARGIN: f64 = 120.0;
 const WATCH_PERIOD: Duration = Duration::from_secs(2);
 /// How often to look for a full-screen app in front (Windows; on the Mac AppKit hides the panel).
 const FULLSCREEN_PERIOD: Duration = Duration::from_millis(500);
+
+/// Where the island is now (the settings window's opening grows out of it).
+pub(crate) fn island_placement(app: &AppHandle) -> Option<Placement> {
+    app.try_state::<SharedState>()
+        .map(|s| s.lock().unwrap().placement)
+}
 
 #[tauri::command]
 fn island_geometry(state: State<'_, SharedState>) -> Geometry {
@@ -909,6 +916,8 @@ pub fn run() {
             update_check,
             update_install,
             open_settings,
+            opening::opening_show,
+            opening::opening_done,
             uninstall::open_bye,
             uninstall::bye_info,
             uninstall::bye_run,

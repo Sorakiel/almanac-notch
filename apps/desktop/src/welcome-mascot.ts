@@ -8,19 +8,33 @@ import {
   stagePointerMove,
   stageRelease,
   type EventType,
+  type StageLook,
 } from '@almanac-notch/island';
 
 export interface WelcomeMascot {
   /** play an event: greeting, success, dance... */
-  react: (type: EventType) => void;
+  react: (type: EventType | 'sleep') => void;
   poke: () => void;
   /** run or pause the frame loop (the guide is hidden behind settings) */
   setRunning: (on: boolean) => void;
+  /** dressed as a module with a lasting mood (stage 9f: settings headers and the sidebar) */
+  dress: (look: StageLook | null) => void;
+  /** asleep until woken; awake: back to its own life */
+  setAsleep: (on: boolean) => void;
+  /** -1..1 in step with its breathing (pose.ts: 3.6 s awake, 5.2 s asleep) */
+  breath: () => number;
+  /** a hop (a step of a walk, a small joy) */
+  hop: (power: number) => void;
+  asleep: () => boolean;
 }
 
-export function welcomeMascot(canvas: HTMLCanvasElement): WelcomeMascot {
+/** `k` < 1: a small canvas (stage 9f) - the stage is drawn at 1/k of the canvas and scaled down */
+export function welcomeMascot(canvas: HTMLCanvasElement, k = 1): WelcomeMascot {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const m = createMascot({ settings: defaultSettings(reduced), now: performance.now(), greetAfter: null });
+  const settings = defaultSettings(reduced);
+  // a small one (settings faces and headers) sleeps only when told: asleep there means "off"
+  if (k < 1) settings.sleepAfter = 1e9;
+  const m = createMascot({ settings, now: performance.now(), greetAfter: null });
   const s = m.state;
   // dark window: no backdrop or ground line, a stronger contact shadow
   s.theme = {
@@ -33,20 +47,24 @@ export function welcomeMascot(canvas: HTMLCanvasElement): WelcomeMascot {
   };
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
   let dpr = 1;
+  // the stage's mascot is never smaller than the prototype's R = 46 (pose.ts geo): a small corner
+  // draws the stage at 1/K of the size and scales it down
+  const K = k;
+  const small = k < 1;
   function resize(): void {
     const r = canvas.getBoundingClientRect();
     dpr = window.devicePixelRatio || 1;
-    s.W = Math.max(200, r.width);
-    s.H = Math.max(120, r.height);
-    canvas.width = Math.round(s.W * dpr);
-    canvas.height = Math.round(s.H * dpr);
+    s.W = small ? Math.max(1, r.width) / K : Math.max(200, r.width);
+    s.H = small ? Math.max(1, r.height) / K : Math.max(120, r.height);
+    canvas.width = Math.round(s.W * K * dpr);
+    canvas.height = Math.round(s.H * K * dpr);
   }
   new ResizeObserver(resize).observe(canvas);
   resize();
 
   const point = (e: PointerEvent | MouseEvent) => {
     const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    return { x: (e.clientX - r.left) / K, y: (e.clientY - r.top) / K };
   };
   window.addEventListener('pointermove', (e) => stagePointerMove(s, point(e), performance.now()), { passive: true });
   canvas.addEventListener('pointerdown', (e) => {
@@ -63,13 +81,24 @@ export function welcomeMascot(canvas: HTMLCanvasElement): WelcomeMascot {
     last = now;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    m.renderStage(ctx, dpr);
+    m.renderStage(ctx, dpr * K);
     canvas.style.cursor = m.stageCursor();
     if (running) raf = requestAnimationFrame(frame);
   }
   return {
     react: (type) => m.trigger(type),
     poke: () => m.poke(1, (Math.random() - 0.5) * 0.6, -0.3),
+    hop: (power) => m.hop(power),
+    asleep: () => s.sleeping,
+    breath: () => Math.sin((s.t * 2 * Math.PI) / (s.sleeping ? 5.2 : 3.6)),
+    dress: (look) => {
+      s.stageLook = look;
+    },
+    setAsleep: (on) => {
+      if (on === s.sleeping) return;
+      if (on) m.trigger('sleep');
+      else m.poke(0.4, 0, -0.2);
+    },
     setRunning: (on) => {
       if (on === running) return;
       running = on;

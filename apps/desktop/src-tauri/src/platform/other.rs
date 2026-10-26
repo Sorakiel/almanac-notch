@@ -43,3 +43,6 @@ pub fn fullscreen_tick(_window: &WebviewWindow, _hide: bool) -> Option<bool> {
 /// The page drew its first frame. Nothing to do here: the window is shown when placed, and a
 /// transparent WKWebView has no white fill to hide (Windows waits for this, platform/windows.rs).
 pub fn ready(_window: &WebviewWindow) {}
+
+/// The opening overlay is a plain always-on-top window here (opening.rs).
+pub fn raise_overlay(_window: &WebviewWindow) {}
