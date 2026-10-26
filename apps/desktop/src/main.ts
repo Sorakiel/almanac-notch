@@ -722,8 +722,12 @@ function tick(now: number, id: number): void {
   almanac?.tick();
   for (const r of s.requests.splice(0))
     if (r.startsWith('shelf:')) shelf.request(r);
-    else if (r.startsWith('settings:')) void invoke('open_settings', { section: r.slice(9) || null });
-    else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
+    else if (r.startsWith('settings:')) {
+      // the window grows out of the open island (opening.rs): it stays open while that plays,
+      // and closes as after any click once the pointer has left
+      s.clickOpen = true;
+      void invoke('open_settings', { section: r.slice(9) || null, fromIsland: true });
+    } else if (r.startsWith('vercel:')) void invoke('vercel_open', { id: r.slice(7) });
     else if (r.startsWith('vcsite:')) void invoke('vercel_site', { id: r.slice(7) });
     else if (r.startsWith('vcredo:')) vercel?.redeploy(r.slice(7), (id) => invoke('vercel_redeploy', { id }));
     else if (r.startsWith('gh:open:')) void invoke('github_open', { name: r.slice(8) });

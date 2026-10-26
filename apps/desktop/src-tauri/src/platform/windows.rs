@@ -3,14 +3,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::WebviewWindow;
+use tauri::{Manager, WebviewWindow};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONULL,
     MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::HiDpi::{
-    GetDpiForWindow, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    GetDpiForWindow, GetSystemMetricsForDpi, SetProcessDpiAwarenessContext,
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
@@ -18,9 +19,10 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
     IsWindowVisible, IsZoomed, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync, GWL_EXSTYLE,
-    GWL_STYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION, WS_EX_APPWINDOW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    GWL_STYLE, HWND_TOPMOST, SM_CXPADDEDBORDER, SM_CXSIZEFRAME, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE, WS_CAPTION,
+    WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT,
 };
 
 use super::{Geometry, Placement, WIN_H, WIN_W};
@@ -293,5 +295,36 @@ pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
     Some(want)
 }
 
-/// The opening overlay is a plain always-on-top window here (opening.rs).
-pub fn raise_overlay(_window: &WebviewWindow) {}
+/// The invisible resize border of a titled window, physical px: its outer frame is this much wider
+/// than what one sees, left, right and below (opening.rs).
+pub fn frame_inset(window: &WebviewWindow) -> f64 {
+    let Ok(h) = window.hwnd() else {
+        return 0.0;
+    };
+    // SAFETY: plain metric queries for a live window owned by Tauri.
+    unsafe {
+        let dpi = GetDpiForWindow(HWND(h.0 as _));
+        (GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi)
+            + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi)) as f64
+    }
+}
+
+/// The opening overlay (opening.rs) is topmost like the island and came later, so it would cover
+/// it: the island goes back on top - the scene grows out from under it.
+pub fn raise_overlay(window: &WebviewWindow) {
+    let Some(island) = window.app_handle().get_webview_window("island") else {
+        return;
+    };
+    // SAFETY: `hwnd(island)` is a live window owned by Tauri.
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd(&island),
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+    }
+}

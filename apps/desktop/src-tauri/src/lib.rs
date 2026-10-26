@@ -623,8 +623,8 @@ pub(crate) fn remove_hook_connection(app: &AppHandle) {
 
 /// Settings window (a regular window; the island panel never takes the keyboard).
 #[tauri::command]
-fn open_settings(app: AppHandle, section: Option<String>) {
-    settings::open(&app, section.as_deref());
+fn open_settings(app: AppHandle, section: Option<String>, from_island: Option<bool>) {
+    settings::open(&app, section.as_deref(), from_island.unwrap_or(false));
 }
 
 /// Player command from the island ("toggle", "next", "seek 42", ...); unknown ones are dropped.
@@ -970,7 +970,7 @@ pub fn run() {
             update::start(app.handle());
             // first run: the guide (language, Claude Code, calendar, modules, launch at login)
             if !prefs::get().onboarded {
-                settings::open(app.handle(), Some("welcome"));
+                settings::open(app.handle(), Some("welcome"), false);
             }
             // Launch activation (tao, wry) arrives asynchronously; undo it once it has.
             let handle = app.handle().clone();

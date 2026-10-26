@@ -44,5 +44,10 @@ pub fn fullscreen_tick(_window: &WebviewWindow, _hide: bool) -> Option<bool> {
 /// transparent WKWebView has no white fill to hide (Windows waits for this, platform/windows.rs).
 pub fn ready(_window: &WebviewWindow) {}
 
+/// No invisible borders here (opening.rs).
+pub fn frame_inset(_window: &WebviewWindow) -> f64 {
+    0.0
+}
+
 /// The opening overlay is a plain always-on-top window here (opening.rs).
 pub fn raise_overlay(_window: &WebviewWindow) {}

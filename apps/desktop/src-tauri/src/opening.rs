@@ -23,9 +23,11 @@ struct Rect {
 }
 
 #[derive(Serialize)]
-struct Size {
+struct Island {
     w: f64,
     h: f64,
+    r: f64,
+    open: bool,
 }
 
 /// What the scene needs, in CSS px of the overlay (opening-scene.ts `OpeningGeo`).
@@ -34,18 +36,24 @@ struct Geo {
     w: f64,
     h: f64,
     cx: f64,
-    island: Size,
+    island: Island,
     win: Rect,
     /// debug builds: ALMANAC_OPENING_SLOW=8 plays it 8 times slower, to look at it frame by frame
     slow: f64,
 }
 
-/// The corner of a titled window on macOS 26 (measured on a screenshot of the settings window).
-const WIN_CORNER: f64 = 16.0;
+/// The corner of a titled window: macOS 26 (measured on a screenshot of the settings window),
+/// Windows 11.
+const WIN_CORNER: f64 = if cfg!(target_os = "macos") { 16.0 } else { 8.0 };
 
 /// Plays the opening for `settings` (built hidden). False when it cannot - no island, the window
 /// on another screen - and the caller shows the window at once.
-pub fn play(app: &AppHandle, settings: &WebviewWindow, placement: Placement) -> bool {
+pub fn play(
+    app: &AppHandle,
+    settings: &WebviewWindow,
+    placement: Placement,
+    from_island: bool,
+) -> bool {
     if app.get_webview_window(LABEL).is_some() {
         return false;
     }
@@ -59,11 +67,13 @@ pub fn play(app: &AppHandle, settings: &WebviewWindow, placement: Placement) -> 
         return false;
     };
     let ws = settings.scale_factor().unwrap_or(ms);
+    // Windows: the outer frame includes invisible resize borders left, right and below
+    let inset = platform::frame_inset(settings) / ws;
     let win = Rect {
-        x: pos.x as f64 / ws - mx,
+        x: pos.x as f64 / ws - mx + inset,
         y: pos.y as f64 / ws - my,
-        w: size.width as f64 / ws,
-        h: size.height as f64 / ws,
+        w: size.width as f64 / ws - 2.0 * inset,
+        h: size.height as f64 / ws - inset,
         r: WIN_CORNER,
     };
     // the window has to be on the island's screen, below the island
@@ -80,10 +90,22 @@ pub fn play(app: &AppHandle, settings: &WebviewWindow, placement: Placement) -> 
         w: mw,
         h: mh,
         cx: placement.origin.0 / scale - mx + WIN_W / 2.0,
-        // the closed island: the strip under the notch (packages/island islandTargets)
-        island: Size {
-            w: g.notch_w.min(WIN_W * 0.36),
-            h: if g.has_notch { g.notch_h } else { 32.0 },
+        // the island as it is now (packages/island islandTargets, render.ts): open with its
+        // settings card when the window was asked for from it, else the closed strip
+        island: if from_island {
+            Island {
+                w: (WIN_W - 24.0).min(600.0),
+                h: 180.0,
+                r: 22.0,
+                open: true,
+            }
+        } else {
+            Island {
+                w: g.notch_w.min(WIN_W * 0.36),
+                h: if g.has_notch { g.notch_h } else { 32.0 },
+                r: 13.0,
+                open: false,
+            }
         },
         win,
         slow: if cfg!(debug_assertions) {

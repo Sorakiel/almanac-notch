@@ -1,8 +1,17 @@
 // The settings window's opening as a sequence (CLAUDE.md rule 3): the scene of src/opening-scene.ts
 // over a wallpaper, with a frame of the window as its content, on a MacBook Air 15" screen.
 // ?t=0.6 holds one moment; window.__goo.setT(t) drives frames for tools/goo-strip.mjs.
-import { createOpening, END } from '../src/opening-scene';
+import { configure, createOpening, END } from '../src/opening-scene';
 
+// ?open: asked for from the open island (its settings card), as in the app from the island
+if (new URLSearchParams(location.search).has('open'))
+  configure({
+    w: 1710,
+    h: 1107,
+    cx: 855,
+    island: { w: 600, h: 180, r: 22, open: true },
+    win: { x: 495, y: 293.5, w: 720, h: 520, r: 16 },
+  });
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const player = createOpening(canvas, { wall: true, texture: './goo-window.png' });
 

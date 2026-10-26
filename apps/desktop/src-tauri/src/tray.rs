@@ -25,10 +25,10 @@ pub fn state() -> &'static str {
 pub fn action(app: &AppHandle, id: &str) {
     match id {
         "quit" => app.exit(0),
-        "settings" => crate::settings::open(app, None),
+        "settings" => crate::settings::open(app, None, false),
         // install right away; progress and errors show in the settings window
         "update:install" => {
-            crate::settings::open(app, Some("general"));
+            crate::settings::open(app, Some("general"), false);
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let _ = crate::update::install(app).await;
@@ -36,7 +36,7 @@ pub fn action(app: &AppHandle, id: &str) {
         }
         // Mac: the system access dialog; Windows: the source is picked in settings
         "calendar:access" if cfg!(target_os = "macos") => crate::calendar::open_access(),
-        "calendar:access" => crate::settings::open(app, Some("calendar")),
+        "calendar:access" => crate::settings::open(app, Some("calendar"), false),
         "hooks:install" | "hooks:uninstall" => {
             crate::claude::hooks_ui::run(app, id == "hooks:install")
         }
