@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'safari16',
     outDir: mode === 'setup' ? 'dist/setup' : 'dist/web',
-    // the island page, the settings window and the uninstall window
+    // the island page, the settings window, the uninstall window and the settings window's opening
     rollupOptions: {
       input:
         mode === 'setup'
@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => ({
               main: resolve(__dirname, 'index.html'),
               settings: resolve(__dirname, 'settings.html'),
               bye: resolve(__dirname, 'bye.html'),
+              opening: resolve(__dirname, 'opening.html'),
             },
     },
   },

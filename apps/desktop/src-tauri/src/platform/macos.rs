@@ -9,7 +9,7 @@ use objc2::rc::Retained;
 use objc2::{msg_send, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSBackingStoreType, NSColor, NSPanel, NSScreen, NSView, NSWindow, NSWindowCollectionBehavior,
-    NSWindowStyleMask,
+    NSWindowOrderingMode, NSWindowStyleMask,
 };
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 use tauri::WebviewWindow;
@@ -115,6 +115,31 @@ pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
         });
     }
     None
+}
+
+/// The settings window's opening overlay (opening.rs): over the menu bar like the island - the
+/// island's own shape grows there - but just under the island's panel, and never in the way of a
+/// click. Any thread.
+pub fn raise_overlay(window: &WebviewWindow) {
+    let w = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        let Ok(ptr) = w.ns_window() else {
+            return;
+        };
+        // SAFETY: Tauri owns the NSWindow while the overlay lives; this runs on the main thread.
+        let ns: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+        ns.setLevel(STATUS_WINDOW_LEVEL);
+        ns.setHasShadow(false);
+        ns.setIgnoresMouseEvents(true);
+        ns.setCollectionBehavior(
+            NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::Stationary
+                | NSWindowCollectionBehavior::IgnoresCycle,
+        );
+        if let Some(p) = PANEL.with(|p| p.borrow().clone()) {
+            ns.orderWindow_relativeTo(NSWindowOrderingMode::Below, p.windowNumber());
+        }
+    });
 }
 
 /// Click-through toggle for the panel; callable from any thread.

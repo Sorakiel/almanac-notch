@@ -287,3 +287,6 @@ pub fn fullscreen_tick(window: &WebviewWindow, hide: bool) -> Option<bool> {
     }
     Some(want)
 }
+
+/// The opening overlay is a plain always-on-top window here (opening.rs).
+pub fn raise_overlay(_window: &WebviewWindow) {}
