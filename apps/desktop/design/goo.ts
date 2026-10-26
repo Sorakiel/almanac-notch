@@ -35,6 +35,8 @@ interface Edge {
   depth: number; // how pinched, 0..1
   gap: number; // after the snap: how far the halves have drawn back, 0..1 (the further one)
   gaps: [number, number]; // the half at a, the half at b
+  feet: [number, number]; // how wide each end flares: a cone at a surface, a little at a knot
+  wave: [number, number]; // the writhe: amplitude px, phase
 }
 
 interface Frame {
@@ -120,9 +122,16 @@ const deathOf = (j: NodeId): number =>
 /** how far the half of a snapped edge at its end `end` has drawn back: 0.2 s into a surface,
  *  quicker into a junction that is about to go */
 function halfGap(e: (typeof EDGES)[number], end: NodeId, t: number): number {
-  const dur = (JUNCTIONS as readonly string[]).includes(end) ? clamp(deathOf(end) - e.snap, 0.06, 0.2) : 0.2;
-  return t < e.snap ? 0 : easeOut(k01(t, e.snap, e.snap + dur));
+  // the owner's reference is a symbiote, not slime: a snapped tendril does not hang as a drop, it
+  // whips back - fast at first, then home
+  const dur = (JUNCTIONS as readonly string[]).includes(end) ? clamp(deathOf(end) - e.snap, 0.06, 0.2) : 0.26;
+  const k = k01(t, e.snap, e.snap + dur);
+  return t < e.snap ? 0 : 1 - (1 - k) ** 5;
 }
+
+/** in the footage a strand stands on a cone as wide as its hold, an hourglass narrowing to the
+ *  middle; at a knot the threads meet without one */
+const footOf = (id: NodeId): number => ((JUNCTIONS as readonly string[]).includes(id) ? 0.3 : 1.6);
 
 /** the bodies' shapes over time - pure functions of t, the web is solved on top of them */
 function bodiesAt(t: number) {
@@ -191,7 +200,7 @@ function balance(t: number, b: ReturnType<typeof bodiesAt>, start: Map<Junction,
 // The junctions and the middles of the threads follow their places on springs, integrated from 0
 // in fixed steps - the same t always gives the same frame. Middles are looser: they swing.
 const DT = 1 / 480;
-const J_SPRING = { w: 2 * Math.PI * 3.6, z: 0.5 },
+const J_SPRING = { w: 2 * Math.PI * 3.6, z: 0.36 },
   M_SPRING = { w: 2 * Math.PI * 4.5, z: 0.32 };
 interface WebState {
   t: number;
@@ -274,7 +283,10 @@ export function frameAt(t: number): Frame {
     const m = ws.mp[i];
     // the curve passes through the lagging middle
     const c: P = [2 * m[0] - (a[0] + b[0]) / 2, 2 * m[1] - (a[1] + b[1]) / 2];
-    edges.push({ a, b, c, r, pinch: e.pinch, depth: 0.9 * easeIn(k01(t, e.snap - 0.2, e.snap)), gap, gaps });
+    edges.push({ a, b, c, r, pinch: e.pinch, depth: 0.9 * easeIn(k01(t, e.snap - 0.2, e.snap)), gap, gaps, feet: [footOf(e.a), footOf(e.b)],
+      // a symbiote's tendrils are alive: a wave runs along each, more the longer it is stretched,
+      // and a snapped one lashes before it is home
+      wave: [Math.min(len * 0.045, 9) * (1 - web) * (1 + 1.5 * gap * (1 - gap) * 4), i * 2.1] });
     if (t < e.snap)
       for (const id of [e.a, e.b])
         if (JUNCTIONS.includes(id as Junction)) {
@@ -287,13 +299,14 @@ export function frameAt(t: number): Frame {
     return [p[0], p[1], (nodeR.get(j) as number) * 1.15];
   });
 
-  // 4. the mascot rides the body: it peeks out as the body leaves the island, looks back up at
-  // the threads, squints as the last one snaps, then goes to its place in the header
+  // 4. the mascot rides the body: it peeks out as the body leaves the island, squints as the first
+  // thick thread snaps, and is in its place in the header before the content shows - its eyes never
+  // cross the text - then the header's own mascot takes over
   const rr = Math.min(hw, hh);
   const peek = easeOut(k01(t, 0.14, 0.3));
-  const go = easeInOut(k01(t, 0.6, 0.86));
+  const go = easeInOut(k01(t, 0.42, 0.68));
   const blink = Math.abs(t - 0.5) < 0.035 ? 0.15 : 1;
-  const squint = 1 - 0.55 * Math.exp(-(((t - 0.86) / 0.06) ** 2));
+  const squint = 1 - 0.55 * Math.exp(-(((t - 0.58) / 0.06) ** 2));
   const ex = mix(CX, EYE_HOME.x, go),
     ey = mix(cy - Math.min(rr, 60) * 0.25, EYE_HOME.y, go);
   const eyeR = Math.min(rr, 46);
@@ -301,7 +314,7 @@ export function frameAt(t: number): Frame {
     ex,
     ey,
     mix(eyeR * 0.27, EYE_HOME.half, go),
-    peek * (1 - easeOut(k01(t, 0.86, 1.0))),
+    peek * (1 - easeOut(k01(t, 0.7, 0.84))),
     mix(eyeR * 0.085, EYE_HOME.w, go),
     mix(eyeR * 0.17, EYE_HOME.h, go) * blink * squint,
   ];
@@ -330,6 +343,9 @@ uniform vec4 uSB[24];      // edge: radius, pinch, depth, gap
 uniform vec2 uSC[24];      // edge: the curve's control point
 uniform vec3 uNode[8];     // junctions: x, y, r
 uniform vec2 uSG[24];      // edge: how far each half has drawn back
+uniform vec2 uSF[24];      // edge: how wide each end flares
+uniform vec2 uSW[24];      // edge: the writhe, amplitude and phase
+uniform float uT;
 uniform float uOpen, uContent, uCX, uWeb;
 uniform vec4 uWin;         // x, y, w, h
 uniform vec4 uEye;         // x, y, half spacing, alpha
@@ -341,26 +357,32 @@ float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b-a)/k, 0., 1.
 float box(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q,0.)) + min(max(q.x,q.y),0.) - r; }
 
 // the thread's radius at h: pinched near its pinch, narrowing to a point at a cut end
-float rad(float h, vec4 sb, float h0, float h1, float cutLo, float cutHi){
+float rad(float h, vec4 sb, vec2 ft, float h0, float h1, float cutLo, float cutHi){
   float r = sb.x * (1. - sb.z * exp(-pow((h - sb.y) / .13, 2.)));
-  // the feet: a thread flares where it holds on, a cone into the surface or the knot
-  r *= 1. + .9 * (exp(-h / .1) + exp(-(1. - h) / .1));
-  if (cutHi > 0.) r *= mix(.3, 1., smoothstep(0., .14, h1 - h));
-  if (cutLo > 0.) r *= mix(.3, 1., smoothstep(0., .14, h - h0));
+  // the feet: a cone where it holds on to a surface, barely any at a knot
+  r *= 1. + ft.x * exp(-h / .16) + ft.y * exp(-(1. - h) / .16);
+  // a torn tendril ends in a point, not a drop
+  if (cutHi > 0.) r *= mix(.06, 1., smoothstep(0., .22, h1 - h));
+  if (cutLo > 0.) r *= mix(.06, 1., smoothstep(0., .22, h - h0));
   return r;
 }
 vec2 bez(vec2 a, vec2 c, vec2 b, float t){ return mix(mix(a, c, t), mix(c, b, t), t); }
+// the tendril's spine: the curve, writhing - a wave running from the island down, still at the ends
+vec2 spine(vec2 a, vec2 c, vec2 b, float u, vec2 wv){
+  vec2 n = normalize(vec2(a.y - b.y, b.x - a.x) + 1e-4);
+  return bez(a, c, b, u) + n * wv.x * sin(3.14159 * u) * sin(6.2832 * (1.3 * u - 2.4 * uT) + wv.y);
+}
 
 // one part of a curved thread, between h0 and h1: the curve as 8 short capsules
-float part(vec2 p, vec2 a, vec2 c, vec2 b, float h0, float h1, vec4 sb, float cutLo, float cutHi){
+float part(vec2 p, vec2 a, vec2 c, vec2 b, float h0, float h1, vec4 sb, vec2 ft, vec2 wv, float cutLo, float cutHi){
   float d = 1e5;
   for (int j = 0; j < 8; j++) {
     float u0 = mix(h0, h1, float(j) / 8.), u1 = mix(h0, h1, float(j + 1) / 8.);
-    vec2 p0 = bez(a, c, b, u0), p1 = bez(a, c, b, u1);
+    vec2 p0 = spine(a, c, b, u0, wv), p1 = spine(a, c, b, u1, wv);
     vec2 pa = p - p0, ba = p1 - p0;
     float k = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-4), 0., 1.);
     float u = mix(u0, u1, k);
-    d = min(d, length(pa - ba * k) - rad(u, sb, h0, h1, cutLo, cutHi));
+    d = min(d, length(pa - ba * k) - rad(u, sb, ft, h0, h1, cutLo, cutHi));
   }
   return d;
 }
@@ -372,16 +394,16 @@ float threads(vec2 p){
     if (sb.x < .3) continue;
     vec2 a = uSA[i].xy, b = uSA[i].zw, c = uSC[i];
     // far from this edge's hull: its rough distance is enough
-    vec2 lo = min(min(a, b), c) - sb.x - 40., hi = max(max(a, b), c) + sb.x + 40.;
+    vec2 lo = min(min(a, b), c) - sb.x * 3. - 60., hi = max(max(a, b), c) + sb.x * 3. + 60.;
     if (any(lessThan(p, lo)) || any(greaterThan(p, hi))) { d = min(d, 40.); continue; }
     // while it is a sheet, neighbouring threads melt into each other
     float kw = 2. + 30. * uWeb;
-    if (sb.w <= 0.) d = smin(d, part(p, a, c, b, 0., 1., sb, 0., 0.), kw);
+    if (sb.w <= 0.) d = smin(d, part(p, a, c, b, 0., 1., sb, uSF[i], uSW[i], 0., 0.), kw);
     else {
       // snapped: each half draws back into what it hangs from
       float top = sb.y * (1. - uSG[i].x), bot = sb.y + (1. - sb.y) * uSG[i].y;
-      if (top > .01) d = smin(d, part(p, a, c, b, 0., top, sb, 0., 1.), kw);
-      if (bot < .99) d = smin(d, part(p, a, c, b, bot, 1., sb, 1., 0.), kw);
+      if (top > .01) d = smin(d, part(p, a, c, b, 0., top, sb, uSF[i], uSW[i], 0., 1.), kw);
+      if (bot < .99) d = smin(d, part(p, a, c, b, bot, 1., sb, uSF[i], uSW[i], 1., 0.), kw);
     }
   }
   // the junctions: a knot of liquid where threads meet
@@ -499,6 +521,9 @@ function draw(t: number): void {
   gl.uniform4fv(U('uSA'), sa);
   gl.uniform2fv(U('uSC'), Array.from({ length: 24 }, (_, i) => f.edges[i]?.c ?? [0, 0]).flat());
   gl.uniform4fv(U('uSB'), sb);
+  gl.uniform2fv(U('uSW'), Array.from({ length: 24 }, (_, i) => f.edges[i]?.wave ?? [0, 0]).flat());
+  gl.uniform1f(U('uT'), t);
+  gl.uniform2fv(U('uSF'), Array.from({ length: 24 }, (_, i) => f.edges[i]?.feet ?? [0, 0]).flat());
   gl.uniform2fv(U('uSG'), Array.from({ length: 24 }, (_, i) => f.edges[i]?.gaps ?? [0, 0]).flat());
   gl.uniform3fv(U('uNode'), Array.from({ length: 8 }, (_, i) => f.nodes[i] ?? [0, 0, 0]).flat());
   gl.uniform1f(U('uOpen'), f.open);
