@@ -4,7 +4,7 @@ import { after, createState, type EventType, type IslandState, type ModuleId, ty
 import type { Settings } from './sim/settings';
 import { update } from './sim/behavior';
 import { answer, trigger, type Answer } from './sim/events';
-import { poke } from './sim/actions';
+import { hop, poke } from './sim/actions';
 import { renderStage, stageCursor } from './stage';
 import { renderIsland } from './island/render';
 
@@ -97,6 +97,8 @@ export function createMascot(opts: MascotOptions) {
     poke: (n: number, lx = 0.2, ly = -0.3) => {
       for (let i = 0; i < n; i++) poke(s, lx, ly);
     },
+    /** a hop of the given power (the settings headers' steps, stage 9f) */
+    hop: (power: number) => hop(s, power),
     answer: (a: Answer) => answer(s, a),
     setFocus: (id: ModuleId | null) => {
       s.focusId = id;

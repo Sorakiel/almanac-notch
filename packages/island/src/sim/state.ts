@@ -359,6 +359,8 @@ export interface StageLook {
   mood: 'calm' | 'worried' | 'happy' | 'watch';
   /** where 'watch' looks, -1..1 like lookX / lookY */
   at?: { x: number; y: number };
+  /** leaning into a walk, radians (the settings header's mascot strolls) */
+  lean?: number;
 }
 
 export interface Targets {

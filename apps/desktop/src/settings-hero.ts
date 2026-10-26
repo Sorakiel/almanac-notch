@@ -38,7 +38,89 @@ export function makeHero(head: HTMLElement, color: string, look: StageLook | nul
   head.prepend(sky);
   head.append(stage);
   const mascot = welcomeMascot(stage, K);
-  mascot.dress(look);
+
+  // ---------- a stroll along the header's floor: the mascot has room here, so it uses it ----------
+  // It walks a little, stops, looks about, sometimes hops for joy - but only when it is calm and
+  // awake: asleep means "not connected", a frown means "needs you", and those must read still.
+  let base: StageLook | null = look;
+  const rawDress = mascot.dress;
+  let x = 0,
+    target = 0,
+    walking = false,
+    dir = -1,
+    nextWalk = performance.now() + 1500 + Math.random() * 2500,
+    nextStep = 0,
+    lastT = performance.now();
+  function apply(): void {
+    rawDress(
+      walking && base?.mood === 'calm'
+        ? { ...base, mood: 'watch', at: { x: dir * 0.85, y: 0.05 }, lean: dir * 0.09 }
+        : base,
+    );
+  }
+  mascot.dress = (l) => {
+    base = l;
+    apply();
+  };
+  apply();
+  /** how far left it may go: never under the title */
+  function room(): number {
+    const text = head.querySelector<HTMLElement>('.head-text');
+    if (!text) return 0;
+    let right = 0;
+    for (const el of text.children) right = Math.max(right, (el as HTMLElement).getBoundingClientRect().right);
+    const hr = head.getBoundingClientRect();
+    // the body is ~50 px wide in the middle of its 150 px canvas, 18 px from the header's right
+    const bodyLeftAtRest = hr.right - 18 - 75 - 25;
+    return Math.max(0, bodyLeftAtRest - (right + 16));
+  }
+  function stroll(now: number): void {
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    const calm = base?.mood === 'calm' && !mascot.asleep();
+    if (!calm || reduced) {
+      if (walking) {
+        walking = false;
+        apply();
+      }
+      return;
+    }
+    if (!walking && now > nextWalk) {
+      const r = room();
+      if (r < 30) {
+        // no room to walk: a small hop where it stands, now and then
+        mascot.hop(1.4);
+        nextWalk = now + 4000 + Math.random() * 4000;
+      } else {
+        let to = -Math.random() * r;
+        if (Math.abs(to - x) < 30) to = x > -r / 2 ? -r : 0;
+        target = to;
+        dir = target < x ? -1 : 1;
+        walking = true;
+        nextStep = now;
+        apply();
+      }
+    }
+    if (walking) {
+      // 38 px/s, a little hop every 0.42 s: steps, not a glide
+      const step = 38 * dt * dir;
+      if (Math.abs(target - x) <= Math.abs(step)) {
+        x = target;
+        walking = false;
+        apply();
+        // arrived: sometimes a hop of joy, then a pause to look about
+        if (Math.random() < 0.3) mascot.hop(2.6);
+        nextWalk = now + 2500 + Math.random() * 4500;
+      } else {
+        x += step;
+        if (now >= nextStep) {
+          mascot.hop(0.9);
+          nextStep = now + 420;
+        }
+      }
+      stage.style.transform = `translateX(${x.toFixed(1)}px)`;
+    }
+  }
 
   let born = performance.now(),
     raf = 0,
@@ -119,6 +201,7 @@ export function makeHero(head: HTMLElement, color: string, look: StageLook | nul
   }
   function frame(now: number): void {
     draw(now);
+    stroll(now);
     raf = running ? requestAnimationFrame(frame) : 0;
   }
   return {

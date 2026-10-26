@@ -23,6 +23,9 @@ export interface WelcomeMascot {
   setAsleep: (on: boolean) => void;
   /** -1..1 in step with its breathing (pose.ts: 3.6 s awake, 5.2 s asleep) */
   breath: () => number;
+  /** a hop (a step of a walk, a small joy) */
+  hop: (power: number) => void;
+  asleep: () => boolean;
 }
 
 /** `k` < 1: a small canvas (stage 9f) - the stage is drawn at 1/k of the canvas and scaled down */
@@ -85,6 +88,8 @@ export function welcomeMascot(canvas: HTMLCanvasElement, k = 1): WelcomeMascot {
   return {
     react: (type) => m.trigger(type),
     poke: () => m.poke(1, (Math.random() - 0.5) * 0.6, -0.3),
+    hop: (power) => m.hop(power),
+    asleep: () => s.sleeping,
     breath: () => Math.sin((s.t * 2 * Math.PI) / (s.sleeping ? 5.2 : 3.6)),
     dress: (look) => {
       s.stageLook = look;

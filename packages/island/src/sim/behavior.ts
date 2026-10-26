@@ -127,6 +127,7 @@ export function update(s: IslandState, dt: number, now: number): void {
   if (mood) L.bg = mood;
   // the settings window's header mascot (StageLook): a mood that lasts while its page is open
   const look = s.stageLook;
+  if (look && !s.sleeping && look.lean) T.lean = look.lean;
   if (look && !s.sleeping) {
     if (look.mood === 'worried') {
       T.grump = 0.4;
